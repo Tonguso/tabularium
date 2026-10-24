@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "routes": [
+    {
+      "kind": "anthropic_subscription",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "kind": "openai_subscription",
+      "model": "gpt-6-luna"
+    },
+    {
+      "kind": "anthropic_api",
+      "model": "claude-sonnet-5-5"
+    },
+    {
+      "kind": "openai_api",
+      "model": "gpt-6.1-sol"
+    }
+  ],
+  "revision": "c602697fd7ab4057afef266fcf7822a4",
+  "updated": 1791811003.9942117
+}

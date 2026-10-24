@@ -1,0 +1,43 @@
+PRIMARY MODEL ROUTING
+Dashboard > Models & usage > Provider priority.
+
+Each agent has routing.json: enabled plus an ordered list of kind/model pairs.
+Kinds: openai_subscription, anthropic_subscription, openai_api, anthropic_api.
+Save reloads at the next foreground or background turn. A running turn keeps its order.
+Sequences are always active. /model reports status only; model selection is dashboard-only.
+
+Initial order:
+Cato and Vit: ChatGPT subscription -> Claude subscription -> OpenAI API -> Anthropic API.
+Cal and Tacitus: Claude subscription -> ChatGPT subscription -> Anthropic API -> OpenAI API.
+GPT routes use gpt-6.1-sol; Claude routes use claude-sonnet-5-5.
+Model availability is checked by the provider when called, not guaranteed by the editor.
+
+AUTHENTICATION
+ChatGPT credentials remain separate for each agent (/openai connect).
+Connect Claude subscription in the dashboard opens Claude Code's official browser login.
+Claude uses this Windows user's shared Claude Code subscription login. It does not borrow
+another agent's ChatGPT token. SDK built-in tools are disabled; only that agent's tools
+are exposed. API-authenticated CLI logins are rejected on the subscription route.
+
+FALLBACK
+Only known authentication/quota/service rejections advance the route order.
+Unknown failures, tool outcomes, context errors, policy rejections and unsupported models
+stop with saved records rather than replaying work through another billing route.
+Completed SDK tool calls and results are mirrored into the canonical conversation.
+A new SDK turn receives that conversation, including images; it does not rely on a separate
+stale SDK session. This may cost more input tokens than resuming an SDK-only session.
+Route-change notices precede inference. Paid API routes must be present in the saved order.
+An unavailable route cools down: five hours for explicit subscription exhaustion,
+five minutes for sign-in/rate-limit issues, two minutes for server overload.
+These are retry intervals, not claims about the provider's actual reset time.
+The next turn after cooldown tries preferred routes again; no background quota polling.
+
+SCOPE
+Routing governs the primary conversation/task model. Voice, image generation, Tavily,
+native search helper calls, and advisor/specialist calls keep their separate settings and
+may have API charges independently of the primary model route.
+
+ACTIVATION
+All four agents load the shared router. The dashboard shows whether each runtime has it.
+Use the shared idle-aware restart for source changes. Sequence edits do not need restart.
+No credentials are stored in routing.json or returned by dashboard routing endpoints.

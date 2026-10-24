@@ -1,0 +1,15 @@
+{
+  "name": "Tabularium",
+  "short_name": "Tabularium",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f7f4",
+  "theme_color": "#1b2a22",
+  "icons": [
+    {
+      "src": "/assets/tabularium.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

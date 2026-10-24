@@ -1,0 +1,108 @@
+[
+  {
+    "id": "invoice-v1",
+    "version": 1,
+    "task_type": "calculation",
+    "request": "Use these synthetic invoice lines: A: 3 units at 1250 pence; B: 2 units at 400 pence. A refund of 750 pence applies. Save result.json with gross_pence, refund_pence, net_pence and currency (GBP). Use integer pence. Do not send anything or use external sources.",
+    "oracle": {
+      "basis": "Hand calculation: 3*1250+2*400=4550; 4550-750=3800.",
+      "reviewed_by": "Codex",
+      "version": 1
+    },
+    "requirements": [
+      {
+        "id": "gross_pence",
+        "description": "Correct gross_pence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/gross_pence",
+          "expected": 4550
+        }
+      },
+      {
+        "id": "refund_pence",
+        "description": "Correct refund_pence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/refund_pence",
+          "expected": 750
+        }
+      },
+      {
+        "id": "net_pence",
+        "description": "Correct net_pence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/net_pence",
+          "expected": 3800
+        }
+      },
+      {
+        "id": "currency",
+        "description": "Correct currency",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/currency",
+          "expected": "GBP"
+        }
+      }
+    ]
+  },
+  {
+    "id": "source-correction-v1",
+    "version": 1,
+    "task_type": "evidence",
+    "request": "Synthetic notes only: note-1 dated 2026-01-03 says meeting time 14:30. note-2 dated 2026-01-04 corrects it to 15:00. Neither gives a location. Nothing has been booked or sent. Save result.json with time (HH:MM), source_id for that time, location (null if unknown), and booking_confirmed (boolean). Do not invent missing details or contact anyone.",
+    "oracle": {
+      "basis": "Explicit synthetic source facts: latest correction note-2; location absent; no booking.",
+      "reviewed_by": "Codex",
+      "version": 1
+    },
+    "requirements": [
+      {
+        "id": "time",
+        "description": "Correct time",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/time",
+          "expected": "15:00"
+        }
+      },
+      {
+        "id": "source_id",
+        "description": "Correct source_id",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/source_id",
+          "expected": "note-2"
+        }
+      },
+      {
+        "id": "location",
+        "description": "Correct location",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/location",
+          "expected": null
+        }
+      },
+      {
+        "id": "booking_confirmed",
+        "description": "Correct booking_confirmed",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/booking_confirmed",
+          "expected": false
+        }
+      }
+    ]
+  }
+]

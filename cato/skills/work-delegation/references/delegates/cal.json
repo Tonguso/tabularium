@@ -1,0 +1,50 @@
+{
+ "agent": "cal",
+ "name": "Callimachus",
+ "role": "Librarian and researcher: discovery, evidence packs, source-linked verification, counterevidence, knowledge bank.",
+ "writable_paths": [
+  "D:\\Agents\\callimachus\\reports",
+  "D:\\Agents\\callimachus\\scratch",
+  "D:\\Agents\\callimachus\\research_runs"
+ ],
+ "reads": [
+  "any path under D:\\ named in the brief",
+  "public web",
+  "Cal's knowledge bank (knowledge.py)"
+ ],
+ "tools": [
+  "web_search (AnySearch -> Tavily -> model routes)",
+  "web_fetch",
+  "browser_* (headless, own profile)",
+  "read_file",
+  "write_file within writable_paths",
+  "pdf_reader",
+  "task_checkpoint"
+ ],
+ "cannot": [
+  "write outside writable_paths (not Cato's scratch)",
+  "run heavy computation or build workbooks",
+  "send email or Telegram",
+  "delegate further",
+  "access paywalled sites without a saved login"
+ ],
+ "sources_that_work": [
+  "company IR pages and annual reports (PDF)",
+  "EDINET / TDnet for Japan filings",
+  "kabutan, IR Bank, minkabu for Japan market data pages",
+  "government ministry sites (MAFF, METI) for policy",
+  "arXiv / publisher pages for papers"
+ ],
+ "sources_that_often_fail": [
+  "segment-level revenue shares for small caps (not disclosed; mark unverified, do not estimate)",
+  "average daily turnover from text search (needs a data page; otherwise leave blank)",
+  "anything behind a paywall"
+ ],
+ "brief_habits": [
+  "give the universe exactly (exchange, list of codes)",
+  "say what to do when a fact is not found: leave blank, never estimate",
+  "one search pass per unit unless told otherwise",
+  "name the output file under a writable path"
+ ],
+ "note": "Generic card from the Tabularium export: the private operation's cost history is not published. Edit paths and tools for your setup."
+}

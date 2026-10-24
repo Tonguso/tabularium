@@ -1,0 +1,36 @@
+{
+ "agent": "vit",
+ "name": "Vitruvius",
+ "role": "Engineer and web designer: scoped reversible code changes, scripts, workbooks via existing scripts, dashboards, tests.",
+ "writable_paths": [
+  "D:\\Agents\\vitruvius\\reports",
+  "D:\\Agents\\vitruvius\\scratch"
+ ],
+ "note_on_allowed_paths": "Vit also edits exactly the allowed_paths you pass on submit (scoped absolute paths, never a whole drive). Everything it edits must be inside them.",
+ "reads": [
+  "any path under D:\\ named in the brief or allowed_paths",
+  "public web for documentation"
+ ],
+ "tools": [
+  "read_file / write_file / edit_file within allowed_paths",
+  "execute_command (python, tests; 60 s per command)",
+  "web_search",
+  "browser_* for checking a served page",
+  "verify_artifact",
+  "task_checkpoint"
+ ],
+ "cannot": [
+  "restart agents, deploy, or modify identities",
+  "spend money or change providers",
+  "edit outside allowed_paths",
+  "delegate further",
+  "run commands longer than 60 s without backgrounding them in the script"
+ ],
+ "brief_habits": [
+  "name the files and the exact behaviour change",
+  "state the test command that must pass",
+  "back up before edit is Vit's rule; say if a diff file is wanted and where (inside writable_paths)",
+  "acceptance_criteria = the completion items, not 'works'"
+ ],
+ "note": "Generic card from the Tabularium export: the private operation's cost history is not published. Edit paths and tools for your setup."
+}

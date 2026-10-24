@@ -1,0 +1,60 @@
+[project]
+name = "tabularium"
+version = "0.1.0"
+description = "An owner-judged agent framework: the records decide, not anyone's word."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+authors = [{ name = "Hogan Tong" }]
+keywords = ["agents", "llm", "telegram", "framework", "verification"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+dependencies = [
+    "pyTelegramBotAPI>=4.14",
+    "requests>=2.31",
+    "anthropic>=0.40",
+    "openai>=1.40",
+    "claude-agent-sdk>=0.1",
+    "cryptography>=42",
+    "tiktoken>=0.7",
+    "pandas>=2.2",
+    "lxml>=5.0",
+    "Pillow>=10.0",
+    "openpyxl>=3.1",
+    "python-docx>=1.1",
+    "PyMuPDF>=1.24",
+    "faster-whisper>=1.0",
+]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.45"]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/Tonguso/tabularium"
+Documentation = "https://github.com/Tonguso/tabularium/blob/main/docs/WHITEPAPER.md"
+Issues = "https://github.com/Tonguso/tabularium/issues"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agent_core"]
+py-modules = [
+    "agent_control", "agent_logging", "agent_runtime", "background_runtime", "dashboard", "dashboard_audit",
+    "dashboard_history", "engine", "owner_telegram", "provider_routing", "retention", "search_routing",
+    "spreadsheet_upload", "subscription_connections", "subscription_runtime", "subscription_usage", "supervisor",
+    "task_cost",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "cato/tests"]
