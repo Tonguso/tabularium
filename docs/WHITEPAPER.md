@@ -142,15 +142,24 @@ database; a later checklist can add or revise, but omission never removes one. E
 a command to run against the delivered file, or a literal the file must contain. The runtime runs the check on the
 exact bytes (recorded by hash), stores the observed output as proof bound to those bytes and that requirement, and
 derives the status: passed, failed, or unverified. A changed file, a changed test, a rework or an interrupted check
-makes the proof stale. Model prose about a requirement is stored as an assessment, never as proof.
+makes the proof stale. Model prose about a requirement is stored as an assessment, never as proof. A requirement
+with no declared check (a comparison, a conclusion, a recommendation) is a judgment item: the owner judges it by
+reading the result, and the runtime says nothing about it. Whether every instruction carries a declared requirement
+is guidance shown to the worker, never evidence against finished work.
 
 ### 4.4 Completion
 
-"Finished" is derived, not declared. A task finishes only when every requirement has current passing proof, no
+"Finished" is derived, not declared. A task finishes only when every declared check has current passing proof, no
 question to the owner is pending, no instruction is undelivered, and every delegated piece has been accepted. A
 worker's completed envelope with any of those missing ends in "needs attention" with a record of what is missing.
 The earlier design ran three self-review retries on an unchanged draft and accepted "done" with a clear blocker; both
 were deleted when this rule replaced them.
+
+What completion could not confirm never changes the owner's message. The result reaches him as the worker wrote it;
+the record of failed or unrun checks, unaccepted dependencies and unanswered decisions is a Checks segment on the
+dashboard and a line on the task's card. Two earlier versions prefixed the message instead, and both produced the
+same complaint: a complete report arriving under "not complete" because a requirement no machine could check, or the
+runtime's own resume note, had been counted against it.
 
 ### 4.5 Receipts, checkpoints, activations, release
 
@@ -190,7 +199,7 @@ behind unrelated work.
 Delivery is blocked until every attached result is read and accepted. Acceptance is one verdict per item, each saying
 how the reviewer knows: ran (executed, launched or opened it), read (inspected its content or output), or report (the
 delegate's word). A ran or read claim with a declared check derives its status from the check; report-only items stay
-unverified and are named to the owner as not run by the reviewer. The delegate's own result is kept as fetched, and its
+unverified and appear in the dashboard's Checks segment as not run by the reviewer. The delegate's own result is kept as fetched, and its
 DONE, OPEN, EVIDENCE and COST lines are appended unedited beneath the coordinator's verdict, so the owner reads what the
 delegate claimed and what it left open. A scorecard records, per request, what was asked, delivered, verified how,
 at what cost, with how many reworks.
@@ -225,6 +234,10 @@ coding agents. The diagnosis never speaks to the owner and cannot ask him anythi
 chooses. After two corrections in a thread, the agent's next reply may not fix, compute or propose anything: it
 restates in the owner's words what it now understands and asks whether that is right.
 
+The same diagnosis also receives two failures the runtime records itself, each marked as the runtime's record and
+not the owner's words: a lesson that recurred on a real task, and a declared check that failed on a delivered file.
+The diagnosis then drafts its lesson from the actual run rather than from a hand-written note about it.
+
 ### 6.4 Quoting and coverage
 
 A reply quotes the message it answers only when the owner has sent something else since; every reply declares which
@@ -254,9 +267,17 @@ owner between the second and third.
 3. **Trial.** A finished past task is rerun twice in isolation, once with the current skill and once with the
    proposed edit; nothing is sent or changed, and the owner receives both answers with a comparison.
 4. **Applied.** On the owner's yes in his own words, the runtime applies exactly the proposed edit and bumps the
-   skill's version. The agent never edits the file itself for a lesson.
-5. **Verified or back.** The next real task where the failure could recur records whether it did. A recurrence
-   returns the lesson to candidate.
+   skill's version. An edit that sharpens an existing rule replaces it in place; an edit that adds a rule becomes one
+   tagged entry in a ledger at the end of the skill, so the method's prose is never rewritten by accretion. The agent
+   never edits the file itself for a lesson.
+5. **Verified or back.** The next real task where the failure could recur records whether it did. A recurrence before
+   any success returns the lesson to candidate. Every such check also counts for the ledger entry, helped or hurt,
+   and a verified entry stays in the ledger and keeps being counted.
+
+The weekly digest curates the ledger from those counts: it offers for retirement an entry that has hurt more often
+than it helped, and for a merge two entries in one skill that say nearly the same thing. Retirement, like approval,
+happens only on the owner's quoted words; the counts come from recorded checks with evidence, never from the agent's
+opinion of its own rule.
 
 Each skill carries a track record (when it was last used, by which task, with what outcome) that the agent sees when
 it loads one, so "I have used this before" is a fact.
@@ -337,6 +358,13 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 - **Reflexion and Voyager** keep verbal lessons and a library of executable skills. Tabularium keeps both, but gates
   promotion behind a trial and the owner's words; ungated libraries fill with the agent's own patches.
+- **ACE (Agentic Context Engineering)** grows a playbook by delta edits with helpful and harmful counts per entry,
+  curated by merging and retiring, instead of rewriting a prompt. Tabularium's lesson ledger follows that shape, with
+  two differences: counts come from the runtime's recorded checks rather than the model's own grading, and every
+  addition, merge and retirement waits for the owner's words.
+- **GEPA** evolves prompts by reflecting on execution traces and searching over variants under a metric. Tabularium
+  takes the first half: a recurred lesson or a failed declared check feeds the diagnosis with the actual run. The
+  variant search is not built, because there is no metric here that could rank variants without the owner.
 - **Generative Agents** consolidate memory by periodic reflection. Tabularium's memory review does the same with an
   exam before and after and the owner's consent.
 - **SWE-agent and Manus** argue that the agent-computer interface is the agent's intelligence: receipts, archived
@@ -383,6 +411,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-10-23 | The evaluator graded prose against prose and passed a wrong file | Grading opens the deliverable; code decides objective items |
 | 2026-10-24 | A worker that asked a question kept its slot; the next job timed out behind it | A pending question ends the turn and frees the slot |
 | 2026-10-24 | A supervisor restart repeated every old failure notice | What the owner was told is kept on disk; routine results go to the dashboard |
+| 2026-10-24 | Every research report arrived under "completion not verified" because a conclusion has no machine check | A requirement without a check is the owner's judgment; the runtime says nothing about it |
+| 2026-10-24 | The runtime's own resume note was counted as an instruction nobody had covered, and blocked a complete report | Coverage is guidance to the worker; checks are a dashboard segment, never a prefix on the owner's message |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
@@ -405,4 +435,5 @@ office, where the decisions and contracts that no magistrate's word could overri
 | Delegation | A contract from one agent to another, tracked to acceptance |
 | Skill | A folder with a written method the agent loads when a task matches |
 | Lesson | A candidate correction to a skill, trialled and approved by the owner |
+| Ledger | The section at the end of a skill where approved additions live as tagged entries with helped and hurt counts |
 | Supervisor | The process that starts, watches and restarts the others |

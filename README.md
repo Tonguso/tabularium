@@ -28,9 +28,12 @@ stored record instead, and anything unproven says so to the owner.
   tool receipts and requirements live in SQLite and files, so a crash, a restart or a late answer loses nothing.
 - **Delegation by contract.** A coordinator writes numbered obligations for another agent; delivery is blocked until
   the result is read and accepted; verdicts say how the reviewer knows; declared checks run on the delivered bytes;
-  the delegate's own account travels to the owner unedited.
+  the delegate's own account travels to the owner unedited. A requirement with no declared check is the owner's to
+  judge by reading. What the checks could not confirm is a segment on the dashboard, never a prefix on the message.
 - **Owner-judged learning.** Agents turn mistakes into candidate lessons and exact skill edits, trial them against
-  past tasks, and change nothing until the owner says so in his own words.
+  past tasks, and change nothing until the owner says so in his own words. An approved addition becomes one tagged
+  entry in the skill's ledger, counted helped or hurt by later checks; the weekly digest proposes retirements and
+  merges for the owner's yes. A recurred lesson or a failed declared check feeds the next diagnosis with the actual run.
 - **Memory that is tested.** One readable memory file per agent, writes that must quote the owner, a weekly exam, and
   tidy-ups applied only after the exam passes on both versions.
 - **Operations like software.** A supervisor, daily self-tests, a self-test after every model-client update, weekly
