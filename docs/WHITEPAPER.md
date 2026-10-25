@@ -71,6 +71,16 @@ a conversation and never read each other's files.
 The roster is one table in code. A role declares whether the agent delegates, how many workers it runs, whether the
 owner's corrections start a diagnosis, and which tools it may hold. Adding an agent is adding a row.
 
+Why several agents, when any agent can run workers? A worker is the same agent in another process: the same memory,
+skills, tools and privileges, there so the agent keeps answering while long work runs. Separate agents give what a
+worker cannot. First, privilege boundaries: no agent holds every tool, and the private agent's records are read by
+nobody else, whereas a worker carries its parent's whole reach. Second, independent review: acceptance means
+something only when the reviewer did not do the work, and a worker shares its parent's method and blind spots. Third,
+a small, relevant context: each agent loads only its own memory and skills, where one agent in every role would carry
+all of them on every turn. Fourth, isolation: a stuck agent does not take the others down, and each can run its own
+model route. Fifth, separate conversations, so a confidential thread and a code review never share a history window.
+The number four is not essential; the divisions that matter are privilege, independence of review and context size.
+
 ### 3.2 The machine
 
 Six processes run on one PC: a supervisor, the four agents, and a dashboard. The supervisor starts the others,
