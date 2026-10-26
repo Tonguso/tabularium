@@ -171,6 +171,11 @@ dashboard and a line on the task's card. Two earlier versions prefixed the messa
 same complaint: a complete report arriving under "not complete" because a requirement no machine could check, or the
 runtime's own resume note, had been counted against it.
 
+The same decision now also runs before the worker's final reply is accepted, while its tools are still available.
+Failed or missing proof can then be repaired in a bounded number of attempts, valid proof is kept, and a genuine
+wait or blocker is respected; only then is the reply final. This reuses the one completion decision and the
+existing retry path rather than adding a second checker.
+
 ### 4.5 Receipts, checkpoints, activations, release
 
 Every tool call writes a receipt before it runs and the outcome after, so a crash leaves the action's status known
@@ -206,13 +211,22 @@ behind unrelated work.
 
 ### 5.3 Acceptance and the owner's view
 
-Delivery is blocked until every attached result is read and accepted. Acceptance is one verdict per item, each saying
-how the reviewer knows: ran (executed, launched or opened it), read (inspected its content or output), or report (the
-delegate's word). A ran or read claim with a declared check derives its status from the check; report-only items stay
-unverified and appear in the dashboard's Checks segment as not run by the reviewer. The delegate's own result is kept as fetched, and its
-DONE, OPEN, EVIDENCE and COST lines are appended unedited beneath the coordinator's verdict, so the owner reads what the
-delegate claimed and what it left open. A scorecard records, per request, what was asked, delivered, verified how,
-at what cost, with how many reworks.
+Both agents work from one agreement: the delegate's requirements and every later clarification are one authoritative
+record, the same record completion reads, with no separately maintained acceptance checklist. Delivery is blocked
+until every attached result is read and accepted, and acceptance is bound to a specific returned delivery: a request
+still in flight cannot be accepted, and rejection stays open until a rework returns. Acceptance is one verdict per
+item, each saying how the reviewer knows: ran (executed, launched or opened it), read (inspected its content or
+output), or report (the delegate's word). A ran or read claim with a declared check derives its status from the check;
+the reviewer's judgment is recorded apart from that machine proof, and report-only items stay unverified and appear
+in the dashboard's Checks segment as not run by the reviewer. A rework preserves the proof of items that did not
+change. The delegate's own result is kept as fetched, and its DONE, OPEN, EVIDENCE and COST lines are appended
+unedited beneath the coordinator's verdict, so the owner reads what the delegate claimed and what it left open. A
+scorecard records, per request, what was asked, delivered, verified how, at what cost, with how many reworks.
+
+The earlier acceptance kept three copies of the agreement (the requirements, the verdicts on the delegation row and
+the scorecard) and never checked that the delegation had returned, so a report-only verdict could accept work still
+in progress and a rejected requirement could vanish in a rework. Both were found by reading the code, not by an
+incident, and replaced within the day.
 
 ### 5.4 Privacy by role
 
@@ -236,8 +250,10 @@ worker kept executing for minutes after asking, holding the slot while the next 
 
 ### 6.3 Corrections
 
-Every reply declares whether the owner just corrected the agent. Corrections collect, and once the thread has been
-quiet for ten minutes one background diagnosis runs for the whole thread: what the agent did, what the owner expected,
+Every reply names, by message id, which incoming messages corrected the agent. The ids come from the durable inbox
+and the owner's own reply references, never from text copied back; a runtime warning carries no id and cannot be
+counted (twice in October a warning injected by the runtime was recorded as the owner's correction and diagnosed as
+his words). Corrections collect, and once the thread has been quiet for ten minutes one background diagnosis runs for the whole thread: what the agent did, what the owner expected,
 why, and whose fault it was. A fault in the agent's method becomes a candidate lesson, with an exact skill edit
 registered only when one sharpened rule would stop a recurrence. A fault in the runtime becomes a report for the
 coding agents. The diagnosis never speaks to the owner and cannot ask him anything; he reads the digest when he
@@ -250,8 +266,9 @@ The diagnosis then drafts its lesson from the actual run rather than from a hand
 
 ### 6.4 Quoting and coverage
 
-A reply quotes the message it answers only when the owner has sent something else since; every reply declares which
-of the owner's messages in the turn it answers, and a reply that leaves one out is sent back once.
+A reply quotes the message it answers only when the owner has sent something else since; every reply declares, by
+message id, which of the owner's messages in the turn it answers, and a reply that leaves one out is sent back once.
+Ids replaced copied text here too: an unrelated, unknown or invalid id cannot match by resemblance.
 
 ## 7. Memory
 
@@ -274,8 +291,14 @@ owner between the second and third.
 1. **Candidate.** A mistake noticed by the agent or the owner is recorded with the failure and the correction in one
    line. Candidates expire after thirty days unless repeated; a weekly digest groups repeats by theme.
 2. **Proposed.** The exact edit to one skill file: the current text quoted, the new text in the skill's voice.
-3. **Trial.** A finished past task is rerun twice in isolation, once with the current skill and once with the
-   proposed edit; nothing is sent or changed, and the owner receives both answers with a comparison.
+3. **Trial.** A screening, not an anecdote. The proposal, the baseline skill, the exact candidate edit, the seed and
+   the case set are frozen before anything runs. Development cases and reserved cases, disjoint and drawn from the
+   reviewed benchmark, are each run with both skills and repeated; files are graded by the independent artifact
+   checks with no model judge, and actual usage is reported with unknowns left unknown. Trial workers hold only
+   read and write tools fenced to their own outputs, see no live memory or task context, and cannot send, delegate
+   or record lessons. The owner reads the report as evidence; a failed screening can still be approved knowingly,
+   and old trial evidence cannot approve a new edit. The earlier trial reran one past task twice and let a model
+   recommend a winner; both were retired on 2026-10-25.
 4. **Applied.** On the owner's yes in his own words, the runtime applies exactly the proposed edit and bumps the
    skill's version. An edit that sharpens an existing rule replaces it in place; an edit that adds a rule becomes one
    tagged entry in a ledger at the end of the skill, so the method's prose is never rewritten by accretion. The agent
@@ -315,6 +338,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Announced routes | Two days on a fallback model unannounced | A missing route is announced; a changed client runs the self-test |
 | Truthful live status | A dead process shown idle; planned restarts counted as crashes | Status from process identity; unknowns shown as unknown |
 | Lesson approval | Agents changing their own rules | Owner's words only, after a trial |
+| Incoming files | A 20 MB screenshot reported twice as an internal error | One size gate for every incoming file; the owner is told the size and the limit |
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
 | Checkpoints and receipts | A crash losing work | Every tool call is a receipt; progress is checkpointed |
 | Drain restart | Restarting mid-task or onto broken code | Waits for work, runs all tests, refuses uncommitted code |
@@ -332,8 +356,9 @@ Tabularium is run like software, which is uncommon for agent systems.
 |---|---|---|
 | Self-test | The agent can take a message, read a file and answer, and which model route answered | Daily, five minutes after every start, and whenever the model client changes |
 | Scorecard | The week per agent: turns, bounced replies, corrections, tasks finished, delegated items met, memory exam | Weekly |
-| Trace | Everything one task did, in order: tools, model calls, tokens, failures, minutes | On demand |
-| Regression benchmark | Fixed synthetic cases with independent answers; code checks the delivered files; pass rate and flaky cases per task type | Weekly, and after any change |
+| Trace | Everything one task did, in order: tools, model calls, tokens, failures, minutes; usage is recorded per model call as it happens, so an interrupted session keeps its partial count | On demand |
+| Regression benchmark | Fixed, reviewed synthetic cases with independent answers (six at the time of writing, with twenty-one objective checks and one declared subjective rubric); code checks the delivered files; pass rate and flaky cases per task type | Weekly, and after any change |
+| Interactive evaluation | The same benchmark machinery with events injected while a real, disposable agent process works: a scope update after the first write, a question followed by a process restart, a corrective follow-up beside a runtime warning, an incomplete delegate delivery; the state is checked independently after the process exits | On demand, after changes to the turn loop |
 | Research signal | A few real past tasks rerun; a model says only whether each new answer is closer, the same, or further from the accepted one | Weekly; a signal, never a score |
 | Live probes | Token use and pass rate before and after an engine change, on matched synthetic tasks | At each release |
 | Incident reviews | What went wrong, what each actor could see, which design choice allowed it | After each failure the owner noticed |
@@ -342,8 +367,9 @@ Tabularium is run like software, which is uncommon for agent systems.
 Restarts drain current work, run both test suites, and refuse uncommitted code. The code has three authors, a human
 owner and two coding agents, each recording every change in one operations log and never reverting another's change
 until the owner confirms. The two coding agents work concurrently on purpose: each has caught real mistakes of the
-other. One release a day and a concept budget (a change that adds a named thing removes one) keep the pace and the
-vocabulary in check.
+other. A concept budget (a change that adds a named thing removes one) keeps the vocabulary in check. A rule of
+one release a day held for two weeks and was dropped once the gate (tests, commit, announced graceful drain, live
+verification) had proved sufficient on its own; six releases went out on one day without incident.
 
 ## 11. The owner's role
 
@@ -373,14 +399,16 @@ Tabularium borrows from, and departs from, several lines of published work.
   two differences: counts come from the runtime's recorded checks rather than the model's own grading, and every
   addition, merge and retirement waits for the owner's words.
 - **GEPA** evolves prompts by reflecting on execution traces and searching over variants under a metric. Tabularium
-  takes the first half: a recurred lesson or a failed declared check feeds the diagnosis with the actual run. The
-  variant search is not built, because there is no metric here that could rank variants without the owner.
+  takes the reflection and the separation of proposal from evaluation: a recurred lesson or a failed declared check
+  feeds the diagnosis with the actual run, and a proposed edit is screened on frozen development and reserved cases.
+  The variant search is not built, because there is no metric here that could rank variants without the owner.
 - **Generative Agents** consolidate memory by periodic reflection. Tabularium's memory review does the same with an
   exam before and after and the owner's consent.
 - **SWE-agent and Manus** argue that the agent-computer interface is the agent's intelligence: receipts, archived
   outputs, refusals of pointless repeats. Tabularium's receipts, archive and loop detectors follow that line.
 - **τ-bench** showed that an agent passing a task once passes it only about half the time across repeats, and that
-  this reliability is what users feel. Tabularium's benchmark reports pass-every-time and flaky cases per task type.
+  this reliability is what users feel. Tabularium's benchmark reports pass-every-time and flaky cases per task type,
+  and its interactive evaluation injects user events mid-task in the τ-bench manner, against real agent processes.
 - **"Why do multi-agent LLM systems fail"** names specification, inter-agent misalignment and verification as the
   failure families. Tabularium's contracts, delegate's account and requirement verification address the second and
   third; the correction rules address the first.
@@ -423,6 +451,10 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-10-24 | A supervisor restart repeated every old failure notice | What the owner was told is kept on disk; routine results go to the dashboard |
 | 2026-10-24 | Every research report arrived under "completion not verified" because a conclusion has no machine check | A requirement without a check is the owner's judgment; the runtime says nothing about it |
 | 2026-10-24 | The runtime's own resume note was counted as an instruction nobody had covered, and blocked a complete report | Coverage is guidance to the worker; checks are a dashboard segment, never a prefix on the owner's message |
+| 2026-10-24 | A warning the runtime injected was recorded as the owner's correction and diagnosed as his words | Corrections and answers name message ids from the inbox; warnings have none |
+| 2026-10-25 | A lesson trial reran one task and let a model pick the winner | Frozen candidate, development and reserved cases, repeated runs, artifact checks only |
+| 2026-10-25 | Acceptance never checked that the delegation had returned, and three copies of the agreement could disagree | One delivery-bound agreement, read by review and completion alike |
+| 2026-10-26 | A 20 MB screenshot failed twice as "stopped with an error" | One size gate; a cause the owner can fix is said in one sentence |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
