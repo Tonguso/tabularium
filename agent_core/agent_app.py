@@ -73,7 +73,7 @@ class Config:
     thread_env_limits: bool = False             # Vit: single-threaded BLAS before anything imports numpy
     activity_interval: int = 10                 # every N text turns, nudge to log recent activity
     reasoning_effort: str = "medium"
-    window: tuple = (30, 50)                    # WINDOW_LOW, WINDOW_HIGH
+    window: tuple = (12, 20)                     # complete user exchanges; low/high cache hysteresis
     always_skills: tuple = ()
     prefs_model_key: bool = False               # Tacitus also honours a legacy 'model' key in model prefs
     ops_slots: dict = field(default_factory=dict)   # per-agent lines inside the shared operational block
@@ -99,7 +99,7 @@ class Config:
 
 # ── Shared text ──────────────────────────────────────────────────────────────────
 
-# One checkpoint tool for every agent (2026-10-11 evening, Alex: "fix everything"). Until then Cato, Cal/Vit and Tacitus
+# One checkpoint tool for every agent (2026-10-11 evening, Alex: [quote removed]). Until then Cato, Cal/Vit and Tacitus
 # carried three versions; Cal and Vit's still said a lesson is "appended to lessons.md", a file retired on 2026-10-10.
 # The store (background_runtime.TaskStore.checkpoint) accepts every field for every agent.
 CHECKPOINT_TOOL = {"name":"task_checkpoint","description":"Save progress needed for continuation: completed steps, next action, evidence and blockers. Plans and estimates are optional when useful; no extra checkpoint is needed solely to announce completion. Record material assumptions in guesses, or ask if they change scope. completion_items merges into the durable requirement list; omission never deletes. source=0 identifies the brief; source=N identifies added instruction N. Existing id updates its check; the next id adds an obligation. Declare deliverables and constraints, then verify failed or unverified items. Passed proof for unchanged requirements and files remains valid. Subjective items remain unverified. lesson records an observed method failure.",
@@ -703,11 +703,12 @@ class AgentApp(engine.AgentRuntime):
             {"name":"capability_check","description":"Inspect local capability evidence before substantial tasks. overview reports configuration and recent model responses without paid requests; outlook probes running classic Outlook COM with a 12s bound, no opening setup/sending; browser with url checks the real page using existing headless navigation. A loaded page is not proof of authentication or membership. PDF/voice need actual artifact/request verification.",
              "input_schema":{"type":"object","properties":{"probe":{"type":"string","enum":["overview","outlook","browser"]},"url":{"type":"string"}},"required":[]}},
             {"name":"specialist_review",
-             "description":"Stateless research/quant/critic review through the paid Anthropic advisor API. Alex approved relevant private/work evidence transfer; never include credentials. No persona/history/tools inherited. Supply original question, dated evidence excerpts with IDs and contrary evidence. Max three calls per turn and 24k characters. Use selectively, in background for long tasks. Findings are advisory, not verified outcomes or user approval.",
+             "description":"Stateless research/quant/critic/delivery review through the paid Anthropic advisor API. role delivery is the cold read of a delegate's delivery before accept: pass delivery_id from result, the completion condition as question, and the result text with the numbered completion items as evidence; accept refuses report-only verdicts without it. Alex approved relevant private/work evidence transfer; never include credentials. No persona/history/tools inherited. Supply original question, dated evidence excerpts with IDs and contrary evidence. Max three calls per turn and 24k characters. Use selectively, in background for long tasks. Findings are advisory, not verified outcomes or user approval.",
              "input_schema":{"type":"object","properties":{
-              "role":{"type":"string","enum":["research","quant","critic"]},
+              "role":{"type":"string","enum":["research","quant","critic","delivery"]},
               "question":{"type":"string"},"evidence":{"type":"string"},
-              "proposed_answer":{"type":"string"},"counterevidence":{"type":"string"}
+              "proposed_answer":{"type":"string"},"counterevidence":{"type":"string"},
+              "delivery_id":{"type":"string","description":"delivery role: the delivery_id returned by delegate result."}
              },"required":["role","question","evidence"]}},
             {"name":"list_images",
              "description":"Find saved original photos by caption or image ID, newest first. They survive follow-ups, history trimming and restart. Returns paths for view_image; never ask Alex to resend an available original. Paging supports older images; include_views also lists locally viewed renders.",
@@ -907,8 +908,11 @@ class AgentApp(engine.AgentRuntime):
     # ── Tool implementations ─────────────────────────────────────────────────────
 
     def tool_read_file(self, path: str, offset: int = 0, limit: int = 8000) -> str:
-        from agent_core.trials import overridden
+        from agent_core.trials import overridden, read_refusal
         path = overridden(path) or path                            # a trial arm reads the proposed skill edit
+        refusal = read_refusal(path)
+        if refusal:
+            return refusal
         # Default 8,000 chars (was 36,000): a worker that pulled two 30k-char subtitle files into context paid
         # ~50k tokens a turn for the rest of the task (2026-10-07). Whole-file work belongs in a script.
         if self.BACKGROUND_TASK_ID and self.config.background_refusals:
@@ -938,13 +942,16 @@ class AgentApp(engine.AgentRuntime):
         parked = self._approving[1]
         return all(parked.get(k) == v for k, v in fields.items())
 
-    def _park(self, chat_id: int, tool: str, inputs: dict, text: str):
+    def _park(self, chat_id: int, tool: str, inputs: dict, text: str, decision_id=None):
         """A guarded call waits for Alex as a durable decision with its exact inputs (2026-10-21). Until then it
         waited 60 seconds in memory: a late yes counted as no and a restart forgot the question. Now it has no
         deadline, survives restarts, and his yes runs exactly this call once."""
         from agent_core import task_decisions
         from agent_core.reply_envelope import Reply
-        row = task_decisions.park_action(self._background, chat_id, tool, inputs, text)
+        try:
+            row = task_decisions.park_action(self._background, chat_id, tool, inputs, text, decision_id)
+        except ValueError as exc:
+            return Refused(str(exc))
         ask = Reply(text + "\n\nReply *yes* to this message to run it, *no* to cancel.")
         ask.decision_id = row["id"]
         self.send_message(chat_id, ask)
@@ -973,17 +980,21 @@ class AgentApp(engine.AgentRuntime):
                                "it still waits. Ask him plainly whether to run it.]")
             action = json.loads(decision["action"])
             if not yes:
-                td.settle_action(self._background, chat, decision["id"], False, source)
+                if not td.settle_action(self._background, chat, decision["id"], False, source):
+                    return True, ""
                 outcome = "Cancelled; it was not run."
             elif not td.settle_action(self._background, chat, decision["id"], True, source, "running"):
                 return True, ""                                   # already settled: a second yes runs nothing
             else:
                 self._approving = (action["tool"], action["inputs"])
                 try:
-                    result = str(self.execute_tool(action["tool"], action["inputs"], chat))
+                    result = self.execute_tool(action["tool"], action["inputs"], chat)
+                    outcome = ("Not completed. " if self.unproductive(result) else "Tool returned: ") + str(result)[:4000]
+                except Exception as exc:
+                    outcome = f"Execution interrupted; outcome unknown. {type(exc).__name__}: {exc}"
                 finally:
                     self._approving = None
-                outcome = "Done. " + result[:1500]
+            td.finish_action(self._background, chat, decision["id"], outcome)
             self.send_message(chat, outcome)
             # The agent sees what happened on its next turn.
             self.conversations.setdefault(chat, self.load_memory_context())
@@ -1410,7 +1421,7 @@ class AgentApp(engine.AgentRuntime):
         # original size handled like any image the agent views. Before this it was "File type '.jpg' not supported"
         # (2026-10-13 15:28).
         if ext in self.IMAGE_FILE_TYPES or (getattr(doc, "mime_type", "") or "").startswith("image/"):
-            downloaded = self.bot.download_file(self.bot.get_file(doc.file_id).file_path)
+            downloaded = self.fetch_file(doc)
             try:
                 media_type, encoded, _ = self._image_for_model(downloaded)
             except Exception:
@@ -1426,8 +1437,7 @@ class AgentApp(engine.AgentRuntime):
         lock.acquire()
 
         try:
-            file_info = self.bot.get_file(doc.file_id)
-            downloaded = self.bot.download_file(file_info.file_path)
+            downloaded = self.fetch_file(doc)
 
             if ext == ".docx":
                 try:
@@ -1495,7 +1505,8 @@ class AgentApp(engine.AgentRuntime):
         chat_id = message.chat.id
         text = message.text.strip() if message.text else ""
         reply_note, reply_image = self._reply_context(message)
-        words = f"{self._ts(message)} {reply_note}{text}"
+        source = f"[Incoming message {message.message_id}]\n" if getattr(message, "message_id", None) else ""
+        words = f"{source}{self._ts(message)} {reply_note}{text}"
         notes = self._language_hint(text)
         if nudge:
             self._turns_since_activity[chat_id] = self._turns_since_activity.get(chat_id, 0) + 1
@@ -1583,20 +1594,7 @@ class AgentApp(engine.AgentRuntime):
     # ── Main ─────────────────────────────────────────────────────────────────────
 
     def _startup_model_label(self) -> str:
-        if self._routing.enabled(self.AGENT_DIR):
-            return "Provider priority: " + " → ".join(self._routing.label(r) for r in self._routing.config(self.AGENT_DIR)["routes"])
-        try:
-            chat_id = int(self.CHAT_ID_FILE.read_text(encoding="utf-8").strip())
-            self.load_model_prefs(chat_id)
-        except (OSError, ValueError):
-            return "Model selections will be loaded from each chat's saved preferences."
-        provider = self.get_provider(chat_id)
-        if provider == "openai" and self.config.plan_signin_aware and not self._chatgpt_plan.store.exists():
-            return f"Configured: {self.get_openai_model(chat_id)} via OpenAI API; no {self.config.display} plan sign-in."
-        if provider == "openai":
-            return (f"Configured: {self.CHATGPT_PLAN_MODEL} via ChatGPT subscription first; "
-                    f"{self.get_openai_model(chat_id)} via paid API when subscription quota is reached.")
-        return f"Configured: {self.get_anthropic_model(chat_id)} via Anthropic API."
+        return "Provider priority: " + " → ".join(self._routing.label(r) for r in self._routing.config(self.AGENT_DIR)["routes"])
 
     def _ui_model_state(self) -> dict:
         from owner_telegram import OWNER_CHAT_ID
@@ -1607,9 +1605,7 @@ class AgentApp(engine.AgentRuntime):
         else:
             route = "ChatGPT subscription first; API on plan limit" if provider == "openai" else "Anthropic API"
         return {"provider": provider, "model": self.CHATGPT_PLAN_MODEL if provider == "openai" else api_model,
-                "api_model": api_model, "advisor": self.advisor_model_for(api_model), "route": route,
-                "options": [{"value": "gpt-6.1-sol", "label": "GPT 6.1 Sol · subscription first"}] +
-                           [{"value": key, "label": self.ANTHROPIC_MODEL_ALIASES[key] + " · API"} for key in ("sonnet", "opus", "haiku", "fable")]}
+                "api_model": api_model, "advisor": self.advisor_model_for(api_model), "route": route}
 
     def main(self) -> None:
         self.on_main()

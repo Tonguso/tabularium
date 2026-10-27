@@ -4,14 +4,14 @@ Default cases are the versioned synthetic benchmark. Collected historical answer
 Objective requirements never call a model judge. Subjective requirements need complete, strictly typed
 judge coverage; missing evidence stays unverified. Only matching benchmark fingerprints are compared.
 """
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 import hashlib
 import sqlite3
 import uuid
 import json
 import os
 import re
-import sys
 import time
 from pathlib import Path
 
@@ -23,7 +23,7 @@ GRADE_SCHEMA = {"type": "object", "properties": {
         "id": {"type": "string"}, "met": {"type": "boolean"}, "reason": {"type": "string"}},
         "required": ["id", "met", "reason"], "additionalProperties": False}}},
     "required": ["items"], "additionalProperties": False}
-EVALUATOR_VERSION = 2
+EVALUATOR_VERSION = 3
 BENCHMARK = Path(__file__).with_name("benchmark_cases.json")
 
 
@@ -41,7 +41,7 @@ def validate_case(case):
             raise ValueError("Requirement IDs must be nonempty and unique.")
         seen.add(ident)
         check = requirement.get("check") or {}
-        if check.get("kind") not in ("json", "text", "xlsx", "judgment"):
+        if check.get("kind") not in ("json", "text", "csv", "xlsx", "judgment"):
             raise ValueError("Unknown requirement check kind.")
         if check["kind"] == "judgment":
             if not check.get("rubric"):
@@ -77,6 +77,8 @@ def artifact_check(check, output_dir):
             actual = actual[int(part)] if isinstance(actual, list) else actual[part]
     elif check["kind"] == "text":
         actual = data.decode("utf-8-sig")
+    elif check["kind"] == "csv":
+        actual = list(csv.reader(StringIO(data.decode("utf-8-sig"), newline=""), strict=True))
     else:
         from openpyxl import load_workbook
         book = load_workbook(BytesIO(data), read_only=True, data_only=True)
@@ -142,6 +144,8 @@ def cases_path(agent_root):
 def load_cases(agent_root):
     """All roles share the same reviewed synthetic benchmark; historical candidates are not answer keys."""
     cases = json.loads(BENCHMARK.read_text(encoding="utf-8"))
+    from agent_core import lesson_cases                # cases the owner approved from this agent's lessons (2026-10-26)
+    cases = cases + lesson_cases.approved_cases(agent_root)
     for case in cases:
         validate_case(case)
     return cases
@@ -259,7 +263,7 @@ def case_type(case):
     return task_type_for(case.get("request", ""))
 
 
-def run(agent_root, store, chat, cases, judge, k=1, sample=0, starter=start_rerun, waiter=wait, log=print):
+def run(agent_root, store, chat, cases, judge, k=1, sample=0, starter=start_rerun, waiter=wait, log=print, executor=None, execution=None):
     """Rerun each case k times, grade each attempt, and return the run record (also saved under task_state/regression)."""
     if type(k) is not int or k < 1 or type(sample) is not int or sample < 0:
         raise ValueError("k must be positive and sample nonnegative.")
@@ -272,19 +276,30 @@ def run(agent_root, store, chat, cases, judge, k=1, sample=0, starter=start_reru
               "benchmark": fingerprint(chosen), "evaluator_version": EVALUATOR_VERSION}
     from agent_core.release import commit
     record["release"] = commit()
+    record["route"] = primary_route(agent_root)
+    if execution is not None:
+        record["execution"] = execution
     for case in chosen:
         attempts = []
         for n in range(1, k + 1):
-            ident = starter(store, chat, case, n)
-            log(f"{case['id']} attempt {n}: task {ident} queued")
-            status = waiter(store, ident)
+            if executor is None:
+                ident = starter(store, chat, case, n)
+                log(f"{case['id']} attempt {n}: task {ident} queued")
+                status = waiter(store, ident)
+                folder = store.directory(ident)
+                usage = generation_usage(folder)
+            else:
+                log(f"{case['id']} attempt {n}: isolated interactive run")
+                outcome = executor(case, n)
+                ident, status, folder = outcome['task'], outcome['status'], Path(outcome['folder'])
+                usage = outcome.get('generation_usage') or generation_usage(folder)
             needs_judge = any(r["check"]["kind"] == "judgment" for r in case["requirements"])
-            answer = _read(store.directory(ident) / "result.txt").strip() if status == "finished" and needs_judge else ""
-            g = grade(judge, case, answer, store.directory(ident) / "trial_output")
+            answer = _read(folder / "result.txt").strip() if status == "finished" and needs_judge else ""
+            g = grade(judge, case, answer, folder / "trial_output")
             if status != "finished":
                 g.update(passed=False, quality=0, note=f"run ended {status}",
                          items=[dict(id=r["id"], status="unverified", reason=f"run ended {status}") for r in case["requirements"]])
-            g.update(task=ident, status=status, generation_usage=generation_usage(store.directory(ident)))
+            g.update(task=ident, status=status, generation_usage=usage)
             attempts.append(g)
             log(f"{case['id']} attempt {n}: {status}, {'pass' if g['passed'] else 'fail'}: {g['note'][:80]}")
         record["cases"].append({"id": case["id"], "source_task": case.get("source_task"), "attempts": attempts,
@@ -330,6 +345,32 @@ def run(agent_root, store, chat, cases, judge, k=1, sample=0, starter=start_reru
     return record
 
 
+def primary_route(agent_root):
+    try:
+        from provider_routing import config
+        return config(Path(agent_root))["routes"][0]["model"]
+    except Exception:
+        return None
+
+
+def route_gap(agent_root):
+    """One digest line when the primary model changed since the benchmark last ran (2026-10-27): a model switch
+    reruns nothing by itself, so a fixed mistake can come back unnoticed."""
+    out = Path(agent_root) / "task_state" / "regression"
+    runs = sorted(out.glob("*.json")) if out.exists() else []
+    current = primary_route(agent_root)
+    if not runs or not current:
+        return None
+    try:
+        last = json.loads(runs[-1].read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if last.get("route") == current:
+        return None
+    return (f"- BENCHMARK? the primary model is now {current}; the last benchmark run ({runs[-1].stem}) was on "
+            f"{last.get('route') or 'an unrecorded model'}. Run: python agent_control.py eval {Path(agent_root).name}")
+
+
 def previous_runs(agent_root, limit=5):
     out = Path(agent_root) / "task_state" / "regression"
     if not out.exists():
@@ -344,6 +385,8 @@ def previous_runs(agent_root, limit=5):
 
 
 def compare(before, after):
+    if before.get("execution") != after.get("execution"):
+        return dict(comparable=False, reason="Different execution profile, model route or effort limit.")
     if not before.get("benchmark") or before.get("benchmark") != after.get("benchmark") or before.get("k") != after.get("k"):
         return dict(comparable=False, reason="Different cases, oracle, evaluator version or repetition count.")
     result = dict(comparable=True, quality_delta=after["quality"] - before["quality"],

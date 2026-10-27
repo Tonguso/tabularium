@@ -12,6 +12,7 @@ children and starts any child again when it exits. Nothing here kills a healthy 
 State for the dashboard and for `agent_control.py status`: logs/supervisor_state.json.
 Maintenance: an existing logs/supervisor.pause file stops all starting and killing until it is removed.
 """
+from agent_core import release
 import json, os, socket, subprocess, sys, time, uuid
 from pathlib import Path
 from agent_core.roster import AGENTS
@@ -168,28 +169,28 @@ def live_status(root=None, now=None):
     """One evidence-based view for the CLI, dashboard and agent operations tool."""
     root, now = Path(root or ROOT), time.time() if now is None else now
     state = read_json(root/'logs/supervisor_state.json')
-    fresh = bool(0 <= now-state.get('updated', 0) < 30 and state.get('created')
+    fresh = bool(now-state.get('updated', 0) < 30 and state.get('created')
                  and process_created(state.get('pid')) == state['created'])
     result = {}
     for name in AGENTS + ('dashboard',):
         record = state.get('children', {}).get(name, {})
-        health = read_json(root/name/'task_state/health.json') if name in AGENTS else {}
+        health = read_json(root/name/'task_state/health.json') if name in AGENTS + ('dashboard',) else {}
         observed = process_created(record.get('pid')) if fresh and record.get('running') else 0
         running = bool(fresh and record.get('running') and record.get('created')
                        and observed == record['created'])
         matched = running and matching_health(record.get('instance'), record.get('python_pid'),
                                               record.get('started', 0), health)
-        healthy = bool(matched and 0 <= now-health.get('last_progress', 0) < STATUS_STALE
+        healthy = bool(matched and now-health.get('last_progress', 0) < STATUS_STALE
                        and alive(health['pid']))
         request = read_json(root/name/'task_state/drain')
         draining = bool(running and request.get('id') and request.get('instance') == record.get('instance'))
         transport = read_json(root/name/'task_state/transport.json') if healthy else {}
         polling = bool(healthy and transport.get('pid') == health['pid'] and transport.get('poll_ok')
-                       and 0 <= now-transport.get('time', 0) < 90)
+                       and now-transport.get('time', 0) < 90)
         phase = health.get('phase', 'unknown') if healthy else 'unknown'
         lifecycle = 'unknown' if not fresh or observed is None else ('stopped' if not running else 'starting')
-        if running and name == 'dashboard':
-            lifecycle = 'running'
+        if healthy and name == 'dashboard':
+            lifecycle = 'ready'
         elif draining:
             lifecycle = 'draining'
         elif healthy:
@@ -201,8 +202,10 @@ def live_status(root=None, now=None):
         result[name] = dict(status=lifecycle, phase=phase, pid=health.get('pid') if healthy else None,
                             running=running, health_fresh=healthy, polling_fresh=polling,
                             last_progress=health.get('last_progress') if matched else None,
-                            restart_pending=draining, starts=record.get('starts'))
-    return {'running': fresh, 'updated': state.get('updated'), 'agents': result}
+                            restart_pending=draining, starts=record.get('starts'),
+                            instance=record.get('instance'), release=health.get('release') if healthy else None)
+    return {'running': fresh, 'updated': state.get('updated'), 'agents': result,
+            'release': state.get('release') if fresh else None}
 
 
 def decide(child, now, health=None, paused=False):
@@ -290,7 +293,7 @@ def notify_owner(text):
 
 
 def write_state(children, paused):
-    state = {"updated": time.time(), "paused": paused, "pid": os.getpid(), "created": process_created(os.getpid()), "children": {
+    state = {"updated": time.time(), "release": release.LOADED, "paused": paused, "pid": os.getpid(), "created": process_created(os.getpid()), "children": {
         c.name: {"pid": c.pid(), "python_pid": agent_pid(c), "started": c.started, "starts": c.starts,
                  "last_exit": c.last_exit, "running": c.running(), "created": c.created,
                  "instance": c.instance, "crashes": c.exits,
@@ -303,7 +306,101 @@ def write_state(children, paused):
         pass
 
 
+
+def release_complete(request, view, loaded):
+    if not release.same_source(loaded, request.get('tested')):
+        return False
+    for name in request['components']:
+        state = view.get(name, {})
+        if not (state.get('running') and state.get('health_fresh') and release.same_source(state.get('release'), request['tested'])
+                and state.get('instance') != request.get('previous', {}).get(name)
+                and (name == 'dashboard' or state.get('polling_fresh'))):
+            return False
+    return True
+
+
+def release_allows_start(name, request, root):
+    if not request or name not in request.get('components', []):
+        return True
+    if request.get('status') not in ('draining', 'complete') or not release.same_source(request.get('tested'), release.identity(root)):
+        return False
+    from agent_core.worker_lease import busy
+    return not any(busy(path) for path in (root/name/'task_state/background').glob('*/worker.lock'))
+
+
+def start_checked(child):
+    try:
+        start(child)
+    except Exception as exc:
+        now = time.time()
+        child.last_exit = {'time': now, 'code': type(exc).__name__, 'planned': False}
+        child.exits.append(now)
+        print(f'[supervisor] could not start {child.name}: {type(exc).__name__}')
+
+
+def release_step(children, job, submit):
+    """Only the supervisor advances the existing restart-status record."""
+    from agent_runtime import atomic_json
+    path = ROOT/'dashboard/restart_status.json'
+    request = read_json(path)
+    if not request.get('target') or request.get('status') in ('complete', 'failed'):
+        return None
+    try:
+        if not release.same_source(release.identity(ROOT), request['target']):
+            raise RuntimeError('Source changed; commit it and request a new release')
+        if request['status'] in ('queued', 'testing'):
+            if job is None:
+                job = submit(release.test_version, ROOT, request['target'])
+                request['status'] = 'testing'
+            if job.done():
+                request['tested'] = job.result()
+                request['status'] = 'draining'
+                request['previous'] = {c.name: c.instance for c in children}
+                job = None
+        if request['status'] == 'draining':
+            pending = []
+            for child in children:
+                if child.running() and child.instance == request['previous'].get(child.name):
+                    if not child.instance:
+                        pending.append(child.name+': startup identity unavailable')
+                        continue
+                    atomic_json(ROOT/child.name/'task_state/drain',
+                                {'id': request['id'], 'instance': child.instance, 'requested': request.get('requested', 0)})
+                if child.last_exit and child.last_exit['time'] >= child.started and not child.last_exit.get('planned'):
+                    pending.append(child.name+': start/crash failure')
+            request['message'] = '; '.join(pending) or 'Waiting for fresh processes on the tested version'
+            if release_complete(request, live_status(ROOT)['agents'], release.LOADED):
+                request.update(status='complete', message='Every component is healthy on the tested version')
+        request['updated'] = time.time()
+    except Exception as exc:
+        request.update(status='failed', message=str(exc), updated=time.time())
+        job = None
+    atomic_json(path, request)
+    return job
+
+
+def handoff_supervisor(lock):
+    """Leave children running; the replacement adopts their existing OS identities."""
+    try:
+        subprocess.Popen([sys.executable, str(ROOT/'supervisor.py'), '--handoff', str(os.getpid())], cwd=ROOT,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    except OSError as exc:
+        print(f'[supervisor] replacement could not start: {type(exc).__name__}')
+        return False
+    lock.close()
+    os._exit(0)
+
+
 def main():
+    if not release.same_source(release.identity(), release.LOADED):
+        raise RuntimeError('Source changed during supervisor startup')
+    # The replacement starts before its parent releases ownership. No child is stopped.
+    if len(sys.argv) == 3 and sys.argv[1] == '--handoff':
+        parent = int(sys.argv[2])
+        born = process_created(parent)
+        while born and process_created(parent) == born:
+            time.sleep(0.05)
     lock = socket.socket()
     try:
         lock.bind(("127.0.0.1", INSTANCE_PORT))
@@ -328,11 +425,17 @@ def main():
     for name, pid in adopt_existing(children):
         print(f"[supervisor] adopted running {name} pid={pid}")
     notified = set()
+    from concurrent.futures import ThreadPoolExecutor
+    tester = ThreadPoolExecutor(max_workers=1)
+    test_job = None
     while True:
         now = time.time()
         paused = PAUSE.exists()
+        if not paused:
+            test_job = release_step(children, test_job, tester.submit)
+        requested = read_json(ROOT/'dashboard/restart_status.json')
         for child in children:
-            health = read_json(ROOT / child.name / "task_state" / "health.json") if child.name in AGENTS else {}
+            health = read_json(ROOT / child.name / "task_state" / "health.json") if child.name in AGENTS + ('dashboard',) else {}
             if child.tracked() and not child.running():
                 request = read_json(ROOT/child.name/'task_state/drain')
                 code = observe_exit(child, now, health, request)
@@ -340,8 +443,8 @@ def main():
             if child.running() and matching_health(child.instance, child.python_pid, child.started, health):
                 child.python_pid = health.get("pid")       # the health file written by this start, not a stale one
             action = decide(child, now, health, paused)
-            if action == "start":
-                start(child)
+            if action == "start" and release_allows_start(child.name, requested, ROOT):
+                start_checked(child)
             elif action == "wait" and child.name not in notified:
                 notified.add(child.name)
                 print(f"[supervisor] {child.name} is crash-looping; waiting {CRASH_BACKOFF}s")
@@ -369,8 +472,11 @@ def main():
                 notify_owner(f"{name}'s daily self-test failed: {str(st.get('error') or st.get('reply'))[:200]}. "
                              "The process is up but a real turn does not complete; inspect its log.")
             # The weekly memory exam is shown on the dashboard with its questions; it is not sent to Telegram
-            # (Alex, 2026-10-24: "is it really necessary that he sends me these supervisor messages?").
+            # (Alex, 2026-10-24: [quote removed]).
         write_state(children, paused)
+        if not paused and requested.get('status') == 'draining' and not release.same_source(requested.get('tested'), release.LOADED):
+            tester.shutdown(wait=True)
+            handoff_supervisor(lock)
         time.sleep(POLL_SECONDS)
 
 

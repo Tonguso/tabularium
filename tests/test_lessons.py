@@ -63,6 +63,42 @@ class Lessons(unittest.TestCase):
         self.assertEqual(learning.record_check(self.root, 1, self.key, False, "task 161: rebuilt membership twice")["status"], "candidate")
         self.assertIn("candidate, unapproved", learning.hints(self.root, 1, "basket_build"))
 
+    def test_an_added_rule_is_one_ledger_entry_counted_by_checks_and_retired_on_his_words(self):
+        """ACE-style ledger (2026-10-24): an addition is an entry, never a rewrite; checks count helped/hurt; a verified
+        entry keeps being counted and the digest offers it for retirement once it hurts more than it helps."""
+        learning.propose_change(self.root, 1, self.key, self.skill, "", "Freeze the membership before building.")
+        learning.approve(self.root, 1, self.key, 7, "yes, change the skill like that", skip_trial=True)
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("- Read the archives for each name.", text)                       # the prose is untouched
+        self.assertIn(learning.LEDGER, text)
+        self.assertIn(f"- [{self.key}] (", text)
+        self.assertTrue(text.rstrip().endswith("Freeze the membership before building."))
+        out = learning.record_check(self.root, 1, self.key, True, "task 160: frozen first")
+        self.assertEqual((out["status"], out["helped"], out["hurt"]), ("verified", 1, 0))
+        out = learning.record_check(self.root, 1, self.key, False, "task 161: rebuilt twice")   # verified stays, counted
+        self.assertEqual((out["status"], out["helped"], out["hurt"]), ("verified", 1, 1))
+        self.assertNotIn("RETIRE?", learning.digest(self.root, 1))
+        learning.record_check(self.root, 1, self.key, False, "task 162: rebuilt again")
+        self.assertIn(f"RETIRE? {self.key}: hurt 2, helped 1", learning.digest(self.root, 1))
+        with self.assertRaises(ValueError):
+            learning.retire(self.root, 1, self.key, 8, "yes, change the skill like that")   # assistant's words
+        out = learning.retire(self.root, 1, self.key, 7, "yes, change the skill like that")
+        self.assertEqual((out["status"], out["entry_removed"]), ("retired", True))
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertNotIn(self.key, text)
+        self.assertIn("- Read the archives for each name.", text)
+        self.assertIn('version: "1.8.7"', text)
+        self.assertNotIn(self.key, learning.digest(self.root, 1))
+
+    def test_two_entries_saying_the_same_thing_are_offered_for_a_merge(self):
+        learning.propose_change(self.root, 1, self.key, self.skill, "", "Freeze the membership list before the build.")
+        learning.approve(self.root, 1, self.key, 7, "yes, change the skill like that", skip_trial=True)
+        k2 = learning.propose(self.root, 1, "Freeze the membership list before building", "t2", "basket_build")
+        learning.propose_change(self.root, 1, k2, self.skill, "", "Freeze the membership list before building.")
+        learning.approve(self.root, 1, k2, 7, "yes, change the skill like that", skip_trial=True)
+        self.assertIn(f"MERGE? {self.key} and {k2}", learning.digest(self.root, 1))
+        self.assertEqual(self.skill.read_text(encoding="utf-8").count(learning.LEDGER), 1)
+
     def test_the_model_cannot_move_a_lesson_past_candidate(self):
         store = ProjectStore(self.root); row = store.manage(1, "read", "lesson", self.key)
         for status in ("proposed", "applied", "verified", "approved", "deployed"):

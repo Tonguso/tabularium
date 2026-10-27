@@ -37,6 +37,7 @@ def aggregate(records):
             value = input_total(metrics) if field == 'input_total' else metrics.get(field)
             if value is None:
                 unknown[field] += 1
+                known[field] += (metrics.get("known_subtotals") or {}).get(field) or 0
             else:
                 known[field] += value
     result = {k: None if unknown[k] else known[k] for k in FIELDS}

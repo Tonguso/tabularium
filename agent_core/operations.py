@@ -12,7 +12,6 @@ import sys
 import time
 from agent_runtime import atomic_json
 from agent_core.memory_store import memory_lock
-from agent_core.roster import AGENTS
 PORT=8220
 URL=f"http://127.0.0.1:{PORT}"
 

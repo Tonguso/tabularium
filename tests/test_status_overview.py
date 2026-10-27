@@ -17,7 +17,7 @@ class Overview(unittest.TestCase):
     def test_status_rows_are_short_and_leave_the_brief_out(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = rt.TaskStore(Path(tmp))
-            brief = "Carry out Alex's current request: 中国还有啥有意思的主题\n" + STALE + "\n" + "x" * 3000
+            brief = "Carry out Alex's current request: 还有什么有意思的主题\n" + STALE + "\n" + "x" * 3000
             with store.db() as db:
                 db.execute("INSERT INTO tasks(id,chat,request,status,created,updated,note) VALUES (148,1,?,'finished',1791812033,1791815417,'Response saved.')", (brief,))
             out = store.overview(1)

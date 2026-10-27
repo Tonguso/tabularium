@@ -2,8 +2,7 @@
 
 Lessons record what went wrong; nothing recorded what went right. On 2026-10-03 Cato designed a brand logo with
 the logo-designer skill (SVG through build_logo_*.py scripts, six rounds of Alex's feedback). On 2026-10-21 he
-loaded the same skill for another logo, used an image model instead, and was blocked twice. Alex: "Why do I have to
-tell him that, he should know." Now every skill load comes with the agent's three most recent uses of that skill:
+loaded the same skill for another logo, used an image model instead, and was blocked twice. Alex: [quote removed] Now every skill load comes with the agent's three most recent uses of that skill:
 when, what the work was, what it produced, how it ended, and Alex's next message. Built from the agent's own tool
 receipts; no model call. About 250 tokens per load.
 

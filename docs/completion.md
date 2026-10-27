@@ -92,3 +92,14 @@ separately established removed gate calls; live totals cannot isolate each gate'
 Raw results and matched comparisons: completion-comparison.json. After task IDs: Cato 323, Cal 63,
 Vit 30, Tacitus 6. The unused TaskStore.park wrapper was also deleted; the completion decision now
 owns production parking, while lifecycle tests exercise named transitions directly.
+
+## Judgment requirements, 2026-10-24
+
+The owner asked why every research result arrived under "Completion not verified: Requirement 1 ...:
+unverified." Requirements no machine can check (a comparison table, a conclusion) were counted as failures, so
+research tasks always ended needs_attention with that paragraph prepended. A requirement without a declared
+`verification` is now a judgment item: status "judgment" in completion.json, never a blocking reason, never in
+the message. Declared checks are unchanged: they must pass on the current bytes. The delivery line
+(verification.summary) is silent when nothing failed and otherwise says "Check failed: ..." or "Not checked on
+the delivered file: ..."; a real block is prepended as "Not complete: ...". Changed by Claude Code at the owner's
+request ("Fix it"); this note supersedes the paragraph above that keeps subjective items blocking.

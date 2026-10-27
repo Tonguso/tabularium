@@ -5,7 +5,8 @@ import re
 ROLES={
  "research":"Audit source support, dates, coverage, contrary evidence and claims exceeding sources. Do not pretend to fetch sources.",
  "quant":"Audit units, calculations, signs, assumptions, time alignment and sensitivity. You cannot execute code; identify checks needing actual execution.",
- "critic":"Challenge the conclusion, compare alternatives and identify failure conditions. Do not invent objections when evidence is sound."
+ "critic":"Challenge the conclusion, compare alternatives and identify failure conditions. Do not invent objections when evidence is sound.",
+ "delivery":"Review a delegate's delivery cold against its numbered completion items. For each item say met, not met, or cannot tell from the packet, with the evidence line that decides it. Substance only (a wrong answer, missing proof, an unmet item); no style findings. Separate defects this delivery introduced from ones already present. Do not repeat a finding the packet marks as already recorded."
 }
 COMMON_TEMPLATE="""You are a temporary independent reviewer, not {name} or the user's conversational assistant.
 Use neutral technical prose, no sir, personal familiarity or roleplay.

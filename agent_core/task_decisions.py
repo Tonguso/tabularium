@@ -4,19 +4,20 @@ import sqlite3
 import time
 from pathlib import Path
 from datetime import datetime
-from agent_core.reply_envelope import Reply
 from agent_core.outcome import Failed
 from agent_core.worker_lease import busy
 from agent_core import lifecycle
 
 TOOL = {
     "name": "task_decision",
-    "description": "Persist a task's question BEFORE asking it; list unanswered decisions; answer using an exact user quote. When Alex's current message is the answer, give decision_id and the quote and leave source_id out; otherwise give source_id from search_conversations. When he uses Telegram's reply on the question, the runtime has already recorded it. Answer queues continuation atomically. Never substitute an assistant suggestion for the user's decision. Parked actions (kind=action) are approved only by his own yes, never through this tool.",
+    "description": "Persist a task's question BEFORE asking it; list unanswered decisions; answer using an exact user quote. When Alex's current message is the answer, give decision_id and the quote and leave source_id out; otherwise give source_id from search_conversations. When he uses Telegram's reply on the question, the runtime has already recorded it. Answer queues continuation atomically. Never substitute an assistant suggestion for the user's decision. For an exact action answering an existing question, prepare with its decision_id, tool and inputs: this reuses that decision and requests exact approval. For a genuinely unrelated action use decision_id=0 explicitly. Prepare does not execute or approve anything. Parked actions are approved only by his own yes.",
     "input_schema": {"type": "object", "properties": {
-        "action": {"type": "string", "enum": ["list", "ask", "answer"]},
+        "action": {"type": "string", "enum": ["list", "ask", "answer", "prepare"]},
         "task_id": {"type": "integer"}, "question": {"type": "string"},
         "decision_id": {"type": "integer"}, "answer": {"type": "string"},
-        "source_id": {"type": "integer"}, "quote": {"type": "string"}},
+        "source_id": {"type": "integer"}, "quote": {"type": "string"},
+        "tool": {"type": "string", "enum": ["send_email", "execute_command"]},
+        "inputs": {"type": "object"}},
         "required": ["action"]},
 }
 
@@ -25,7 +26,7 @@ def pending(store, chat, task=None, kind=None):
     db = sqlite3.connect(store.database, timeout=30)
     db.row_factory = sqlite3.Row
     try:
-        query = "SELECT * FROM decisions WHERE chat=? AND state='pending'"
+        query = "SELECT decisions.*, (SELECT status FROM tasks WHERE tasks.id=decisions.task) AS task_state FROM decisions WHERE chat=? AND state='pending'"
         args = [chat]
         if task is not None:
             query += " AND task=?"
@@ -36,84 +37,6 @@ def pending(store, chat, task=None, kind=None):
         rows = [dict(r) for r in db.execute(query + " ORDER BY id", args)]
     finally:
         db.close()
-    return annotate_stale(store, chat, rows)
-
-
-STOP_TERMS = {"的", "了", "是", "我", "你", "他", "们", "这", "那", "不", "都", "也", "在", "有", "和", "就", "要", "可以",
-              "什么", "一个", "选项", "推荐", "还是", "如果", "the", "and", "for", "with", "that", "this", "option"}
-
-
-def terms(text):
-    """Latin words of three letters or more and CJK character bigrams, minus function words: the overlap test that
-    says a later message or task may be about a pending question."""
-    import re
-    out = {w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9_]{2,}", text)}
-    cjk = re.findall(r"[一-鿿]+", text)
-    for run in cjk:
-        out.update(run[i:i + 2] for i in range(len(run) - 1))
-    return {t for t in out if t not in STOP_TERMS and not any(c in t for c in "的了是我你他们这那不都也在有和就要")}
-
-
-def _stamp(said_at):
-    try:
-        return datetime.fromisoformat(said_at).timestamp()
-    except (TypeError, ValueError):
-        return 0
-
-
-def annotate_stale(store, chat, rows):
-    """Mark each pending decision 'possibly_stale' with a reason when, since it was asked: Alex sent a message that
-    overlaps its topic, its task finished or was cancelled or superseded, or a newer task on the same topic was
-    started. Nothing is closed here: the flag only stops a stale question from looking current (2026-10-20: decision 7
-    was answered at 18:24 through the inbox, never closed, and asked again at 19:56)."""
-    if not rows:
-        return rows
-    recall = store.agent_dir / "task_state/conversation_recall.sqlite3"
-    messages, tasks = [], []
-    since = min(r["created"] for r in rows)
-    if recall.exists():
-        try:
-            db = sqlite3.connect(recall.as_uri() + "?mode=ro", uri=True)
-            try:
-                messages = [m for m in db.execute("SELECT id,text,said_at FROM messages WHERE chat=? AND speaker='user' "
-                                                  "AND source NOT LIKE '%task_state' || ? || 'background%' ORDER BY id",
-                                                  (str(chat), "%"))
-                            if _stamp(m[2]) > since - 60]
-            finally:
-                db.close()
-        except sqlite3.Error:
-            messages = []
-    try:
-        db = sqlite3.connect(store.database, timeout=30)
-        try:
-            tasks = db.execute("SELECT id,status,request,created FROM tasks WHERE chat=? AND created>? ORDER BY id",
-                               (chat, since - 60)).fetchall()
-            states = dict(db.execute("SELECT id,status FROM tasks WHERE id IN (%s)" % ",".join("?" * len(rows)),
-                                     [r["task"] for r in rows]).fetchall())
-        finally:
-            db.close()
-    except sqlite3.Error:
-        states = {}
-    for row in rows:
-        topic = terms(row["question"])
-        reason = ""
-        status = states.get(row["task"])
-        if status in ("finished", "cancelled", "superseded"):
-            reason = f"task {row['task']} is {status}"
-        for ident, text, said_at in messages:
-            if _stamp(said_at) <= row["created"] - 60:
-                continue
-            shared = sorted(topic & terms(text), key=len, reverse=True)
-            if shared:
-                when = said_at[11:16] if said_at and len(said_at) >= 16 else said_at
-                reason = (reason + "; " if reason else "") + f"user message {ident} at {when} mentions {shared[0]}"
-                break
-        for ident, status, request, created in tasks:
-            if ident != row["task"] and created > row["created"] and topic & terms(request or ""):
-                reason = (reason + "; " if reason else "") + f"newer task {ident} is about the same topic"
-                break
-        if reason:
-            row["possibly_stale"] = reason
     return rows
 
 
@@ -133,7 +56,7 @@ def ask(store, chat, ident, question):
                              "if it needs more work, reopen it first with background_task resume.")
         if store.worker_attempt and (not task or task["attempt"] != store.worker_attempt):
             raise ValueError("Worker no longer owns this task.")
-        old = db.execute("SELECT * FROM decisions WHERE task=? AND chat=? AND state='pending' AND kind='question'",
+        old = db.execute("SELECT * FROM decisions WHERE task=? AND chat=? AND state='pending' AND (task<>0 OR kind='question')",
                          (ident, chat)).fetchone()
         if old:
             # Never silently replace a question already shown to the user.
@@ -165,16 +88,39 @@ def verdict(text):
     return True if word in YES else False if word in NO else None
 
 
-def park_action(store, chat, tool, inputs, question):
-    """A guarded tool call waits as a decision with its exact inputs (2026-10-21). It has no deadline and survives a
-    restart: Alex's yes, whenever it comes, runs exactly this call once. Replaces the 60-second in-memory wait,
-    which treated a late answer as a no and forgot everything on restart."""
+def park_action(store, chat, tool, inputs, question, decision_id=None, task=0):
+    """Attach the exact action to its existing question; never guess the relationship."""
     now = time.time()
     db = sqlite3.connect(store.database, timeout=30)
     db.row_factory = sqlite3.Row
+    action = json.dumps({"tool": tool, "inputs": inputs}, ensure_ascii=False)
     try:
-        key = db.execute("INSERT INTO decisions(task,chat,question,created,updated,kind,action) VALUES (0,?,?,?,?,'action',?)",
-                         (chat, question, now, now, json.dumps({"tool": tool, "inputs": inputs}, ensure_ascii=False))).lastrowid
+        db.execute("BEGIN IMMEDIATE")
+        if decision_id is None and db.execute(
+                "SELECT 1 FROM decisions WHERE chat=? AND state='pending'", (chat,)).fetchone():
+            raise ValueError("Use task_decision prepare with the originating decision_id, or decision_id=0 for an unrelated action.")
+        if decision_id:
+            row = db.execute("SELECT * FROM decisions WHERE id=? AND chat=?", (decision_id, chat)).fetchone()
+            if not row or row['state'] != 'pending':
+                raise ValueError("The originating decision is not pending in this chat.")
+            if row['kind'] == 'action':
+                if row['action'] != action:
+                    raise ValueError("This decision already has a different exact action awaiting approval.")
+                return dict(row)
+            task = row['task']
+            if task:
+                state = db.execute("SELECT status FROM tasks WHERE id=?", (task,)).fetchone()[0]
+                if state in ('cancelled', 'cancelling', 'superseded', 'finished'):
+                    raise ValueError("The task is no longer available for this action.")
+            # Old question messages cannot authorize a newly specified exact action.
+            db.execute("UPDATE decisions SET kind='action',action=?,message_ids='[]',updated=? WHERE id=?",
+                       (action, now, decision_id))
+            key = decision_id
+        else:
+            if task:
+                raise ValueError("Create the task question first, then prepare its exact action by decision_id.")
+            key = db.execute("INSERT INTO decisions(task,chat,question,created,updated,kind,action) "
+                             "VALUES (0,?,?,?,?,'action',?)", (chat, question, now, now, action)).lastrowid
         db.commit()
         return dict(db.execute("SELECT * FROM decisions WHERE id=?", (key,)).fetchone())
     finally:
@@ -204,16 +150,58 @@ def by_message(store, chat, message_id):
 
 
 def settle_action(store, chat, decision, approved, source, outcome=""):
-    """Close a parked action: 'answered' when Alex said yes (and it ran), 'declined' when he said no. Returns False
-    if it was no longer pending, so a repeated yes never runs the action twice."""
+    """Claim approval once before execution. An interrupted claim has an unknown outcome, never an automatic retry."""
     db = sqlite3.connect(store.database, timeout=30)
     try:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT task FROM decisions WHERE id=? AND chat=? AND state='pending' AND kind='action'",
+                         (decision, chat)).fetchone()
+        if not row:
+            return False
+        if row[0]:
+            state = db.execute("SELECT status FROM tasks WHERE id=?", (row[0],)).fetchone()
+            if not state or state[0] in ('cancelled', 'cancelling', 'superseded', 'finished'):
+                db.execute("UPDATE decisions SET state='declined',answer='Task ended; action not executed.',updated=? WHERE id=?",
+                           (time.time(), decision))
+                db.commit()
+                return False
         changed = db.execute("UPDATE decisions SET state=?,answer=?,source=?,updated=? WHERE id=? AND chat=? "
                              "AND state='pending' AND kind='action'",
-                             ("answered" if approved else "declined", outcome[:4000], source, time.time(),
-                              int(decision), chat)).rowcount
+                             ("answered" if approved else "declined", "Outcome unknown until execution is recorded." if approved else "Declined; not executed.",
+                              source, time.time(), int(decision), chat)).rowcount
+        if changed and approved and row[0]:
+            lifecycle.move(db, row[0], 'stop', 'needs_attention',
+                           'Approved action claimed; outcome unknown until recorded', notified=1)
         db.commit()
         return bool(changed)
+    finally:
+        db.close()
+
+
+def finish_action(store, chat, decision, outcome):
+    """Save the tool outcome and queue the original task in the same transaction."""
+    db = sqlite3.connect(store.database, timeout=30)
+    db.row_factory = sqlite3.Row
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT * FROM decisions WHERE id=? AND chat=? AND kind='action'", (decision, chat)).fetchone()
+        if not row or row['state'] not in ('answered', 'declined'):
+            raise ValueError("Action has no recorded approval or refusal.")
+        action = json.loads(row['action'])
+        if 'result' in action:
+            return
+        action['result'] = str(outcome)
+        db.execute("UPDATE decisions SET answer=?,action=?,updated=? WHERE id=?",
+                   (str(outcome), json.dumps(action, ensure_ascii=False), time.time(), decision))
+        task = db.execute("SELECT status FROM tasks WHERE id=?", (row['task'],)).fetchone()
+        if task and task[0] not in ('cancelled', 'cancelling', 'superseded', 'finished'):
+            control = db.execute("INSERT INTO controls(task,text) VALUES (?,?)", (row['task'],
+                f"Decision #{decision}: {row['question']}\nRecorded action outcome: {outcome}\n"
+                "Use this result; do not repeat the action. Continue the original task from its saved evidence.")).lastrowid
+            db.execute("UPDATE decisions SET control=? WHERE id=?", (control, decision))
+            state = lifecycle.WAITING if task[0] == lifecycle.WAITING else 'queued'
+            lifecycle.move(db, row['task'], 'answer', state, 'Action outcome recorded; continuation queued')
+        db.commit()
     finally:
         db.close()
 
@@ -330,45 +318,44 @@ def completion_evidence(store, ident, result, context, checkpoint):
     benchmark = (context.get("eval") or {}).get("benchmark")
     if benchmark:
         try:
-            case = regression.bound_case(store.agent_dir, context)
+            regression.bound_case(store.agent_dir, context)
         except ValueError as exc:
             reasons.append(str(exc))
-        else:
-            grade = regression.grade(None, case, str(result), store.directory(ident) / "trial_output")
-            items = grade["items"]
-            if not grade["passed"]:
-                reasons.append(grade["note"])
     else:
+        # No bookkeeping test here (2026-10-24, Alex: [quote removed]): whether every instruction carries a
+        # declared requirement is guidance in the worker's context, never evidence that work is incomplete. The
+        # runtime's own resume note (control 235 on task 348) was counted as an uncovered instruction.
         requirements, _ = verification.contract(store, ident)
-        missing = verification.uncovered_sources(store, ident, requirements)
-        if missing:
-            reasons.append("Instructions without declared requirements: " + str(missing))
         try:
             verification.validate_items(requirements)
-            items = [dict(id=n, item=it["item"], status=verification.status(store, ident, "", n))
+            # A requirement without a declared check is the owner's to judge by reading; it never blocks finishing
+            # (2026-10-24). A declared check must have passed on the current file.
+            items = [dict(id=n, item=it["item"], status="judgment" if verification.is_judgment(it)
+                          else verification.status(store, ident, "", n))
                      for n, it in enumerate(requirements, 1)]
             for it in items:
-                if it["status"] != "passed":
-                    reasons.append(f"Requirement {it['id']} {it['item']}: {it['status']}.")
+                if it["status"] not in ("passed", "judgment"):
+                    reasons.append(f"Check {it['status']}: {it['item']}.")
         except (ValueError, TypeError, KeyError) as exc:
             reasons.append("Completion requirements unavailable: " + str(exc))
-    # An accepted dependency must still match its proof when the parent finishes.
+    # The same delivery-bound acceptance decision is used here and at review.
     for delegation in store.delegations(ident):
-        if delegation["status"] != "read":
+        if delegation['status'] == 'cancelled':
             continue
-        request = delegation["request_id"]
+        request = delegation['request_id']
         try:
-            requirements, _ = verification.contract(store, ident, request)
-            verification.validate_items(requirements)
-            if any(verification.status(store, ident, request, n) != "passed" for n in range(1, len(requirements) + 1)):
-                reasons.append(f"Dependency {request}: proof is failed or unverified.")
-        except (ValueError, TypeError, KeyError) as exc:
+            _, _, unmet = verification.acceptance(store, ident, request)
+            if unmet:
+                reasons.append(f"Delegated requirements not accepted ({request}): {unmet}.")
+        except (ValueError, TypeError, KeyError, OSError) as exc:
             reasons.append(f"Dependency {request}: {exc}")
-    return dict(passed=not reasons, verdict="passed" if not reasons else "unverified", reasons=reasons, items=items)
+    # Benchmark generation is recorded here; its independent evaluator owns artifact and subjective grading.
+    verdict = ("recorded" if benchmark else "passed") if not reasons else "unverified"
+    return dict(passed=not reasons and not benchmark, verdict=verdict, reasons=reasons, items=items)
 
 
-def finish(store, ident, result):
-    """The only completion decision: durable controls, dependencies and current artifact proof."""
+def finish(store, ident, result, *, commit=True):
+    """One decision, previewed before the final reply and rechecked when committing task state."""
     from agent_runtime import atomic_json
     from agent_core.memory_store import atomic_text
     from agent_core.corrections import is_diagnosis
@@ -389,10 +376,10 @@ def finish(store, ident, result):
     task = store.get(ident)
     isolated = bool(context.get("trial") or context.get("eval") or is_diagnosis(task["request"]))
     question = getattr(result, "question", "") or store.legacy_question(ident)
-    if question and not isolated and not store.decisions(task["chat"], ident) and task["status"] not in ("cancelled", "cancelling", "queued"):
+    if commit and question and not isolated and not store.decisions(task["chat"], ident) and task["status"] not in ("cancelled", "cancelling", "queued"):
         store.ask(task["chat"], ident, question)
     # One inexpensive dependency refresh, never another model turn or a polling loop.
-    if store.unread_delegations(ident):
+    if commit and store.unread_delegations(ident):
         store.refresh_delegations(ident)
     from agent_core import verification
     try:
@@ -404,10 +391,12 @@ def finish(store, ident, result):
     db = sqlite3.connect(store.database, timeout=30)
     db.row_factory = sqlite3.Row
     try:
-        db.execute("BEGIN IMMEDIATE")
+        db.execute("BEGIN IMMEDIATE" if commit else "BEGIN")
         task = db.execute("SELECT * FROM tasks WHERE id=?", (ident,)).fetchone()
         if store.worker_attempt and task["attempt"] != store.worker_attempt:
             raise ValueError("Worker no longer owns this task.")
+        if not commit and task["status"] != "running":
+            return dict(state=task["status"], reasons=[])
         if task["status"] in ("cancelled", "superseded"):
             return task["status"]
         if task["status"] == "cancelling":
@@ -433,6 +422,8 @@ def finish(store, ident, result):
         evidence.update(state=state, checked_at=time.time())
         if state != "finished" or errors:
             evidence.update(passed=False, verdict="unverified")
+        if not commit:
+            return evidence
         atomic_json(folder / "completion.json", evidence)
         if state == lifecycle.WAITING:
             atomic_text(folder / "parked_answer.txt", str(result or ""))
@@ -445,6 +436,30 @@ def finish(store, ident, result):
         return state
     finally:
         db.close()
+
+
+def completion_feedback(agent, chat, result):
+    """Give a repairable final draft its existing completion evidence while tools are still available."""
+    from agent_core.reply_envelope import retry_note
+    if (not agent.BACKGROUND_TASK_ID or not getattr(result, 'complete', False)
+            or getattr(result, 'task_outcome', 'none') in ('blocked', 'waiting')
+            or getattr(result, 'question', '')):
+        return None
+    decision = finish(agent._background, int(agent.BACKGROUND_TASK_ID), result, commit=False)
+    if decision['state'] != 'needs_attention' or not decision['reasons']:
+        return None
+    reasons = tuple(decision['reasons'])
+    seen = agent._completion_feedback.setdefault(chat, [])
+    # Two repair turns at most; repeating the same failure is not progress. Kept across session limits.
+    if reasons in seen or len(seen) >= 2:
+        return None
+    seen.append(reasons)
+    return retry_note(agent, 'completion', result,
+                      'Completion evidence: ' + '; '.join(reasons) +
+                      '\nRepair these specific gaps using the existing artifacts and tools. Preserve valid proof; '
+                      'do not repeat completed actions. If work is complete, declare task_outcome=completed. '
+                      'If a real blocker prevents repair, record it and declare blocked or ask the needed question. '
+                      'These diagnostics are runtime feedback, not a message from Alex.')
 
 
 def live(store, chat, ident):
@@ -480,17 +495,25 @@ def live(store, chat, ident):
 
 def context(store, chat, task=None):
     db = sqlite3.connect(store.database, timeout=30)
+    db.row_factory = sqlite3.Row
     try:
         ids = [r[0] for r in db.execute(
             "SELECT id FROM tasks WHERE chat=? AND status NOT IN ('finished','cancelled','superseded') "
             "AND (? IS NULL OR id=?) ORDER BY id", (chat, task, task))]
+        outcomes = [dict(r) for r in db.execute(
+            "SELECT id,task,question,state,answer FROM decisions WHERE chat=? AND kind='action' AND state<>'pending' "
+            "AND (? IS NULL OR task=?) ORDER BY updated DESC LIMIT 6", (chat, task, task))]
     finally:
         db.close()
     decisions = store.decisions(chat, task)
-    if not ids and not decisions:
+    if not ids and not decisions and not outcomes:
         return ""
-    return "[Live task evidence; historical assistant claims are not current status]\n" + json.dumps(
-        {"tasks": [store.live(chat, i) for i in ids], "pending_decisions": decisions}, ensure_ascii=False)
+    for outcome in outcomes:
+        outcome['answer'] = outcome['answer'][:1500] if outcome['answer'] else 'Outcome unknown.'
+    evidence = {"tasks": [store.live(chat, i) for i in ids], "pending_decisions": decisions}
+    if outcomes:
+        evidence['action_outcomes'] = outcomes
+    return "[Live task evidence; historical assistant claims are not current status]\n" + json.dumps(evidence, ensure_ascii=False)
 
 
 def execute(agent, chat, inputs):
@@ -504,6 +527,21 @@ def execute(agent, chat, inputs):
             if agent.BACKGROUND_TASK_ID and ident != int(agent.BACKGROUND_TASK_ID):
                 raise ValueError("A worker can only ask about its own task.")
             result = store.ask(chat, ident, inputs["question"])
+        elif action == "prepare":
+            if agent.BACKGROUND_TASK_ID:
+                raise ValueError("The foreground prepares exact actions against the worker's decision_id.")
+            tool, values = inputs["tool"], inputs["inputs"]
+            schemas = {(t.get('function') or t)['name']: (t.get('function') or t)
+                       for t in agent.get_tools('anthropic')}
+            if tool not in ('send_email', 'execute_command') or tool not in schemas:
+                raise ValueError("This agent cannot prepare that tool.")
+            schema = schemas[tool]['input_schema']
+            if not isinstance(values, dict) or set(values) - set(schema.get('properties', {})):
+                raise ValueError("Unknown action inputs.")
+            if any(k not in values for k in schema.get('required', [])):
+                raise ValueError("Missing required action inputs.")
+            return agent._park(chat, tool, values, "Approve this exact action:\n" + json.dumps(
+                {"tool": tool, "inputs": values}, ensure_ascii=False), decision_id=int(inputs['decision_id']))
         elif action == "answer":
             if agent.BACKGROUND_TASK_ID:
                 raise ValueError("The foreground agent records user answers.")
@@ -512,7 +550,7 @@ def execute(agent, chat, inputs):
             else:
                 result = answer_from_current(agent, chat, inputs["decision_id"], inputs["answer"], inputs["quote"])
         else:
-            raise ValueError("Use list, ask or answer.")
+            raise ValueError("Use list, ask, answer or prepare.")
         return json.dumps(result, ensure_ascii=False)
     except (ValueError, KeyError, OSError, sqlite3.Error) as exc:
         return Failed("Decision not changed: " + str(exc))
@@ -549,7 +587,7 @@ def verify_reply(agent, messages, chat, result):
             except ValueError:
                 ident = 0
         if ident and not (agent.BACKGROUND_TASK_ID and agent._background.pending_controls(ident)):
-            existing = [d for d in agent._background.decisions(chat, ident) if d.get("kind", "question") == "question"]
+            existing = agent._background.decisions(chat, ident)
             result.decision_id = (existing[0] if existing else agent._background.ask(chat, ident, result.question))["id"]
         elif not ident:
             # A conversation question has no executable task. Its answer never queues invented work.

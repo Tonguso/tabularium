@@ -93,9 +93,224 @@ def merge_items(previous, updates):
     return result
 
 
+def delegate(store, task, request):
+    """Resolve the request to its authoritative worker task; no copied agreement."""
+    import sqlite3
+    from background_runtime import TaskStore
+    from agent_core.roster import ROLES
+    db = sqlite3.connect(store.database, timeout=30)
+    try:
+        card = db.execute("SELECT task,agent FROM scorecard WHERE request_id=?", (request,)).fetchone()
+    finally:
+        db.close()
+    if not card or int(card[0]) != int(task):
+        raise ValueError("The request does not belong to this task.")
+    name = {"vit": "vitruvius", "cal": "callimachus"}.get(card[1])
+    if not name:
+        raise ValueError("Unknown delegate.")
+    folder = store.agent_dir.parent / name
+    database = folder / "task_state/background/jobs.sqlite3"
+    if not database.exists():
+        return None                       # historical unmapped contracts remain readable, never acceptable
+    db = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=30)
+    try:
+        table = ROLES[name].request_table
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (table,)).fetchone():
+            return None
+        row = db.execute(f"SELECT task FROM {table} WHERE request_id=?", (request,)).fetchone()
+    finally:
+        db.close()
+    if not row:
+        return None
+    remote = TaskStore(folder, ROLES[name])
+    if remote.get(row[0])["chat"] != store.get(task)["chat"]:
+        raise ValueError("Delegate belongs to another chat.")
+    return remote, int(row[0])
+
+
+def delivery(store, task, request):
+    """Identity of the returned result and agreement, not the request's historical read flag."""
+    import sqlite3
+    resolved = delegate(store, task, request)
+    if not resolved:
+        raise ValueError("No mapped delegate task; inspect the legacy result before submitting current work.")
+    remote, child = resolved
+    state = remote.get(child)
+    if state['status'] not in ('finished', 'needs_attention'):
+        raise ValueError("The delegate has not returned a delivery for review.")
+    db = sqlite3.connect(remote.database, timeout=30)
+    try:
+        controls = db.execute("SELECT id,text,applied FROM controls WHERE task=? ORDER BY id", (child,)).fetchall()
+        if any(not row[2] for row in controls) or db.execute("SELECT 1 FROM decisions WHERE task=? AND state='pending'", (child,)).fetchone():
+            raise ValueError("Delegate has unresolved instructions or decisions.")
+    finally:
+        db.close()
+    items = saved_items(remote, child)
+    paths = [str(remote.directory(child) / 'result.txt')]
+    for item in items:
+        paths.extend((item.get('verification') or {}).get('paths', []))
+    card = store.scorecard(request)
+    brief = json.loads(card.get('brief') or '{}')
+    output = brief.get('output_path')
+    if output:
+        paths.append(output)
+    # Missing declared artifacts remain reviewable as failures, never a passing check.
+    artifacts = {str(Path(p).resolve()): hashes([p])[str(Path(p).resolve())] if Path(p).is_file() else None for p in paths}
+    if artifacts[str(Path(paths[0]).resolve())] is None:
+        raise ValueError("Delegate result is missing.")
+    return dict(task=child, attempt=state.get('attempt'), updated=state['updated'],
+                agreement=hashlib.sha256(json.dumps([items, controls], sort_keys=True, ensure_ascii=False).encode()).hexdigest(),
+                artifacts=artifacts)
+
+
+def review_record(store, task, request):
+    if not task:
+        raise ValueError("No owner task is attached to this request.")
+    row = next((d for d in store.delegations(task) if d['request_id'] == request), None)
+    if not row:
+        raise ValueError('The request is not attached to this owner task.')
+    value = json.loads(row.get('acceptance') or '{}')
+    return value if isinstance(value, dict) else {}   # legacy read is not a delivery-bound review
+
+
+def delivery_id(snapshot):
+    return hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
+
+
+def current_review(store, task, request):
+    record = review_record(store, task, request)
+    if not record.get('delivery') or record['delivery'] != delivery(store, task, request):
+        raise ValueError("Fetch the current delegate result before reviewing it.")
+    return record
+
+
+def acceptance(store, task, request, proposed=None, observed=None):
+    """One decision for both recording a review and completing its owner task."""
+    record = current_review(store, task, request)
+    if proposed is not None and observed != delivery_id(record['delivery']):
+        raise ValueError('accept needs the delivery_id returned by the result you reviewed.')
+    values = proposed if proposed is not None else record.get('verdicts')
+    if not values:
+        raise ValueError('Every requirement needs a review verdict.')
+    items = saved_items(store, task, request)
+    record['verdicts'] = verdicts(store, task, request, values)
+    unmet = [v['item'] for v in record['verdicts'] if v['verdict'] != 'met']
+    if record['delivery'] != delivery(store, task, request):
+        raise ValueError('Delivery changed during review; fetch the current result.')
+    return record, [n for n in unmet if items[n-1].get('critical')], unmet
+
+
+REWORK_CAP = 3
+
+
+def item_paths(items, number, result_path):
+    """The artifacts behind one requirement: its declared paths, else the delegate's result text."""
+    paths = (items[number - 1].get('verification') or {}).get('paths') or []
+    return [str(Path(p).resolve()) for p in paths] or [str(Path(result_path).resolve())]
+
+
+def rework_refusal(store, task, request, items):
+    """Review has to converge (2026-10-27, after the Tiro reworks): three reworks on one request are the cap, and an
+    item the current review accepted as met cannot be sent back again."""
+    card = store.scorecard(request)
+    if card and (card.get('reworks') or 0) >= REWORK_CAP:
+        return (f"Request {request} has had {REWORK_CAP} reworks, the cap: a fourth round does not converge. Either accept "
+                "the current delivery with the open items marked not_met, so Alex sees what is missing, or submit a new "
+                "request with a changed brief and say in brief_lesson what this one got wrong.")
+    if not task:
+        return None
+    try:
+        record = current_review(store, task, request)
+    except ValueError:
+        return None                                   # no review of the current delivery: nothing to repeat
+    met = {v['item'] for v in record.get('verdicts') or [] if v.get('verdict') == 'met'}
+    repeated = sorted(set(items) & met)
+    if repeated:
+        return f"Items {repeated} were accepted as met on this delivery; a rework cannot flag them again. Send back only the open items."
+    return None
+
+
+def rework_snapshot(store, task, request, items):
+    """Hashes of the artifacts behind the items sent back, so the next review can tell a change from a wave-off."""
+    try:
+        snapshot = delivery(store, task, request)
+    except ValueError:
+        return {}
+    contract_items = saved_items(store, task, request)
+    result_path = next(iter(snapshot['artifacts']))
+    wanted = {p for n in items if 1 <= n <= len(contract_items) for p in item_paths(contract_items, n, result_path)}
+    return {p: h for p, h in snapshot['artifacts'].items() if p in wanted}
+
+
+def rework_outcome(entry, snapshot, items):
+    """Per item sent back: changed (the delegate altered the artifact) or unchanged (the finding was waved off)."""
+    result_path = next(iter(snapshot['artifacts']))
+    return {str(n): 'changed' if any(snapshot['artifacts'].get(p) != entry.get('artifacts', {}).get(p)
+                                     for p in item_paths(items, n, result_path)) else 'unchanged'
+            for n in entry.get('items', []) if 1 <= n <= len(items)}
+
+
+def cold_review(agent_dir, delivery_id):
+    """The finished cold read (specialist_review role delivery) of this exact delivery, or None."""
+    folder = Path(agent_dir) / 'reports' / 'specialist_reviews'
+    if not delivery_id or not folder.exists():
+        return None
+    for path in sorted(folder.glob('*.json'), reverse=True):
+        try:
+            record = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if record.get('role') == 'delivery' and record.get('delivery_id') == delivery_id and record.get('status') == 'finished':
+            return str(path)
+    return None
+
+
+def transfer_proof(store, task, request, item, remote, child):
+    """One-way reuse of unchanged pre-migration owner proof; never override a worker's newer check."""
+    import sqlite3
+    target = receipt_path(remote, child, '', item)
+    if target.exists():
+        return
+    old_path = store.directory(task) / 'verification' / hashlib.sha256(request.encode()).hexdigest()[:24] / f'{item}.json'
+    if not old_path.exists():
+        return
+    db = sqlite3.connect(store.database, timeout=30)
+    try:
+        row = db.execute('SELECT items FROM requirements WHERE task=? AND request=?', (task, request)).fetchone()
+    finally:
+        db.close()
+    try:
+        old = json.loads(row[0])[item-1] if row else None
+        current = saved_items(remote, child)[item-1]
+        record = json.loads(old_path.read_text(encoding='utf-8'))
+        clean = lambda it: {k:v for k,v in it.items() if k not in ('id','source','parent_source','parent_item')}
+        if not old or current.get('source', 0) != 0 or clean(old) != clean(current) or current.get('parent_source', 0) != old.get('source', 0):
+            return
+        source = old.get('source', 0)
+        instruction = store.get(task)['request'] if not source else next((x['text'] for x in store.scope_updates(task) if x['id']==source), None)
+        expected = hashlib.sha256(json.dumps([old, instruction], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        if (record.get('task'),record.get('request'),record.get('item'),record.get('requirement')) != (task,request,item,expected):
+            return
+        if record.get('status') != 'passed' or record.get('hashes') != hashes(current['verification']['paths']):
+            return
+        lease = WorkerLease(target.with_suffix('.lock'))
+        try:
+            if lease.acquire() and not target.exists():
+                record.update(task=child, request='', requirement=key(remote, child, '', current))
+                atomic_json(target, record)
+        finally:
+            lease.close()
+    except (ValueError, TypeError, KeyError, IndexError, OSError):
+        return                             # incompatible historical evidence remains unverified
+
+
 def saved_items(store, task, request=""):
     """Read the one durable contract, migrating an older contract once on first use."""
     import sqlite3
+    if request:
+        resolved = delegate(store, task, request)
+        if resolved:
+            return saved_items(*resolved)
     db = sqlite3.connect(store.database, timeout=30)
     try:
         row = db.execute("SELECT items FROM requirements WHERE task=? AND request=?", (task, request)).fetchone()
@@ -123,6 +338,10 @@ def saved_items(store, task, request=""):
 def declare(store, task, updates, request=""):
     """Merge a checkpoint's test declarations into task-owned obligations, never replace them."""
     import sqlite3
+    if request:
+        resolved = delegate(store, task, request)
+        if resolved:
+            return declare(*resolved, updates)
     saved_items(store, task, request)
     db = sqlite3.connect(store.database, timeout=30)
     try:
@@ -169,6 +388,10 @@ def key(store, task, request, item):
 
 
 def receipt_path(store, task, request, item):
+    if request:
+        resolved = delegate(store, task, request)
+        if resolved:
+            return receipt_path(*resolved, "", item)
     scope = hashlib.sha256(request.encode()).hexdigest()[:24] if request else "own"
     return store.directory(task) / "verification" / scope / f"{item}.json"
 
@@ -186,6 +409,11 @@ def hashes(paths):
 
 
 def status(store, task, request, item):
+    if request:
+        resolved = delegate(store, task, request)
+        if resolved:
+            transfer_proof(store, task, request, item, *resolved)
+            return status(*resolved, "", item)
     items, generation = contract(store, task, request)
     try:
         record = json.loads(receipt_path(store, task, request, item).read_text(encoding="utf-8"))
@@ -227,7 +455,16 @@ def execute(agent, chat, task_id, item, request_id="", rerun=False):
     if store.get(task)["chat"] != chat or (agent.BACKGROUND_TASK_ID and int(agent.BACKGROUND_TASK_ID) != task):
         return Refused("Verification belongs to another chat or worker.")
     lease = None
+    owner = store
+    owner_task = task
     try:
+        if request_id:
+            delivery(store, task, request_id)
+            resolved = delegate(store, task, request_id)
+            if resolved:
+                transfer_proof(store, task, request_id, item, *resolved)
+                store, task = resolved
+                request_id = ""
         items, generation = contract(store, task, request_id)
         validate_items(items)
         if type(item) is not int or not 1 <= item <= len(items):
@@ -252,7 +489,7 @@ def execute(agent, chat, task_id, item, request_id="", rerun=False):
             return Refused(f"Verification requires {tool}, which this agent cannot use.")
         if agent.BACKGROUND_TASK_ID and agent.config.background_refusals:
             for name in spec["paths"]:
-                refusal = store.path_refusal(task, name)
+                refusal = owner.path_refusal(owner_task, name)
                 if refusal:
                     return Refused(refusal)
         record["hashes"] = hashes(spec["paths"])
@@ -302,26 +539,57 @@ def verdicts(store, task, request, proposed):
         number = value.get("item")
         if type(number) is not int or not 1 <= number <= len(items) or number in seen:
             raise ValueError("Each verdict needs a distinct requirement number.")
+        if len(str(value.get('evidence', '')).strip()) < 20:
+            raise ValueError(f'Item {number} needs evidence explaining the assessment.')
+        if value.get('how') not in ('ran', 'read', 'report', 'judgment'):
+            raise ValueError(f'Item {number} needs how: ran, read, report or judgment.')
         seen.add(number)
         state = status(store, task, request, number)
-        if value.get("how") in ("ran", "read") and state == "unverified":
+        subjective = is_judgment(items[number - 1])
+        if not subjective and value.get("how") in ("ran", "read") and state == "unverified":
             raise ValueError(f"Item {number} has no current requirement-bound proof. Run verify_requirement or label it report/judgment (unverified).")
-        result = dict(value, status=state, assessment=value.get("assessment", value.get("evidence", "")),
-                      verdict="met" if state == "passed" else "not_met" if state == "failed" else "unverified")
+        review = value.get('verdict')
+        if review not in ('met', 'partial', 'not_met', 'unverified'):
+            raise ValueError('Unknown review verdict.')
+        if subjective:
+            outcome = review if value.get('how') in ('judgment', 'read') or review != 'met' else 'unverified'
+        else:
+            outcome = 'not_met' if review == 'not_met' or state == 'failed' else 'partial' if review == 'partial' else 'met' if state == 'passed' else 'unverified'
+        result = dict(value, status=state, assessment=value.get("assessment", value.get("evidence", "")), verdict=outcome)
         if state != "unverified":
             result["how"] = "ran" if items[number - 1]["verification"]["kind"] == "command" else "read"
             result["evidence"] = str(receipt_path(store, task, request, number))
         normalized.append(result)
-    if any(it.get("critical") and n not in seen for n, it in enumerate(items, 1)):
-        raise ValueError("Every critical requirement needs a verdict.")
+    if len(seen) != len(items):
+        raise ValueError("Every requirement needs a review verdict.")
     return normalized
 
 
+def is_judgment(item):
+    """A requirement with no declared check is judged by the owner reading the result, not by the runtime."""
+    return not (isinstance(item, dict) and item.get("verification"))
+
+
 def summary(store, task, request=""):
+    """What the owner needs to know about the declared checks, in plain words, or "" when there is nothing to say.
+
+    2026-10-24 (Alex: [quote removed]): every research result arrived under "Completion not
+    verified: Requirement 1 ...: unverified." because requirements no machine can check (a comparison, a conclusion)
+    were reported as failures. Judgment requirements are now silent; the owner judges them by reading. Only a declared
+    check that failed, or that was declared and never run on the delivered file, is mentioned."""
     items, _ = contract(store, task, request)
-    if not items:
-        return "Verification: unverified (no requirements declared)."
-    groups = {"passed": [], "failed": [], "unverified": []}
+    failed, not_run = [], []
     for n, it in enumerate(items, 1):
-        groups[status(store, task, request, n)].append(f"{n} {it['item']}")
-    return "Verification: " + "; ".join(f"{state}: {', '.join(names)}" for state, names in groups.items() if names) + "."
+        if is_judgment(it):
+            continue
+        state = status(store, task, request, n)
+        if state == "failed":
+            failed.append(it["item"])
+        elif state != "passed":
+            not_run.append(it["item"])
+    lines = []
+    if failed:
+        lines.append("Check failed: " + "; ".join(failed) + ".")
+    if not_run:
+        lines.append("Not checked on the delivered file: " + "; ".join(not_run) + ".")
+    return "\n".join(lines)

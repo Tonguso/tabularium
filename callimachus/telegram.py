@@ -112,7 +112,7 @@ class CallimachusApp(AgentApp):
             return "Cato owns the shared project/decision register. Use sourced knowledge records, not a competing register."
         if name in ("write_file", "edit_file"):
             # Direct file tools may write inside Cal's workspace and the knowledge base wiki
-            # (Alex, 2026-10-06: "He should be able to write"). Library originals stay read-only.
+            # (Alex, 2026-10-06: [quote removed]). Library originals stay read-only.
             path = Path(inputs.get("path", inputs.get("file_path", ""))).resolve()
             wiki_root = Path(_os.environ.get("KNOWLEDGE_BASE_DIR", r"D:\KnowledgeBase\_wiki"))
             if not (path.is_relative_to(self.AGENT_DIR.resolve()) or path.is_relative_to(wiki_root)):

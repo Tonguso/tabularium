@@ -2,10 +2,8 @@
 agent dir, no polling) and the shared functions are bound to the agent's namespace. start_all runs this
 before stopping anything, so an agent that cannot import never replaces a running one.
 2026-10-07: the first merged engine imported a Cato-only module and three agents died at startup."""
-import os
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 

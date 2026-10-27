@@ -1,6 +1,6 @@
 """A hand-off to Cal or Vit from the chat needs no worker slot (2026-10-21).
 
-22:19 Alex: "What's blocking the queue? I'm not seeing Vit doing any work." Cato had queued a Cato background task
+22:19 Alex: [quote removed] Cato had queued a Cato background task
 whose job was to submit the Tiro fixes to Vit; it waited behind the fund-list task for the single worker slot, so
 Vit received nothing. A foreground submit now starts the delegate at once and creates the task that will receive
 and deliver the result already parked; it wakes, and only then takes a slot, when the result returns."""
@@ -40,7 +40,7 @@ class Handoff(unittest.TestCase):
                                         budget_tokens=50000, allowed_paths=[str(Path(self.tmp.name) / "tiro")], _runner=self.runner)
 
     def test_the_delegate_starts_now_and_the_owner_waits_without_a_slot(self):
-        busy = self.store.start(CHAT, "fund-list expansion")["id"]        # the single slot is taken
+        self.store.start(CHAT, "fund-list expansion")        # the single slot is taken
         self.store.claim_next()
         t0 = time.time()
         out = json.loads(self.submit())

@@ -54,6 +54,8 @@ def agent_week(root, name, start, end):
     finished = [t for t in tasks if t["status"] == "finished"]
     accepted = _query(state / "background" / "jobs.sqlite3",
                       "SELECT agent, items_total, items_met, reworks, guesses_verdict FROM scorecard WHERE accepted>=? AND accepted<?", (start, end))
+    logs = _query(state / "background" / "jobs.sqlite3", "SELECT rework_log FROM scorecard WHERE accepted>=? AND accepted<?", (start, end))
+    outcomes = [o for a in logs for e in json.loads(a.get("rework_log") or "[]") for o in (e.get("outcome") or {}).values()]
     lessons = _query(state / "projects.sqlite3", "SELECT json_extract(data,'$.status') s, count(*) n FROM records WHERE kind='lesson' "
                      "AND updated>=? AND updated<? GROUP BY s", (start, end))
     exam = {}
@@ -80,6 +82,9 @@ def agent_week(root, name, start, end):
             "items_total": sum(a["items_total"] or 0 for a in accepted),
             "reworks": sum(a["reworks"] or 0 for a in accepted),
             "wrong_guesses": sum(1 for a in accepted if a["guesses_verdict"] and a["guesses_verdict"] != "ok"),
+            # a finding the delegate changed nothing for was noise or a dispute; either way it cost a round
+            "rework_changed": outcomes.count("changed"),
+            "rework_unchanged": outcomes.count("unchanged"),
         } if accepted else None,
         "memory_exam": exam or None,
         # candidates are the workers' own failure notes; the rest went through Alex (proposed, approved, verified, applied)
@@ -129,6 +134,7 @@ def table(report):
                 ("tasks finished / stopped", lambda a: f"{a['tasks_finished']} / {a['tasks_stopped']}"),
                 ("median task minutes", lambda a: "-" if a["task_minutes_median"] is None else str(a["task_minutes_median"])),
                 ("delegations items met", lambda a: "-" if not a["delegations"] else f"{a['delegations']['items_met']}/{a['delegations']['items_total']} rw{a['delegations']['reworks']}"),
+                ("rework items changed/unch.", lambda a: "-" if not a["delegations"] else f"{a['delegations'].get('rework_changed', 0)}/{a['delegations'].get('rework_unchanged', 0)}"),
                 ("memory exam c/p/w", lambda a: "-" if not a["memory_exam"] else "/".join(str(a["memory_exam"][k]) for k in ("correct", "partial", "wrong"))),
                 ("lessons cand/taken + inc", lambda a: f"{a['lessons_candidate']}/{a['lessons_taken']} + {a['incidents']}")]
         for label, f in rows:

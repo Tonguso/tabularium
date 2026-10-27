@@ -54,18 +54,15 @@ SCHEMA["properties"].update({
         "state": {"type": "string", "enum": ["running", "queued", "waiting", "finished", "stopped"]}},
         "required": ["task_id", "state"], "additionalProperties": False},
         "description": "EVERY claim in reply about this agent's task progress, including implicit claims such as 'still working'. Identify the task; live evidence will be checked before delivery. Empty only when there are no status claims."},
-    "correction": {"type": "string", "enum": ["none", "corrected"],
-                   "description": ("corrected when Alex's latest message tells you that you, or something the system "
-                                   "showed him, got it wrong: plainly, by swearing, by repeating himself, by asking "
-                                   "why you did or didn't do something. He does not have to say what the error was. "
-                                   "Disagreeing with an idea or changing his mind is not a correction: none. When "
-                                   "corrected, the runtime starts a diagnosis of the error by itself after this reply; "
-                                   "answer him normally and do not promise that diagnosis.")},
-    "answers": {"type": "array", "items": {"type": "string"},
-                "description": ("For each message from Alex in this turn that this reply answers or acknowledges, its "
-                                "opening words copied exactly (a few words are enough). Every message he sent in this "
-                                "turn should be covered: answered, or acknowledged as handled (for example 'Cal is on "
-                                "it'). Empty only when the turn has no message from him.")},
+    "correction": {"type": "array", "items": {"type": "integer"},
+                   "description": "IDs from the Incoming messages list that correct you or the system. Empty if none. Runtime warnings are not human feedback. Select each actual correction, including follow-ups; disagreement or a changed preference alone is not a correction."},
+    "answers": {"type": "array", "items": {"type": "integer"},
+                "description": ("IDs from Incoming messages that this reply answers or acknowledges. One reply can "
+                                "cover several messages: when a correction changes an earlier request and you handle "
+                                "the revised request, include BOTH IDs. Include unrelated requests only if also "
+                                "addressed. Use exact current-turn IDs, never copied text or invented IDs. "
+                                "This declares message coverage, not proof that a deliverable passed its checks. "
+                                "Empty when there are no incoming message IDs.")},
     "request": {"type": "string", "enum": ["done", "started", "asking", "blocked", "none"],
                 "description": ("Where Alex's request stands after this reply. done: delivered in this reply. started: "
                                 "background work was started this turn. asking: you need his answer to continue, and "
@@ -94,14 +91,14 @@ class Reply(str):
     work = "none"
     complete = True
     decision_id = 0          # the decision this message asks; send_message records its Telegram id on it (2026-10-21)
-    answers = ()             # opening words of Alex's messages this reply answers (2026-10-21)
+    answers = ()             # exact current-turn message IDs covered by this reply
     request = "none"         # where his request stands: done, started, asking, blocked, none (2026-10-21)
 
-    def __new__(cls, text, modality="text", complete=True, work="none", task_outcome="none", question="", decision_task_id=0, status_claims=None, correction="none", answers=(), request="none"):
+    def __new__(cls, text, modality="text", complete=True, work="none", task_outcome="none", question="", decision_task_id=0, status_claims=None, correction=(), answers=(), request="none"):
         self = super().__new__(cls, text)
-        self.answers = tuple(a for a in (answers or ()) if isinstance(a, str) and a.strip())
+        self.answers = tuple(a for a in answers if type(a) is int and a > 0) if isinstance(answers, (list, tuple)) else ()
         self.request = request if request in ("done", "started", "asking", "blocked", "none") else "none"
-        self.correction = correction if correction in ("none", "corrected") else "none"
+        self.correction = tuple(correction) if isinstance(correction, (list, tuple)) and all(type(i) is int for i in correction) else ()
         self.modality = modality if modality in ("text", "voice") else "text"
         self.work = work if work in WORK else "none"
         self.complete = complete
@@ -112,20 +109,21 @@ class Reply(str):
         return self
 
 
+def retry_note(agent, reason, draft, note):
+    """Runtime feedback belongs to this exact rejected draft, not to a human message."""
+    agent._inbox.record_event('bounce', reason, role='runtime', details={'draft': str(draft), 'warning': note})
+    return {'role': 'user', 'content': 'Runtime feedback on your undelivered draft:\n' + str(draft) + '\n' + note}
+
+
 UNBACKED_PROMISE = ("[System: your reply declares work=started, but no background task was created in this turn. A "
                     "promise with nothing behind it is not delivered. Either start the work now with background_task, "
                     "or set work=awaiting_go and ask Alex to confirm.]")
 
 
-def _plain(text):
-    return "".join(ch for ch in (text or "").lower() if ch.isalnum())
-
-
 def answered(reply, turn_messages):
-    """The turn's messages [(message_id, text)] that the reply declares it answers: an `answers` entry whose letters
-    appear in the message (case, spaces and punctuation ignored)."""
-    keys = [_plain(a) for a in getattr(reply, "answers", ()) if len(_plain(a)) >= 2]
-    return [(mid, text) for mid, text in turn_messages if any(k in _plain(text) for k in keys)]
+    """Resolve declared coverage against this turn's message identities; never infer it from text."""
+    ids = set(getattr(reply, "answers", ()))
+    return [(mid, text) for mid, text in turn_messages if mid in ids]
 
 
 def unanswered(reply, turn_messages):
@@ -138,10 +136,11 @@ def unanswered(reply, turn_messages):
 
 
 def unanswered_note(missing):
-    lines = "\n".join(f"- \"{' '.join(text.split())[:80]}\"" for _, text in missing)
-    return ("[System: Alex sent more than one message in this turn and your reply does not cover these:\n" + lines +
-            "\nAnswer each, or say in a line how it is being handled, and list every message you cover in answers. "
-            "Nothing has been sent yet.]")
+    lines = "\n".join(f"- ID {mid}: {str(text or '')[:80]}" for mid, text in missing)
+    return ("[System: your reply does not cover these incoming message IDs:\n" + lines +
+            "\nAddress each, or acknowledge how it is being handled, and include its ID in answers. "
+            "One response to a corrected request can cover both the original and correction IDs. "
+            "Do not claim coverage of unrelated requests you have not addressed. Nothing has been sent yet.]")
 
 
 DEAD_END = ("[System: your reply says Alex's request is blocked: not done, nothing running, nothing asked. That "
@@ -175,7 +174,7 @@ def reply(value) -> Reply:
     return Reply(text.strip(), value.get("modality", "text"), work=value.get("work", "none"),
                  task_outcome=value.get("task_outcome", "none"), question=value.get("question", ""),
                  decision_task_id=value.get("decision_task_id", 0), status_claims=value.get("status_claims", []),
-                 correction=value.get("correction", "none"), answers=value.get("answers") or (),
+                 correction=value.get("correction", []), answers=value.get("answers") or (),
                  request=value.get("request", "none"))
 
 

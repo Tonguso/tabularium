@@ -1,6 +1,6 @@
 """ALWAYS_SKILLS (2026-10-09): a skill named there is standing instruction, included in full in the system prompt;
 the others stay a catalogue. Tacitus's standing method is the first such skill."""
-import sys, tempfile, types, unittest
+import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "cato"))

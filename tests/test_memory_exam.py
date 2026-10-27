@@ -35,10 +35,10 @@ class Sources(unittest.TestCase):
 class Exam(unittest.TestCase):
     def test_exam_grades_answers(self):
         sources = [{"id": 1, "text": "I will be in Tokyo next week.", "said_at": "2026-10-09"},
-                   {"id": 2, "text": "Call me Alex, never a Chinese name.", "said_at": "2026-10-09"},
+                   {"id": 2, "text": "Call me Alex, not by a nickname.", "said_at": "2026-10-09"},
                    {"id": 3, "text": "thanks that is all for now really", "said_at": "2026-10-10"}]
         questions = {"I will be in Tokyo next week.": {"question": "Where does Alex travel next week?", "expected": "Tokyo"},
-                     "Call me Alex, never a Chinese name.": {"question": "How must Alex be addressed?", "expected": "Alex, never a Chinese name"}}
+                     "Call me Alex, not by a nickname.": {"question": "How must Alex be addressed?", "expected": "Alex, not by a nickname"}}
         grades = {"Tokyo": {"score": "correct", "note": "named Tokyo"}, "I do not remember.": {"score": "wrong", "note": "did not know"}}
 
         def examiner(prompt, schema):

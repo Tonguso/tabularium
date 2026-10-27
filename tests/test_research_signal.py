@@ -53,7 +53,6 @@ class Signal(unittest.TestCase):
 
     def test_an_unverified_prose_rerun_is_compared_on_its_text_and_closed(self):
         # 2026-10-24 first run: all three reruns ended needs_attention (no declared checks) and were counted "further" unread
-        case = research_signal.candidates(self.root, "research")[0]
         def starter(store, chat, c):
             ident = research_signal.start(store, chat, c)
             (store.directory(ident) / "result.txt").write_text(

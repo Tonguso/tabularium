@@ -17,9 +17,6 @@ SKILL = ROOT / 'skills' / 'work-delegation'
 CARDS = SKILL / 'references' / 'delegates'
 BRIEFS = SKILL / 'references' / 'briefs'
 MAX_CRITICAL, MAX_ITEMS = 3, 6
-VERDICTS = ('met', 'partial', 'not_met', 'unverified')
-# Provenance is explanatory. The shared runtime derives success from requirement checks.
-HOW = ('ran', 'read', 'report', 'judgment')
 SAVE_WORDS = re.compile(r'\b(save|saved|write|written|output|deliver|put|store|export)\w*\b', re.I)
 WIN_PATH = re.compile(r'[A-Za-z]:\\[^\s"\'`<>|,;)\]]+')
 
@@ -63,31 +60,6 @@ def guesses_refusal(guesses, verdict):
     return ("accept needs guesses_verdict for the delegate's stated assumptions: 'ok' if each matches Alex's intent, or "
             "'wrong: <which assumption and what was meant>' (then rework the items it affected). Assumptions: "
             + '; '.join(str(g)[:140] for g in real))
-
-
-def validate_verdicts(verdicts, items):
-    if not items:
-        return ('No completion items are recorded for this request (submitted before acceptance existed); '
-                'accept is not possible, use the result with explicit caveats.')
-    if not isinstance(verdicts, list) or not verdicts or len(verdicts) > len(items):
-        return f'accept needs a verdict per critical item (non-critical items may be left out; {len(items)} items in all).'
-    seen = set()
-    for v in verdicts:
-        if not isinstance(v, dict) or not isinstance(v.get('item'), int) or not 1 <= v['item'] <= len(items) or v['item'] in seen:
-            return f'Each verdict needs a distinct item number 1..{len(items)}.'
-        seen.add(v['item'])
-        if v.get('verdict') not in VERDICTS:
-            return 'verdict must be met, partial or not_met.'
-        if len(str(v.get('evidence', '')).strip()) < 20:
-            return (f"Verdict for item {v['item']} needs evidence: what you checked and how (verify_artifact, review_output, "
-                    'a recomputed number, a source you opened, or consult_advisor). Not an impression.')
-        if v.get('how') not in HOW:
-            return (f"Verdict for item {v['item']} needs how: 'ran' (you executed, launched or opened the deliverable yourself), "
-                    "'read' (you inspected its content or output yourself) or 'report' (taken from the delegate's report only).")
-    missing = [n for n, it in enumerate(items, 1) if it.get('critical') and n not in seen]
-    if missing:
-        return f'accept needs a verdict with evidence for every critical item; missing: {missing}.'
-    return None
 
 
 def load_card(agent):

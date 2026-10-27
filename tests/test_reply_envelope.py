@@ -3,7 +3,7 @@
 At 19:27 Cato's last text was his working notes and the runtime sent it, because a turn ended with "whatever text
 came last". Each route now requests a structured final answer with one `reply` field through the provider's own
 structured-output option, and delivers only that field. A final answer without it stops the turn; it is not sent."""
-import json, sys, tempfile, unittest
+import sys, tempfile, unittest
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace as NS

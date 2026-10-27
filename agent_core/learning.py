@@ -9,6 +9,13 @@ guidance, never used), and a weekly script that batched candidates into grouped 
 thing Alex approves is the exact edit, the runtime applies exactly that edit, and the lesson stays open until a real
 task shows whether the failure recurred. A model cannot move a lesson past 'candidate' through project_record; only
 these functions change its status, and approval needs Alex's own words from the conversation record.
+
+2026-10-24, after Cato's survey of learning frameworks (ACE's delta edits): an approved lesson that adds a rule is
+appended as one entry in the skill's "## Lessons" ledger, tagged with its key, never as a rewrite of the skill's
+prose. Every check on a later task counts for the entry (helped / hurt), and a verified entry keeps being counted.
+The weekly digest names entries that hurt more than they helped and entries that look alike, for Alex to retire or
+merge; retire removes the entry on his words. Nothing here grades a lesson from the agent's opinion: counts come from
+recorded checks, each with evidence.
 """
 from contextlib import closing
 import hashlib
@@ -20,6 +27,29 @@ import time
 from .project_store import ProjectStore
 
 OPEN = ("candidate", "proposed", "applied")
+LEDGER = "## Lessons"
+LEDGER_NOTE = ("Entries added by approved lessons (agent_core.learning). Each is checked on later tasks and counted; "
+               "retired entries are removed. Edit this section only through the lesson tool.")
+
+
+def ledger_entry(key, text, at=None):
+    return f"- [{key}] ({time.strftime('%Y-%m-%d', time.localtime(at or time.time()))}) " + " ".join(text.split())
+
+
+def add_entry(text, key, new_text, at=None):
+    """Append one ledger entry at the end of the skill, creating the ledger section once."""
+    entry = ledger_entry(key, new_text, at)
+    body = text.rstrip("\n")
+    if LEDGER not in body:
+        body += f"\n\n{LEDGER}\n{LEDGER_NOTE}\n"
+    return body + "\n" + entry + "\n"
+
+
+def remove_entry(text, key):
+    """Drop the ledger line tagged with `key`; True when a line was removed."""
+    lines = text.splitlines(keepends=True)
+    kept = [l for l in lines if not l.startswith(f"- [{key}]")]
+    return "".join(kept), len(kept) != len(lines)
 
 
 def propose(root, chat, content, source, task_type='other'):
@@ -33,7 +63,18 @@ def propose(root, chat, content, source, task_type='other'):
     store.manage(chat, 'save', 'lesson', key, dict(title=content[:160], failure=content, source=source,
         candidate_change=content, checks=[], limitations='Candidate: show Alex the proposed skill edit before anything changes.',
         status='candidate', task_types=[task_type]))
+    from agent_core import lesson_cases              # every lesson carries its own benchmark case (2026-10-26)
+    lesson_cases.draft(root, chat, key)
     return key
+
+
+def owner_said(root, chat, source_id, quote):
+    """Alex's own words: message id + exact quote, checked against the conversation record, or ValueError."""
+    recall = Path(root).resolve() / 'task_state/conversation_recall.sqlite3'
+    with closing(sqlite3.connect(recall.as_uri() + '?mode=ro', uri=True)) as db:
+        row = db.execute('SELECT speaker,text FROM messages WHERE id=? AND chat=?', (int(source_id), str(chat))).fetchone()
+    if not (quote or '').strip() or not row or row[0] != 'user' or quote not in row[1]:
+        raise ValueError('Exact user approval quote not found.')
 
 
 def _sha(path):
@@ -92,6 +133,10 @@ def propose_change(root, chat, key, method_path, current_text, new_text):
     def change(d):
         if d.get('status') not in ('candidate', 'proposed'):
             raise ValueError('Only a candidate or a pending proposal can be (re)proposed.')
+        if d.get('trial', {}).get('version') == 2 and not d['trial'].get('notified'):
+            raise ValueError('A trial is running; wait for its comparison before changing the proposal.')
+        if d.get('trial'):
+            d.setdefault('trial_history', []).append(d.pop('trial'))
         d['status'] = 'proposed'
         d['proposal'] = {'method_path': str(method), 'current_text': current_text or '', 'new_text': new_text,
                          'file_sha256': _sha(method), 'at': time.time()}
@@ -110,10 +155,15 @@ def _bump_version(text):
     return re.sub(r'(version:\s*"?)([0-9][0-9.]*)("?)', bump, head, count=1) + sep + body
 
 
+def render_change(text, key, p):
+    edited = text.replace(p['current_text'], p['new_text'], 1) if p['current_text'] else add_entry(text, key, p['new_text'], p['at'])
+    return _bump_version(edited)
+
+
 def approve(root, chat, key, source_id, quote, skip_trial=False):
     """Step 3: Alex's go, in his own words (message id + exact quote, checked against the conversation record),
     applies exactly the proposed edit and bumps the skill's patch version. Status 'applied'. A finished trial
-    (agent_core.trials) comes first, so he judges two real outputs rather than the argument for the edit; skip_trial
+    (agent_core.trials) comes first, so he judges independent checks and actual outputs rather than the argument for the edit; skip_trial
     only when he said no trial is needed, and the lesson records that it was skipped (2026-10-20)."""
     root = Path(root).resolve()
     recall = root / 'task_state/conversation_recall.sqlite3'
@@ -125,39 +175,75 @@ def approve(root, chat, key, source_id, quote, skip_trial=False):
     def change(d):
         if d.get('status') != 'proposed' or not d.get('proposal'):
             raise ValueError('Nothing to approve: show Alex the proposed edit first (action=propose).')
-        if not (d.get('trial') or {}).get('done') and not skip_trial:
+        from agent_core.trials import evidence_matches
+        matched = evidence_matches(d)
+        if d.get('trial', {}).get('version') == 2 and not d['trial'].get('notified'):
+            raise ValueError('Wait for the trial comparison before approving or skipping it.')
+        if not matched and not skip_trial:
             raise ValueError('Run the trial first (lesson action=trial) so Alex sees both outputs, or pass skip_trial '
                              'only if he said no trial is needed.')
-        if skip_trial and not (d.get('trial') or {}).get('done'):
+        if skip_trial and not matched:
             d['trial_skipped'] = {'quote': quote, 'at': time.time()}
         p = d['proposal']
         method = _skill_file(root, p['method_path'])
         if _sha(method) != p['file_sha256']:
             raise ValueError('The skill file changed since the proposal; propose the edit again so Alex sees the current version.')
         text = method.read_text(encoding='utf-8')
-        text = text.replace(p['current_text'], p['new_text'], 1) if p['current_text'] else text.rstrip('\n') + '\n\n' + p['new_text'] + '\n'
-        method.write_text(_bump_version(text), encoding='utf-8')
+        # A replacement sharpens an existing rule in place; an addition becomes one ledger entry (ACE, 2026-10-24).
+        method.write_text(render_change(text, key, p), encoding='utf-8')
         d['status'] = 'applied'
         d['approval'] = {'source': f'message:{int(source_id)}', 'quote': quote, 'at': time.time()}
-        d['applied'] = {'method_path': str(method), 'method_sha256': _sha(method), 'at': time.time()}
+        d['applied'] = {'method_path': str(method), 'method_sha256': _sha(method), 'at': time.time(),
+                        'entry': not p['current_text']}
+        d.setdefault('helped', 0); d.setdefault('hurt', 0)
         return {'key': key, 'status': 'applied', 'skill': str(method)}
     return _update(root, chat, key, change)
 
 
 def record_check(root, chat, key, worked, evidence):
-    """Step 4: after a real task where the failure could have recurred. Worked: 'verified', the lesson closes.
-    Recurred: back to 'candidate' with the evidence, so the next proposal starts from what did not work."""
+    """Step 4: after a real task where the failure could have recurred. Every check counts for the entry (helped or
+    hurt). An applied lesson's first success makes it 'verified'; a failure before any success sends it back to
+    'candidate'. A verified entry stays in the ledger and keeps being counted; when it has hurt more than it helped the
+    digest offers it for retirement (ACE, 2026-10-24). The check carries evidence; the agent's opinion is not a count."""
     if not (evidence or '').strip(): raise ValueError('A check needs evidence: the task and what happened.')
 
     def change(d):
-        if d.get('status') != 'applied': raise ValueError('Only an applied lesson can be checked.')
+        if d.get('status') not in ('applied', 'verified'): raise ValueError('Only an applied or verified lesson can be checked.')
         d.setdefault('checks', []).append({'worked': bool(worked), 'evidence': evidence, 'at': time.time()})
+        d['helped'] = d.get('helped', 0) + (1 if worked else 0)
+        d['hurt'] = d.get('hurt', 0) + (0 if worked else 1)
         if worked:
             d['status'] = 'verified'
-        else:
+        elif d['status'] == 'applied':
             d['status'] = 'candidate'
             d.pop('proposal', None)
-        return {'key': key, 'status': d['status']}
+        return {'key': key, 'status': d['status'], 'helped': d['helped'], 'hurt': d['hurt']}
+    return _update(root, chat, key, change)
+
+
+def retire(root, chat, key, source_id, quote):
+    """Remove a ledger entry on Alex's words (message id + exact quote, as for approve). A lesson that sharpened a
+    rule in place has no entry to remove: it is marked retired and the digest says the rule needs a new proposal."""
+    root = Path(root).resolve()
+    recall = root / 'task_state/conversation_recall.sqlite3'
+    with closing(sqlite3.connect(recall.as_uri() + '?mode=ro', uri=True)) as db:
+        row = db.execute('SELECT speaker,text FROM messages WHERE id=? AND chat=?', (int(source_id), str(chat))).fetchone()
+    if not quote.strip() or not row or row[0] != 'user' or quote not in row[1]:
+        raise ValueError('Exact user retirement quote not found.')
+
+    def change(d):
+        if d.get('status') not in ('applied', 'verified'): raise ValueError('Only an applied or verified lesson can be retired.')
+        removed = False
+        applied = d.get('applied') or {}
+        if applied.get('method_path'):
+            method = _skill_file(root, applied['method_path'])
+            text, removed = remove_entry(method.read_text(encoding='utf-8'), key)
+            if removed:
+                method.write_text(_bump_version(text), encoding='utf-8')
+        d['status'] = 'retired'
+        d['retired'] = {'source': f'message:{int(source_id)}', 'quote': quote, 'at': time.time(), 'entry_removed': removed}
+        return {'key': key, 'status': 'retired', 'entry_removed': removed,
+                'note': '' if removed else 'This lesson changed a rule in place; the rule stays until a new proposal replaces it.'}
     return _update(root, chat, key, change)
 
 
@@ -208,8 +294,8 @@ def similar(root, chat, content, threshold=0.3):
     return best[0]
 
 
-TOOL = {"name":"lesson","description":"Turn a recorded lesson into a skill change, Alex's way: show him the change, apply it on his go, then check it worked. propose: the exact edit to one skill file (current_text quoted exactly as it appears once in the file, or empty to append; new_text in the skill's own voice). The result's show_owner is what he must see before anything changes. trial: rerun one finished research or basket task (task_id) twice in the background, once with the current skill and once with the proposed edit; nothing is sent or changed, and Alex receives both answers with a comparison when the second run ends. Run it after propose unless Alex says no trial is needed. approve: only after Alex says yes in his own words, normally after seeing the trial; pass his message id and the exact quote, and skip_trial=true only if he said no trial is needed. The runtime applies exactly the proposed edit and bumps the skill's version; you never edit the file yourself for a lesson. checked: after the next real task where the failure could have recurred, record worked=true/false with evidence (the task and what happened). A recurrence sends the lesson back to candidate.",
-  "input_schema":{"type":"object","properties":{"action":{"type":"string","enum":["propose","trial","approve","checked"]},"key":{"type":"string"},"task_id":{"type":"integer","description":"trial: the finished past task to rerun, one where the lesson applies"},"skip_trial":{"type":"boolean","description":"approve: only when Alex said no trial is needed"},"method_path":{"type":"string","description":"propose: the SKILL.md or references file under skills/"},"current_text":{"type":"string"},"new_text":{"type":"string"},"source_message_id":{"type":"integer"},"quote":{"type":"string"},"worked":{"type":"boolean"},"evidence":{"type":"string"}},"required":["action","key"]}}
+TOOL = {"name":"lesson","description":"Turn a recorded lesson into a skill change, Alex's way: show him the change, apply it on his go, then check it worked. propose: the exact edit to one skill file (current_text quoted exactly as it appears once in the file to sharpen an existing rule, or empty to add one entry to the skill's '## Lessons' ledger; new_text in the skill's own voice). Every check on a later task counts for the entry (helped/hurt); retire removes a ledger entry after Alex says so in his own words (the digest names entries that hurt more than they helped). The result's show_owner is what he must see before anything changes. trial: compare frozen skills on reviewed benchmark cases using disjoint development_cases and heldout_cases IDs, repetitions and max_steps. Choose relevant cases. Exposed cases cannot be reused as held-out evidence. The report checks actual files and records usage; small samples are screening, never proof of general improvement. Run it after propose unless Alex says no trial is needed. approve: only after Alex says yes in his own words, normally after seeing the trial; pass his message id and the exact quote, and skip_trial=true only if he said no trial is needed. The runtime applies exactly the proposed edit and bumps the skill's version; you never edit the file yourself for a lesson. checked: after the next real task where the failure could have recurred, record worked=true/false with evidence (the task and what happened). A recurrence sends the lesson back to candidate. Every lesson also carries a drafted benchmark case (its task's request and Alex's rule): case: fill in the oracle_basis and the requirements (benchmark format: id, description, check of kind json/text/csv/xlsx/judgment with a relative path and expected value) so code can grade it; calibrate: two isolated runs with the lesson's skill, the request alone and the request with the rule stated, after which the runtime refuses a case that fails even with the rule or passes without it; approve_case: Alex's quoted yes adds a calibrated case to the benchmark; recombine: draft a reserved (held-out) case from this and one or two other approved cases of the same skill, then fill/calibrate it. A trial with no chosen cases uses the skill's approved development and reserved cases.",
+  "input_schema":{"type":"object","properties":{"action":{"type":"string","enum":["propose","trial","approve","checked","retire","case","calibrate","approve_case","recombine"]},"slot":{"type":"string","enum":["case","reserved"]},"request":{"type":"string","description":"case: the task as Alex would ask it (defaults to the lesson's task request)"},"oracle_basis":{"type":"string","description":"case: how the expected answer was established, independent of the agent"},"requirements":{"type":"array","items":{"type":"object"},"description":"case: benchmark requirements, each with id, description and a check"},"with_keys":{"type":"array","items":{"type":"string"},"description":"recombine: one or two other lesson keys of the same skill"},"key":{"type":"string"},"development_cases":{"type":"array","items":{"type":"string"}},"heldout_cases":{"type":"array","items":{"type":"string"}},"repetitions":{"type":"integer","minimum":1,"maximum":5},"max_steps":{"type":"integer","minimum":1,"maximum":60},"skip_trial":{"type":"boolean","description":"approve: only when Alex said no trial is needed"},"method_path":{"type":"string","description":"propose: the SKILL.md or references file under skills/"},"current_text":{"type":"string"},"new_text":{"type":"string"},"source_message_id":{"type":"integer"},"quote":{"type":"string"},"worked":{"type":"boolean"},"evidence":{"type":"string"}},"required":["action","key"]}}
 
 
 def execute(agent, chat, inputs):
@@ -223,15 +309,33 @@ def execute(agent, chat, inputs):
                                              inputs.get("current_text", ""), inputs["new_text"]), ensure_ascii=False)
         if action == "trial":
             from agent_core import trials
-            return json.dumps(trials.start(agent.AGENT_DIR, chat, inputs["key"], inputs["task_id"], agent._background),
+            return json.dumps(trials.start(agent.AGENT_DIR, chat, inputs["key"], inputs, agent._background, agent.SYSTEM_PROMPT),
                               ensure_ascii=False)
         if action == "approve":
             return json.dumps(approve(agent.AGENT_DIR, chat, inputs["key"], inputs["source_message_id"],
                                       inputs["quote"], skip_trial=bool(inputs.get("skip_trial"))), ensure_ascii=False)
         if action == "checked":
-            return json.dumps(record_check(agent.AGENT_DIR, chat, inputs["key"], inputs["worked"],
-                                           inputs["evidence"]), ensure_ascii=False)
-        return "Use action propose, trial, approve or checked."
+            out = record_check(agent.AGENT_DIR, chat, inputs["key"], inputs["worked"], inputs["evidence"])
+            if not inputs["worked"]:                    # a recurrence is a failure the diagnosis should read (2026-10-24)
+                from agent_core import corrections
+                corrections.start_failure(agent, chat, f"Lesson {inputs['key']} recurred", inputs["evidence"])
+            return json.dumps(out, ensure_ascii=False)
+        if action == "retire":
+            return json.dumps(retire(agent.AGENT_DIR, chat, inputs["key"], inputs["source_message_id"], inputs["quote"]),
+                              ensure_ascii=False)
+        from agent_core import lesson_cases
+        if action == "case":
+            return json.dumps(lesson_cases.fill(agent.AGENT_DIR, chat, inputs["key"], inputs.get("slot", "case"),
+                                                inputs.get("request"), inputs.get("oracle_basis"), inputs.get("requirements")), ensure_ascii=False)
+        if action == "calibrate":
+            return json.dumps(lesson_cases.calibrate(agent.AGENT_DIR, chat, inputs["key"], agent._background, agent.SYSTEM_PROMPT,
+                                                     inputs.get("slot", "case"), inputs.get("max_steps", 12)), ensure_ascii=False)
+        if action == "approve_case":
+            return json.dumps(lesson_cases.approve(agent.AGENT_DIR, chat, inputs["key"], inputs["source_message_id"], inputs["quote"],
+                                                   inputs.get("slot", "case")), ensure_ascii=False)
+        if action == "recombine":
+            return json.dumps(lesson_cases.recombine(agent.AGENT_DIR, chat, inputs["key"], inputs.get("with_keys") or []), ensure_ascii=False)
+        return "Use action propose, trial, approve, checked, retire, case, calibrate, approve_case or recombine."
     except (ValueError, KeyError, TypeError) as exc:
         return f"Not recorded: {exc}"
 
@@ -257,10 +361,11 @@ def expire(root, chat, days=EXPIRE_DAYS, now=None):
 def digest(root, chat, limit=5):
     """The few open lessons worth Alex's eye: proposals awaiting him, then candidates grouped by theme with their
     repeat counts, most repeated first. Text for a weekly message."""
-    rows = _lessons(root, chat, OPEN)
+    rows = _lessons(root, chat, OPEN + ('verified',))
     proposed = [(k, d) for k, d in rows if d.get('status') == 'proposed']
     applied = [(k, d) for k, d in rows if d.get('status') == 'applied']
     cands = [(k, d) for k, d in rows if d.get('status') == 'candidate']
+    entries = sorted((k, d) for k, d in rows if d.get('status') in ('applied', 'verified') and (d.get('applied') or {}).get('entry'))
     groups = []                                   # [(representative, [keys])] by bigram similarity
     for key, d in cands:
         text = d.get('candidate_change') or d.get('title') or ''
@@ -279,6 +384,24 @@ def digest(root, chat, limit=5):
         lines.append(f"- x{len(members)} {key}: {(d.get('candidate_change') or d.get('title') or '')[:140]}")
     if len(groups) > limit:
         lines.append(f"- and {len(groups) - limit} more themes, each seen once; they expire after {EXPIRE_DAYS} days unless repeated.")
+    from agent_core import lesson_cases                 # cases awaiting his yes, and drafts the agent still owes
+    lines.extend(lesson_cases.digest_lines(rows))
+    from agent_core import regression
+    gap = regression.route_gap(root)
+    if gap:
+        lines.append(gap)
+    # Curation of the ledger (ACE): retire what hurts, merge what repeats. Proposals only; Alex decides.
+    for key, d in entries:
+        if d.get('hurt', 0) > d.get('helped', 0) and d.get('hurt', 0) >= 2:
+            lines.append(f"- RETIRE? {key}: hurt {d['hurt']}, helped {d.get('helped', 0)}: {(d.get('title') or '')[:120]}")
+    seen = set()
+    for i, (k1, d1) in enumerate(entries):
+        for k2, d2 in entries[i + 1:]:
+            same_skill = (d1.get('applied') or {}).get('method_path') == (d2.get('applied') or {}).get('method_path')
+            g, h = _grams(d1.get('title') or ''), _grams(d2.get('title') or '')
+            if same_skill and g and h and len(g & h) / len(g | h) >= 0.5 and (k1, k2) not in seen:
+                seen.add((k1, k2))
+                lines.append(f"- MERGE? {k1} and {k2} say nearly the same thing in {Path((d1.get('applied') or {}).get('method_path', '')).parent.name}")
     return '\n'.join(lines)
 
 

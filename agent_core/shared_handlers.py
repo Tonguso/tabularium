@@ -19,7 +19,33 @@ from pathlib import Path
 from agent_core.memory_context import read_view
 
 
+TELEGRAM_FILE_CAP = 20 * 1024 * 1024       # the Bot API refuses getFile above this; nothing on our side can raise it
+
+
+class FileTooBig(Exception):
+    """An incoming file Telegram will not let a bot download. str(exc) is the sentence for Alex.
+
+    2026-10-26: a 20.4 MB screenshot sent "as file" failed twice as "Task #2163 stopped with an error", and Cato
+    guessed at the cause. The size is known before the download, so the gate is one place for every incoming file
+    and the notice names the size and the limit; videos keep their own larger handling."""
+
+
 class SharedHandlers:
+    def fetch_file(self, ref, what="That file"):
+        """Download one incoming Telegram file (photo size, document, voice) or raise FileTooBig with the sentence."""
+        size = getattr(ref, "file_size", None) or 0
+        name = getattr(ref, "file_name", None) or what
+        notice = (f"{name} is {size / 1048576:.1f} MB; Telegram lets a bot download at most 20 MB, so I cannot read it. "
+                  "Send it as a photo (Telegram compresses it) or a smaller file.")
+        if size > TELEGRAM_FILE_CAP:
+            raise FileTooBig(notice)
+        try:
+            return self.bot.download_file(self.bot.get_file(ref.file_id).file_path)
+        except Exception as exc:
+            if "file is too big" in str(exc).lower():
+                raise FileTooBig(notice) from exc
+            raise
+
     def _kill_headless_outlook(self) -> str:
         """Kill Outlook instances that have no visible window -- the ones COM starts on demand.
         A user-opened Outlook has a main window and is left alone. On 2026-09-30 a headless
@@ -344,8 +370,7 @@ class SharedHandlers:
         self.ensure_initialised(chat_id)
         images = []
         for message in batch:
-            info = self.bot.get_file(message.photo[-1].file_id)
-            downloaded = self.bot.download_file(info.file_path)
+            downloaded = self.fetch_file(message.photo[-1], "That photo")
             self._last_photo[chat_id] = downloaded
             self._images.store(chat_id, downloaded, self.detect_media_type(downloaded),
                           message.caption or "", message.date, kind="photo")
@@ -436,8 +461,7 @@ class SharedHandlers:
 
         try:
             from openai import OpenAI as OAClient
-            file_info = self.bot.get_file(message.voice.file_id)
-            downloaded = self.bot.download_file(file_info.file_path)
+            downloaded = self.fetch_file(message.voice, "That voice message")
 
             audio = io.BytesIO(downloaded)
             audio.name = "voice.ogg"
@@ -449,6 +473,7 @@ class SharedHandlers:
                 self.send_message(chat_id, "Couldn't transcribe the voice message.")
                 return
 
+            self._inbox.local.turn_messages = [(message.message_id, text)]
             # Keep transcription internal; Alex does not want a text echo.
 
             messages = self.conversations[chat_id]

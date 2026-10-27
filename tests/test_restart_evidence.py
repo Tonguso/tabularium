@@ -87,6 +87,17 @@ class LiveEvidence(unittest.TestCase):
     def view(self):
         return supervisor.live_status(self.root, self.now)['agents']
 
+    def test_a_health_file_written_after_the_status_clock_was_read_is_fresh_not_stale(self):
+        # The agents write health every second; a status call samples its clock first, so a file a few
+        # milliseconds newer than that clock is the normal case, not evidence of anything (2026-10-27).
+        for name in AGENTS:
+            atomic_json(self.root/name/'task_state/health.json', {'pid': self.pid, 'instance': 'current',
+                        'phase': 'idle', 'last_progress': self.now+0.05})
+            atomic_json(self.root/name/'task_state/transport.json', {'pid': self.pid, 'poll_ok': True, 'time': self.now+0.05})
+        self.state['updated'] = self.now+0.05
+        self.save()
+        self.assertTrue(all(a['status'] == 'ready' for n,a in self.view().items() if n in AGENTS))
+
     def test_ready_requires_fresh_owned_health_and_live_supervisor(self):
         self.assertTrue(all(a['status'] == 'ready' for n,a in self.view().items() if n in AGENTS))
         for name in AGENTS:
@@ -138,15 +149,28 @@ class LiveEvidence(unittest.TestCase):
         self.save()
         self.assertEqual(self.view()['cato']['status'], 'stopped')
 
-    def test_restart_request_is_durable_targeted_and_idempotent(self):
-        agent_control.request_restart(AGENTS, run_tests=False, root=self.root)
-        first = supervisor.read_json(self.root/'cato/task_state/drain')
-        agent_control.request_restart(['cato'], run_tests=False, root=self.root)
-        self.assertEqual(first, supervisor.read_json(self.root/'cato/task_state/drain'))
-        self.assertEqual(first['instance'], 'current')
-        self.assertEqual(self.view()['cato']['status'], 'draining')
-        atomic_json(self.root/'cato/task_state/drain', dict(first, instance='old'))
-        self.assertEqual(self.view()['cato']['status'], 'ready')
+    def test_supervisor_owns_durable_targeted_drains(self):
+        from concurrent.futures import Future
+        from agent_core import release
+        target={'commit':'test','digest':'test'}
+        p=patch.object(release,'identity',return_value=target);p.start()
+        q=patch.object(release,'uncommitted',return_value=[]);q.start()
+        r=patch.object(supervisor,'ROOT',self.root);r.start()
+        try:
+            agent_control.request_restart(root=self.root)
+            children=[]
+            for name in AGENTS:
+                child=supervisor.Child(name);child.adopted=self.pid;child.instance='current';children.append(child)
+            future=Future();future.set_result(target)
+            supervisor.release_step(children,None,lambda *a:future)
+            first=supervisor.read_json(self.root/'cato/task_state/drain')
+            agent_control.request_restart(['cato'],root=self.root)
+            self.assertEqual(first,supervisor.read_json(self.root/'cato/task_state/drain'))
+            self.assertEqual(first['instance'],'current')
+            self.assertEqual(self.view()['cato']['status'],'draining')
+            atomic_json(self.root/'cato/task_state/drain',dict(first,instance='old'))
+            self.assertEqual(self.view()['cato']['status'],'ready')
+        finally:r.stop();q.stop();p.stop()
 
     def test_adoption_retains_exit_code_identity_and_crash_budget(self):
         import os
@@ -219,7 +243,7 @@ a.serve_forever()
                     time.sleep(0.02)
                 health = supervisor.read_json(folder/'task_state/health.json')
                 self.assertEqual(health.get('instance'), instance)
-                agent_control.request_restart([name], run_tests=False, root=root)
+                atomic_json(folder/'task_state/drain', {'id': 'fixture', 'instance': instance})
                 out, err = proc.communicate(timeout=20)
                 self.assertEqual(proc.returncode, 75, (out,err))
                 request = supervisor.read_json(folder/'task_state/drain')

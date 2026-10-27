@@ -1,5 +1,6 @@
 """Durable Telegram inbox (DurableInbox), atomic JSON writes, tool-history recovery and the everyday-style prompt,
 shared by all four agents and the dashboard. The agent runtime itself is engine.AgentRuntime."""
+from agent_core import release
 import functools
 import json
 import os
@@ -61,7 +62,7 @@ class DurableInbox:
         self.active_job = None
         self.health_lock = threading.Lock()
         self.health = {"pid": os.getpid(), "phase": "starting", "task": None,
-                       "instance": os.environ.get('AGENT_LAUNCH_ID') or uuid.uuid4().hex}
+                       "instance": os.environ.get('AGENT_LAUNCH_ID') or uuid.uuid4().hex, "release": release.LOADED}
         with self.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY, chat INTEGER, '
                        'message INTEGER, handler TEXT, payload TEXT, status TEXT, created REAL, '
@@ -69,16 +70,38 @@ class DurableInbox:
             db.execute('CREATE TABLE IF NOT EXISTS usage_events (id INTEGER PRIMARY KEY, job INTEGER, created REAL, kind TEXT, provider TEXT, model TEXT, billing TEXT, role TEXT, metrics TEXT)')
             db.execute('CREATE INDEX IF NOT EXISTS usage_job ON usage_events(job)')
 
-    def record_event(self, kind, model='', billing='', provider='', usage=None, role='worker'):
+    def record_event(self, kind, model='', billing='', provider='', usage=None, role='worker', details=None, event_id=None, partial=False):
         """Best-effort accounting. Never let a metrics failure interrupt the task."""
-        from agent_core.usage import normalize
+        from agent_core.usage import normalize, FIELDS
         payload = normalize(provider, usage) if usage is not None else {}
+        if partial:
+            known = {k: v for k, v in payload.items() if k in FIELDS and v is not None}
+            if 'input_total' not in known and any(k in known for k in FIELDS[1:4]):
+                known['input_total'] = sum(known.get(k, 0) for k in FIELDS[1:4])
+            payload = dict.fromkeys(FIELDS) | {'known_subtotals': known}
+        if details is not None:
+            payload['details'] = details
+        db = None
         try:
-            with self.db() as db:
-                db.execute('INSERT INTO usage_events(job,created,kind,provider,model,billing,role,metrics) VALUES (?,?,?,?,?,?,?,?)',
-                           ((getattr(self.local, 'job', None) or self.active_job), time.time(), kind, provider, model, billing, role, json.dumps(payload)))
+            db = sqlite3.connect(self.database, timeout=30)
+            if event_id is None:
+                saved_id = db.execute('INSERT INTO usage_events(job,created,kind,provider,model,billing,role,metrics) VALUES (?,?,?,?,?,?,?,?)',
+                           ((getattr(self.local, 'job', None) or self.active_job), time.time(), kind, provider, model, billing, role, json.dumps(payload))).lastrowid
+            else:
+                saved_id = event_id
+                changed = db.execute('UPDATE usage_events SET metrics=?,created=? WHERE id=? AND kind=? AND provider=? AND model=? AND role=?',
+                                     (json.dumps(payload), time.time(), event_id, kind, provider, model, role)).rowcount
+                if not changed:
+                    raise ValueError('Usage snapshot no longer exists')
+            db.commit()
+            return saved_id
         except Exception as exc:
             print(f'[usage] Could not save accounting: {type(exc).__name__}')
+            return event_id
+        finally:
+            if db is not None:
+                db.close()
+
 
     def usage_summary(self, chat):
         with self.db() as db:
@@ -102,7 +125,7 @@ class DurableInbox:
         for (model, billing, role), group in groups.items():
             lines.append(f'{model} | {billing} | {role}: {group["attempt"]} application attempts, {group["response"]} responses.')
             totals = aggregate(group['metrics'])
-            if not group['metrics'] or all(totals[k] is None for k in FIELDS):
+            if not group['metrics'] or (all(totals[k] is None for k in FIELDS) and not any(totals['known_subtotals'].values())):
                 lines.append('Token usage unavailable.')
                 continue
             lines.append(', '.join(f'{key}={totals[key]:,}' if totals[key] is not None else
@@ -182,6 +205,21 @@ class DurableInbox:
         """[(message_id, text)] of Alex's messages the running turn has taken in: its own, then follow-ups."""
         return list(getattr(self.local, 'turn_messages', None) or [])
 
+    def turn_sources(self, chat):
+        """Real inbox payloads selected for this turn, including exact Telegram reply references."""
+        db = sqlite3.connect(self.database, timeout=30)
+        try:
+            sources = []
+            for ident, text in self.turn_messages():
+                row = db.execute('SELECT payload FROM jobs WHERE chat=? AND message=?', (chat, ident)).fetchone()
+                if row:
+                    source = json.loads(row[0])
+                    source['text'] = text
+                    sources.append(source)
+            return sources
+        finally:
+            db.close()
+
     def superseded(self, chat, message_id):
         """True when Alex has sent `chat` another message after `message_id`: a reply then quotes what it answers,
         as Alex does himself when several threads run at once (2026-10-20). Otherwise the reply follows his
@@ -215,6 +253,7 @@ class DurableInbox:
         time.sleep(max(0.0, FOLLOW_UP_SECONDS - (time.time() - created)))
         extra = self.follow_ups(chat, ident)
         self.local.last_bubble = extra[-1][1].message_id if extra else None
+        self.local.turn_messages = [(message.message_id, message.text)] + [(m.message_id, m.text) for _, m in extra]
         if extra:
             message.text = "\n".join([message.text] + [m.text for _, m in extra])
         return [ident] + [i for i, _ in extra], message
@@ -296,6 +335,7 @@ class DurableInbox:
         self.worker.start()
 
     def run(self):
+        from agent_core.shared_handlers import FileTooBig      # local: agent_core imports this module
         from telebot.types import Message
         while not self.shutdown.is_set():
             self.wake.wait(1)
@@ -327,11 +367,10 @@ class DurableInbox:
                                 ids.append(jid)
                                 batch.append(other)
                 self.local.message_id = message.message_id      # what this job answers; replies quote it when needed
-                self.local.turn_messages = []                     # [(message_id, text)] this turn takes in
+                self.local.turn_messages = [(m.message_id, m.text or m.caption or '') for m in batch]
                 if name == 'handle_message' and message.text:
                     ids, message = self.gather(chat, ident, created, message)
-                    # Bubbles merged within FOLLOW_UP_SECONDS are one message, known by its last bubble.
-                    self.local.turn_messages = [(self.local.last_bubble or message.message_id, message.text)]
+                    # Execution is coalesced; each original message keeps its identity.
                 marks = ','.join('?' for _ in ids)
                 with self.db() as db:
                     # /stop may have cancelled the job during the album collection wait.
@@ -344,6 +383,9 @@ class DurableInbox:
                 self.progress('task_started', deadline_seconds=2100)
                 fn(batch if album else message)
                 status = 'failed' if self.local.failed else 'done'
+            except FileTooBig as exc:                           # Alex's to fix, said plainly; not a runtime failure
+                status = 'done'
+                self.notify(chat, str(exc))
             except Exception as exc:
                 status = 'failed'
                 print(f'[inbox] Task #{ident} failed: {type(exc).__name__}: {exc}')
@@ -352,6 +394,7 @@ class DurableInbox:
                 self.active_chat = None
                 self.active_job = None
                 self.local.job = None
+                self.local.turn_messages = []
                 self.progress('idle')
             with self.db() as db:
                 db.executemany('UPDATE jobs SET status=? WHERE id=? AND status IN (\'running\',\'pending\')', [(status, i) for i in ids])

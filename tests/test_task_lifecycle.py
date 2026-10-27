@@ -133,7 +133,7 @@ class Agent(unittest.TestCase):
     def test_a_plain_yes_is_ambiguous_when_two_actions_wait(self):
         agent = self.agent()
         for n in (1, 2):
-            task_decisions.park_action(agent._background, CHAT, "send_email", {"to": f"{n}@x"}, f"send {n}?")
+            task_decisions.park_action(agent._background, CHAT, "send_email", {"to": f"{n}@x"}, f"send {n}?", decision_id=0)
         self.assertEqual(agent._settle_by_reply(message("yes")), (False, ""))
         self.assertEqual(len(task_decisions.pending(agent._background, CHAT, kind="action")), 2)
 
@@ -168,7 +168,7 @@ class Agent(unittest.TestCase):
         (store.directory(task) / "result.txt").write_text("Portable Tiro is ready to use.", encoding="utf-8")
         with store.db() as db:
             db.execute("UPDATE tasks SET notified=1 WHERE id=?", (task,))      # delivered at 19:41
-        store.ask(CHAT, task, "Tiro 修复要不要排到百分位任务前面先做？")
+        store.ask(CHAT, task, "修复要不要排到另一个任务前面先做？")
         self.assertEqual(store.get(task)["status"], "needs_answer")
         send = Mock()
         store.tick(send)

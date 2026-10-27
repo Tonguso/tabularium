@@ -1,4 +1,5 @@
 """Loopback-only shared agent control panel. No model calls; independent of Telegram."""
+from agent_core import release
 from pathlib import Path
 import json, re, secrets, sqlite3, threading, time
 from datetime import datetime
@@ -169,6 +170,7 @@ def state():
             title=(task.get('request') or 'Background work').splitlines()[0]
             task['label']=(title[:100]+'…') if len(title)>100 else title
             task['checkpoint']=read_json(store.directory(task['id'])/'checkpoint.json')
+            task['completion']=read_json(store.directory(task['id'])/'completion.json')   # checks live here, not in his messages (2026-10-24)
             data['tasks'].append(task)
     data['restart']=read_json(ROOT/'dashboard/restart_status.json')
     data['supervisor']=read_json(ROOT/'logs/supervisor_state.json')
@@ -305,9 +307,8 @@ class Handler(BaseHTTPRequestHandler):
                 names=AGENTS if selected=='all' else (selected,)
                 # A restart is a flag (2026-10-09): the agent finishes queued work, exits, and the supervisor restarts it.
                 from agent_control import request_restart
-                request_restart(names, run_tests=False, allow_uncommitted=True)   # Alex's button
-                atomic_json(ROOT/'dashboard/restart_status.json',{'agent':selected,'status':'draining','updated':time.time()})
-                self.send({'message':('All agents' if selected=='all' else selected.title())+' will restart after finishing current work.'}); return
+                request_restart(names)
+                self.send({'message':'Release queued. The supervisor will test and update the agents and dashboard.'}); return
             elif self.path=='/api/task':
                 action=value.get('action')
                 if action not in ('cancel','resume'):raise ValueError('Unsupported task action')
@@ -339,15 +340,38 @@ class _ExclusiveServer(ThreadingHTTPServer):
         super().server_bind()
 
 
+def serve(server, root=ROOT):
+    """Stop accepting requests on drain, finish handlers, then acknowledge the release."""
+    import os
+    from supervisor import read_json, RESTART_EXIT
+    health = {'pid': os.getpid(), 'instance': os.environ.get('AGENT_LAUNCH_ID'), 'release': release.LOADED}
+    server.timeout = 1
+    try:
+        while True:
+            health.update(phase='idle', last_progress=time.time())
+            atomic_json(root/'dashboard/task_state/health.json', health)
+            request = read_json(root/'dashboard/task_state/drain')
+            if request.get('id') and request.get('instance') == health['instance']:
+                break
+            server.handle_request()
+    finally:
+        server.server_close()  # ThreadingHTTPServer waits for in-flight handlers.
+    health.update(phase='restart_ready', restart=request, last_progress=time.time())
+    atomic_json(root/'dashboard/task_state/health.json', health)
+    return RESTART_EXIT
+
+
 def main():
+    import os
     from agent_logging import start_logging
-    # Bind BEFORE start_logging: its heartbeat thread is non-daemon, so a second dashboard that
-    # lost the port used to stay alive forever doing nothing (six were running on 2026-10-06).
+    if not release.same_source(release.identity(), release.LOADED):
+        raise RuntimeError('Source changed during dashboard startup')
     try:server=_ExclusiveServer(('127.0.0.1',PORT),Handler)
     except OSError:
         print('Dashboard already running or port occupied.');return
     start_logging('dashboard')
     print('Agent dashboard:',URL)
-    server.serve_forever()
+    os._exit(serve(server))
+
 
 if __name__=='__main__':main()

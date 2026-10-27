@@ -179,7 +179,7 @@ class KeepTheAnswer(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         try:
             agent = make_agent("cato", tmp.name, background=True)
-            draft = "一、结论：核心是 A&D 二线供应商。需要您确认：FTI 是不是 FTAI 的笔误？"
+            draft = "一、结论：核心是二线供应商。需要您确认：FTI 是不是 FTAI 的笔误？"
             fake = patch.object(agent._routing, "run", return_value=Reply(
                 "audited", task_outcome="waiting", question="FTI 是不是 FTAI 的笔误？", decision_task_id=1,
                 status_claims=[{"task_id": 1, "state": "waiting"}, {"task_id": int(agent.BACKGROUND_TASK_ID), "state": "waiting"}]))

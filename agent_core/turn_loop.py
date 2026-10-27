@@ -96,7 +96,7 @@ def run(agent, messages, chat_id, provider):
                 agent._inbox.record_event("bounce", "cut_off", role="runtime")
                 messages.pop()
                 return end(kept + CUT_OFF_FINAL, complete=False)
-            save({"role": "user", "content": [{"type": "text", "text": CUT_OFF_NOTE}]})
+            api_messages.append(reply_envelope.retry_note(agent, "cut_off", kept, CUT_OFF_NOTE))
             continue
 
         if exchange.stop:
@@ -106,20 +106,22 @@ def run(agent, messages, chat_id, provider):
             final = reply_envelope.reply(exchange.text)        # only the declared reply is delivered and saved
             if not agent.BACKGROUND_TASK_ID and not reminded and                     reply_envelope.unbacked(final, agent._background.activated_since(chat_id, turn_started)):
                 reminded = True                                 # once: the model starts the work or asks for a go
-                agent._inbox.record_event("bounce", "unbacked_promise", role="runtime")
-                save({"role": "user", "content": reply_envelope.UNBACKED_PROMISE})
+                api_messages.append(reply_envelope.retry_note(agent, "unbacked_promise", final, reply_envelope.UNBACKED_PROMISE))
                 continue
             if not agent.BACKGROUND_TASK_ID and not unblocked_asked and reply_envelope.dead_end(final):
                 unblocked_asked = True                          # once: another route, a question, or an honest stop
-                agent._inbox.record_event("bounce", "dead_end", role="runtime")
-                save({"role": "user", "content": reply_envelope.DEAD_END})
+                api_messages.append(reply_envelope.retry_note(agent, "dead_end", final, reply_envelope.DEAD_END))
                 continue
             missing = [] if agent.BACKGROUND_TASK_ID or covered_asked else reply_envelope.unanswered(
                 final, agent._inbox.turn_messages() if hasattr(agent._inbox, "turn_messages") else [])
             if missing:
                 covered_asked = True                            # once: answer them or say how each is handled
-                agent._inbox.record_event("bounce", "unanswered_message", role="runtime")
-                save({"role": "user", "content": reply_envelope.unanswered_note(missing)})
+                api_messages.append(reply_envelope.retry_note(agent, "unanswered_message", final, reply_envelope.unanswered_note(missing)))
+                continue
+            from agent_core.task_decisions import completion_feedback
+            feedback = completion_feedback(agent, chat_id, final)
+            if feedback:
+                api_messages.append(feedback)
                 continue
             return end(final)
 
@@ -137,7 +139,7 @@ def run(agent, messages, chat_id, provider):
             agent.save_conversation(chat_id)
         if step + 1 == agent.TOOL_BUDGET_WARN_AT:
             # Once. Without it a long task simply hits the wall and Alex gets nothing after ten minutes.
-            results.append({"type": "text", "text": budget_warning(step + 1, agent.MAX_TOOL_ITERATIONS)})
+            api_messages.append({"role": "user", "content": budget_warning(step + 1, agent.MAX_TOOL_ITERATIONS)})
         agent.save_conversation(chat_id)
 
     agent._inbox.record_event("bounce", "step_limit", role="runtime")

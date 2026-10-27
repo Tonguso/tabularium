@@ -3,6 +3,7 @@ from copy import deepcopy
 from hashlib import sha256
 import json
 from pathlib import Path
+from agent_core.memory_store import atomic_text
 
 # A conservative wire-size trigger, NOT a claim about any model's token window.
 # Server context errors trigger further reduction; protected content is never cut.
@@ -163,4 +164,69 @@ def clear_cache_markers(messages: list) -> list:
                 scrub(block.get("content"))
     for message in result:
         scrub(message.get("content"))
+    return result
+
+
+def exchange_starts(messages):
+    """User exchanges, not tool-result messages, are the unit of conversational retention."""
+    starts, pending = [], set()
+    for i, message in enumerate(messages[2:], 2):
+        content = message.get('content')
+        blocks = content if isinstance(content, list) else []
+        if message.get('role') == 'user' and not pending:
+            if isinstance(content, str):
+                if not content.startswith(('[Local recovery record]', '[System:', '[Background scope update')):
+                    starts.append(i)
+            elif any(b.get('type') in ('text', 'image') for b in blocks):
+                starts.append(i)
+        for block in blocks:
+            if block.get('type') == 'tool_use':
+                pending.add(block.get('id'))
+            elif block.get('type') == 'tool_result':
+                pending.discard(block.get('tool_use_id'))
+    return starts
+
+
+def completed_exchanges(messages, directory):
+    """Keep the conversation verbatim; archive completed tool traces once per exchange."""
+    starts = exchange_starts(messages)
+    if len(starts) < 2:
+        return messages
+    result = list(messages[:starts[0]])
+    for start, end in zip(starts, starts[1:]):
+        exchange = messages[start:end]
+        protected = {b.get('id') for m in exchange for b in
+                     (m.get('content') if isinstance(m.get('content'), list) else [])
+                     if b.get('type') == 'tool_use' and b.get('name') in PROTECTED_TOOLS}
+        uses = {b.get('id') for m in exchange for b in
+                (m.get('content') if isinstance(m.get('content'), list) else []) if b.get('type') == 'tool_use'}
+        results = {b.get('tool_use_id') for m in exchange for b in
+                   (m.get('content') if isinstance(m.get('content'), list) else []) if b.get('type') == 'tool_result'}
+        protected.update(uses ^ results)  # a follow-up may arrive between a call and its result
+        trace, kept = [], []
+        for message in exchange:
+            content = message.get('content')
+            if not isinstance(content, list):
+                kept.append(message)
+                continue
+            visible, removed = [], []
+            for block in content:
+                tool = block.get('type') in ('tool_use', 'tool_result')
+                ident = block.get('id') if block.get('type') == 'tool_use' else block.get('tool_use_id')
+                (removed if tool and ident not in protected else visible).append(block)
+            if removed:
+                trace.append({**message, 'content': removed})
+            if visible:
+                kept.append({**message, 'content': visible})
+        if trace:
+            full = json.dumps(trace, ensure_ascii=False)
+            path = directory / (sha256(full.encode('utf-8')).hexdigest() + '.json')
+            directory.mkdir(parents=True, exist_ok=True)
+            if not path.exists():
+                atomic_text(path, full)
+            # This is evidence of past calls, not a fabricated user instruction or an instruction to run again.
+            kept.insert(1, {'role': 'assistant', 'content':
+                f'[Completed tool trace: {path}. Exact calls and results retained; read_file to inspect. Do not replay actions.]'})
+        result.extend(kept)
+    result.extend(messages[starts[-1]:])
     return result

@@ -1,5 +1,4 @@
-"""A Claude Code update runs the self-test at once (Alex, 2026-10-22: "shouldn't we implement checks and fix after
-each update?"). The CLI path the subscription route would use is checked every minute; a change (new version, or
+"""A Claude Code update runs the self-test at once (Alex, 2026-10-22: [quote removed]). The CLI path the subscription route would use is checked every minute; a change (new version, or
 none) triggers the self-test instead of waiting for the daily one."""
 import contextlib, io, json, tempfile, unittest
 from pathlib import Path

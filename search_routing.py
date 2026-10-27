@@ -12,7 +12,6 @@ A route still cooling down in the main router is skipped. A route that fails or 
 web-search evidence hands over to the next one. No credentials are stored or returned here.
 """
 from agent_core.wire_budget import message_budget
-import asyncio
 import json
 import time
 from pathlib import Path

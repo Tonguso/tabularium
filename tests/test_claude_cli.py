@@ -3,7 +3,7 @@
 2026-10-20 20:14 an update removed the stand-alone claude.exe (~/.local/bin and the SDK bundle). find_cli found no
 candidate, every turn raised "Claude Code is not installed", and the router fell back to the ChatGPT subscription
 for two days without telling Alex: cooldowns of five minutes, retried forever, no notice (only quota and sign-out
-were announced). Alex: "agents were heavily using Codex fallback this week"."""
+were announced). Alex: [quote removed]."""
 import os, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace as NS

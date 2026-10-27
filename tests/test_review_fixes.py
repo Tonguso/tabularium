@@ -7,7 +7,7 @@
 import json, subprocess, tempfile, unittest
 from pathlib import Path
 
-from agent_core import memory_consolidation as mc, regression, release
+from agent_core import memory_consolidation as mc, release
 import agent_control
 
 
@@ -65,14 +65,12 @@ class Release(unittest.TestCase):
         self.assertEqual(release.commit(self.root), self.head)
         self.assertEqual(release.commit(self.root / "missing"), "")
 
-    def test_restart_refuses_uncommitted_changes_unless_told(self):
-        (self.root / "engine.py").write_text("x = 2\n", encoding="utf-8")
-        self.assertEqual(release.uncommitted(self.root), ["engine.py"])
-        with self.assertRaisesRegex(RuntimeError, "Uncommitted changes"):
-            agent_control.request_restart(["cato"], run_tests=False, root=self.root)
-        self.assertFalse((self.root / "cato" / "task_state" / "drain").exists())
-        agent_control.request_restart(["cato"], run_tests=False, root=self.root, allow_uncommitted=True)
-        self.assertTrue((self.root / "cato" / "task_state" / "drain").exists())
+    def test_release_refuses_uncommitted_changes(self):
+        (self.root/'engine.py').write_text('x = 2\n',encoding='utf-8')
+        self.assertEqual(release.uncommitted(self.root),['engine.py'])
+        self.assertRaisesRegex(RuntimeError,'Commit tracked changes',agent_control.request_restart,['cato'],root=self.root)
+        self.assertFalse((self.root/'cato/task_state/drain').exists())
+        self.assertFalse((self.root/'dashboard/restart_status.json').exists())
 
     def test_a_worker_attempt_records_its_release(self):
         from background_runtime import TaskStore

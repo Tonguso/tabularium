@@ -1,6 +1,6 @@
 """Versioned projects, theses and candidate lessons; local change-only alerts."""
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 from pathlib import Path
 import re

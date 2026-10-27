@@ -33,6 +33,9 @@ def continue_turn(agent, messages, chat, run):
             agent.save_conversation(chat)
             return result
         except SessionLimit as exc:
+            if getattr(agent, "_trial", None):
+                from agent_core.reply_envelope import Reply
+                return Reply("Trial effort allowance exhausted; unfinished deliverables remain unverified.", complete=False)
             agent.save_conversation(chat)
             after = completed_actions(messages)
             calls = {b.get("id") for m in messages if isinstance(m.get("content"), list)

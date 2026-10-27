@@ -1,117 +1,270 @@
-from agent_harness import put
-"""Trials: two reruns of a past task, current skill against the proposed edit, before Alex approves (2026-10-20).
-
-Why: a lesson went from 'proposed' to 'applied' on the strength of Cato's argument. Now approval normally follows a
-trial, so Alex judges two real outputs; the trial changes nothing and sends nothing but the comparison."""
-import json, os, sqlite3, tempfile, unittest
-from contextlib import closing, contextmanager
+"""Independent evidence, isolation and real worker lifecycle for lesson screening."""
+import json
+import os
+import sqlite3
+import tempfile
+import time
+import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch
-from agent_core import learning, trials
+from agent_harness import put, make_agent, AGENTS
+from agent_core import learning, trials, regression, session_lifecycle
 from agent_core.outcome import Refused
 import background_runtime as rt
 
-SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\n## Membership\n- Read the archives for each name.\n'
+SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\nRead archives.\n'
+
+def cases():
+    return [dict(id=name, version=1, request=f'Save result.txt containing {value}.',
+                 oracle=dict(basis=f'Explicit requested value {value}', reviewed_by='test author'),
+                 requirements=[dict(id='value', check=dict(kind='text', path='result.txt', expected=value))])
+            for name, value in [('dev', 'A'), ('held', 'B')]]
 
 
 class Trials(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name).resolve()
-        (self.root / "task_state").mkdir()
-        with closing(sqlite3.connect(self.root / "task_state" / "conversation_recall.sqlite3")) as con, con:
-            con.execute("CREATE TABLE messages(id INTEGER PRIMARY KEY, chat TEXT, speaker TEXT, text TEXT)")
-            con.execute("INSERT INTO messages VALUES (7, '1', 'user', 'ok, approve it')")
-        self.skill = self.root / "skills" / "basket" / "SKILL.md"
-        self.skill.parent.mkdir(parents=True); self.skill.write_text(SKILL, encoding="utf-8")
-        self.key = learning.propose(self.root, 1, "Freeze the membership first", "t1", "basket_build")
-        learning.propose_change(self.root, 1, self.key, self.skill, "- Read the archives for each name.",
-                                "- Freeze the membership first; then read the archives once per name.")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve() / 'cato'
+        (self.root / 'task_state').mkdir(parents=True)
+        db = sqlite3.connect(self.root / 'task_state/conversation_recall.sqlite3')
+        try:
+            db.execute('CREATE TABLE messages(id INTEGER PRIMARY KEY, chat TEXT, speaker TEXT, text TEXT)')
+            db.execute("INSERT INTO messages VALUES (7, '1', 'user', 'ok, approve it')")
+            db.commit()
+        finally:
+            db.close()
+        self.skill = self.root / 'skills/basket/SKILL.md'
+        self.skill.parent.mkdir(parents=True)
+        self.skill.write_text(SKILL, encoding='utf-8')
+        self.key = learning.propose(self.root, 1, 'Freeze membership', 't1', 'basket_build')
+        self.propose()
         self.store = rt.TaskStore(self.root)
-        self.source = self.store.start(1, "Build a US tower basket workbook", "towers only")["id"]
-        put(self.store, self.source, "finished", "done")
-        self.env = patch.dict(os.environ, {}, clear=False); self.env.start()
+        self.spec = dict(development_cases=['dev'], heldout_cases=['held'], repetitions=2, max_steps=12)
+        self.corpus = cases()
+        mock = patch.object(regression, 'load_cases', return_value=self.corpus)
+        mock.start(); self.addCleanup(mock.stop)
+        env = patch.dict(os.environ)
+        env.start(); self.addCleanup(env.stop)
+        for name in (trials.READS_ENV, trials.TRIAL_DIR_ENV, trials.OVERRIDES_ENV):
+            os.environ.pop(name, None)
 
-    def tearDown(self):
-        self.env.stop()
-        os.environ.pop(trials.OVERRIDES_ENV, None); os.environ.pop(trials.TRIAL_DIR_ENV, None)
-        self.tmp.cleanup()
+    def propose(self, text='Freeze membership.'):
+        learning.propose_change(self.root, 1, self.key, self.skill, '', text)
 
-    def test_approval_waits_for_a_trial_unless_owner_skips_it(self):
-        with self.assertRaisesRegex(ValueError, "Run the trial first"):
-            learning.approve(self.root, 1, self.key, 7, "ok, approve it")
-        self.assertEqual(learning.approve(self.root, 1, self.key, 7, "ok, approve it", skip_trial=True)["status"], "applied")
-        self.assertEqual(learning.read(self.root, 1, self.key)["trial_skipped"]["quote"], "ok, approve it")
+    def start(self):
+        return trials.start(self.root, 1, self.key, self.spec, self.store)
 
-    def test_start_makes_two_silent_arms_and_an_edited_copy(self):
-        out = trials.start(self.root, 1, self.key, self.source, self.store)
-        a, b = out["baseline_task"], out["variant_task"]
-        ca = json.loads((self.store.directory(a) / "context.json").read_text(encoding="utf-8"))
-        cb = json.loads((self.store.directory(b) / "context.json").read_text(encoding="utf-8"))
-        self.assertEqual((ca["trial"]["arm"], cb["trial"]["arm"], ca["notify_telegram"], cb["notify_telegram"]), ("baseline", "variant", False, False))
-        self.assertEqual(ca["trial"]["overrides"], {})
-        patched = Path(cb["trial"]["overrides"][str(self.skill.resolve())])
-        self.assertIn("Freeze the membership first", patched.read_text(encoding="utf-8"))
-        self.assertNotIn("Freeze", self.skill.read_text(encoding="utf-8"))                 # the real skill is untouched
-        self.assertIn("Trial run", ca["context"]); self.assertIn("towers only", ca["context"])
-        self.assertEqual(learning.read(self.root, 1, self.key)["trial"]["variant"], b)
-        with self.assertRaisesRegex(ValueError, "already running"):
-            trials.start(self.root, 1, self.key, self.source, self.store)
+    def record(self):
+        return learning.read(self.root, 1, self.key)['trial']
 
-    def test_only_finished_research_or_basket_tasks(self):
-        running = self.store.start(1, "Build another basket", "")["id"]
-        with self.assertRaisesRegex(ValueError, "finished task"):
-            trials.start(self.root, 1, self.key, running, self.store)
-        code = self.store.start(1, "Fix the dashboard code", "")["id"]; put(self.store, code, "finished", "")
-        with self.assertRaisesRegex(ValueError, "research and basket"):
-            trials.start(self.root, 1, self.key, code, self.store)
+    def ctx(self, ident):
+        return json.loads((self.store.directory(ident) / 'context.json').read_text(encoding='utf-8'))
 
-    def test_the_variant_process_reads_the_edit_and_writes_only_its_folder(self):
-        out = trials.start(self.root, 1, self.key, self.source, self.store)
-        folder = self.store.directory(out["variant_task"])
-        ctx = json.loads((folder / "context.json").read_text(encoding="utf-8"))
-        trials.prepare_worker(ctx, folder)
-        self.assertIn("Freeze", Path(trials.overridden(self.skill)).read_text(encoding="utf-8"))
-        self.assertIsNone(trials.overridden(self.root / "skills" / "other.md"))
-        self.assertIsNone(trials.write_refusal(str(folder / "trial_output" / "basket.xlsx")))
-        self.assertIsInstance(trials.write_refusal(r"D:\Baskets\US Tower Infrastructure 2026-10-11.xlsx"), Refused)
-        runtime = NS(_all_tools=lambda p: [{"name": n} for n in ("read_file", "send_email", "delegate", "web_search", "lesson")])
-        trials.scope(runtime)
-        self.assertEqual(runtime._tool_scope, {"read_file", "web_search"})
+    def settle(self, crash=False):
+        for i, run in enumerate(self.record()['runs']):
+            folder = self.store.directory(run['task'])
+            out = folder / 'trial_output'
+            out.mkdir(exist_ok=True)
+            (out / 'result.txt').write_text('A' if run['case'] == 'dev' else 'B', encoding='utf-8')
+            (folder / 'result.txt').write_text('Claim: everything passed.', encoding='utf-8')
+            put(self.store, run['task'], 'interrupted' if crash and i == 0 else 'finished', 'Worker error: test')
 
-    def test_the_second_arm_to_finish_sends_the_comparison(self):
-        out = trials.start(self.root, 1, self.key, self.source, self.store)
-        a, b = out["baseline_task"], out["variant_task"]
-        prompts = []
+    def test_reproposal_invalidates_completed_trial(self):
+        learning.set_trial(self.root, 1, self.key, {'done': True})
+        self.propose('A different rule.')
+        self.assertNotIn('trial', learning.read(self.root, 1, self.key))
+        self.assertRaisesRegex(ValueError, 'Run the trial first', learning.approve, self.root, 1, self.key, 7, 'ok, approve it')
 
-        @contextmanager
-        def scope(names):
-            self.assertEqual(names, set()); yield
-        runtime = NS(load_memory_context=lambda: [], _ts=lambda: "[ts]", tool_scope=scope,
-                     run_turn=lambda messages, chat: prompts.append(messages[-1]["content"]) or "1. 差异…\n2. …\n3. …\n建议: approve")
-        agent = NS(runtime=runtime)
-        ctx = lambda i: json.loads((self.store.directory(i) / "context.json").read_text(encoding="utf-8"))
-        self.assertEqual(trials.after_arm(agent, self.store, a, ctx(a), "baseline answer"), "baseline answer")   # first: silent
-        report = trials.after_arm(agent, self.store, b, ctx(b), "variant answer")
-        self.assertIn("【技能修改试验】", report); self.assertIn("建议: approve", report)
-        self.assertIn("baseline answer", prompts[0]); self.assertIn("variant answer", prompts[0])
-        self.assertIn("Freeze the membership first", prompts[0])
-        self.assertTrue(ctx(b)["notify_telegram"]); self.assertFalse(ctx(a)["notify_telegram"])
-        self.assertTrue(learning.read(self.root, 1, self.key)["trial"]["done"])
-        self.assertEqual(learning.approve(self.root, 1, self.key, 7, "ok, approve it")["status"], "applied")   # no skip needed now
+    def test_candidate_is_exactly_the_applied_ledger_edit(self):
+        p = learning.read(self.root, 1, self.key)['proposal']
+        self.assertEqual(learning.render_change(SKILL, self.key, p), learning._bump_version(learning.add_entry(SKILL, self.key, p['new_text'], p['at'])))
+        self.start(); self.settle()
+        trials.reconcile(self.store, lambda *a: True)
+        tested = Path(self.record()['folder'], 'variant.md').read_text(encoding='utf-8')
+        learning.approve(self.root, 1, self.key, 7, 'ok, approve it')
+        self.assertEqual(self.skill.read_text(encoding='utf-8'), tested)
 
-    def test_an_ordinary_task_is_untouched(self):
-        self.assertEqual(trials.after_arm(None, self.store, self.source, {"context": "x"}, "answer"), "answer")
-        trials.prepare_worker({"context": "x"}, self.store.directory(self.source))
-        self.assertIsNone(os.environ.get(trials.TRIAL_DIR_ENV))
+    def test_trial_tools_cannot_escape_through_shell_or_search(self):
+        runtime = NS(_all_tools=lambda p: [{'name': n} for n in ('read_file', 'write_file', 'execute_command', 'web_search', 'task_checkpoint')])
+        trials.scope(runtime, {'trial': {'max_steps': 12}})
+        self.assertEqual(runtime._tool_scope, {'read_file', 'write_file'})
+
+    def test_freezes_both_arms_and_hides_oracles_before_launch(self):
+        self.start()
+        self.assertEqual(len(self.record()['runs']), 8)
+        for run in self.record()['runs']:
+            ctx = self.ctx(run['task'])
+            self.assertFalse(ctx['notify_telegram'])
+            self.assertNotIn('requirements', ctx)
+            self.assertNotIn('oracle', ctx)
+            self.assertTrue(Path(ctx['trial']['skill']).is_file())
+        self.assertEqual(self.skill.read_text(encoding='utf-8'), SKILL)
+        self.skill.write_text('Live changed', encoding='utf-8')
+        baseline = Path(self.record()['folder'], 'baseline.md')
+        self.assertEqual(baseline.read_text(encoding='utf-8'), SKILL)
+
+    def test_inputs_must_be_disjoint_and_reviewed(self):
+        self.spec['heldout_cases'] = ['dev']
+        self.assertRaisesRegex(ValueError, 'disjoint', self.start)
+        self.spec['heldout_cases'] = ['unreviewed']
+        self.assertRaisesRegex(ValueError, 'reviewed', self.start)
+
+    def test_exposed_case_cannot_be_relabelled_as_heldout(self):
+        self.start(); self.settle()
+        trials.reconcile(self.store, lambda *a: True)
+        self.propose('Another candidate.')
+        self.corpus[1]['id'] = 'renamed'
+        self.spec['heldout_cases'] = ['renamed']
+        self.assertRaisesRegex(ValueError, 'exposed', self.start)
+
+    def test_crash_is_a_failed_attempt_not_silently_retried(self):
+        self.start(); self.settle(crash=True)
+        self.store.retry_interrupted()
+        notices = []
+        trials.reconcile(self.store, lambda c, t: notices.append(t))
+        trials.reconcile(self.store, lambda c, t: notices.append(t))
+        self.assertEqual(len(notices), 1)
+        first = self.record()['outcomes'][0]
+        self.assertFalse(first['grade']['passed'])
+        self.assertEqual(first['status'], 'interrupted')
+        self.assertIn('INCONCLUSIVE', notices[0])
+
+    def test_not_graded_until_every_run_settles_and_delivery_retries(self):
+        self.start()
+        trials.reconcile(self.store, lambda *a: self.fail('Premature delivery'))
+        self.assertFalse(self.record()['done'])
+        self.settle()
+        self.assertRaises(OSError, trials.reconcile, self.store, lambda *a: False)
+        self.assertTrue(self.record()['done'])
+        self.assertNotIn('notified', self.record())
+        trials.reconcile(self.store, lambda *a: True)
+        self.assertTrue(self.record()['notified'])
+
+    def test_claims_do_not_replace_deliverables(self):
+        self.start(); self.settle()
+        run = self.record()['runs'][0]
+        (self.store.directory(run['task']) / 'trial_output/result.txt').write_text('WRONG', encoding='utf-8')
+        trials.reconcile(self.store, lambda *a: True)
+        self.assertFalse(self.record()['outcomes'][0]['grade']['passed'])
+        self.assertTrue(self.record()['outcomes'][1]['grade']['passed'])
+
+    def test_reads_cannot_see_oracle_siblings_or_live_memory(self):
+        self.start()
+        run = self.record()['runs'][0]
+        folder = self.store.directory(run['task'])
+        trials.prepare_worker(self.ctx(run['task']), folder)
+        self.assertIsNone(trials.read_refusal(self.ctx(run['task'])['trial']['skill']))
+        self.assertIsNone(trials.read_refusal(folder / 'trial_output/x.txt'))
+        for path in [self.root / 'memory.md', folder / 'context.json', Path(self.record()['folder']) / 'variant.md']:
+            self.assertIsInstance(trials.read_refusal(path), Refused)
+        self.assertIsInstance(trials.write_refusal(self.skill), Refused)
+
+    def test_frozen_skill_tampering_stops_worker(self):
+        self.start()
+        ident = self.record()['runs'][0]['task']
+        ctx = self.ctx(ident)
+        Path(ctx['trial']['skill']).write_text('Changed', encoding='utf-8')
+        self.assertRaisesRegex(ValueError, 'changed', trials.prepare_worker, ctx, self.store.directory(ident))
+
+    def test_effort_limit_does_not_open_another_session(self):
+        calls = []
+        def run():
+            calls.append(1)
+            raise session_lifecycle.SessionLimit('limit')
+        result = session_lifecycle.continue_turn(NS(_trial=True), [], 1, run)
+        self.assertFalse(result.complete)
+        self.assertEqual(calls, [1])
+
+    def test_all_agents_enforce_trial_scope_and_skip_live_memory(self):
+        for name in AGENTS:
+            folder = self.root / name
+            folder.mkdir()
+            runtime = make_agent(name, folder, background=True)
+            trials.scope(runtime, {'trial': {'max_steps': 4}})
+            self.assertFalse(runtime._tool_scope - {'read_file', 'write_file'})
+            for tool in ('execute_command', 'web_search', 'remember', 'task_decision', 'send_email'):
+                self.assertIsInstance(runtime._execute_tool_unguarded(tool, {}, 1), Refused)
+            runtime._load_core_memory = lambda: self.fail('Live memory accessed')
+            window = [{'role': 'user', 'content': 'Frozen task'}]
+            self.assertEqual(runtime._attach_current_context(window, 1), window)
+
+    def test_real_workers_produce_artifacts_and_one_settled_report(self):
+        (self.root / 'telegram.py').write_text(STUB, encoding='utf-8')
+        self.spec['repetitions'] = 1
+        self.start()
+        notices = []
+        self.store.last_monitor = time.time()
+        try:
+            deadline = time.monotonic() + 45
+            while time.monotonic() < deadline:
+                self.store.tick(lambda c, t: notices.append(t))
+                if self.record().get('notified'):
+                    break
+                time.sleep(.1)
+            logs = '\n'.join((self.store.directory(r['task']) / 'worker.log').read_text(encoding='utf-8', errors='replace') for r in self.record()['runs'] if (self.store.directory(r['task']) / 'worker.log').exists())
+            self.assertTrue(self.record().get('done'), logs)
+            self.assertEqual(len(notices), 1, logs)
+            self.assertTrue(all(r['grade']['passed'] for r in self.record()['outcomes']), logs)
+            self.assertEqual(self.skill.read_text(encoding='utf-8'), SKILL)
+        finally:
+            for proc in self.store.processes.values():
+                if proc.poll() is None:
+                    proc.terminate()
+                proc.wait(timeout=5)
+
+    def test_standing_skill_is_replaced_not_duplicated(self):
+        before = 'Follow this method:\nRead archives.\n'
+        prompt = trials.skill_prompt(before, SKILL, SKILL.replace('Read archives.', 'Freeze membership.'))
+        self.assertNotIn('Read archives.', prompt)
+        self.assertEqual(prompt.count('Freeze membership.'), 1)
+
+    def test_cannot_change_proposal_during_running_trial(self):
+        self.start()
+        self.assertRaisesRegex(ValueError, 'trial is running', self.propose, 'Another rule')
+
+    def test_failed_scheduling_cannot_authorize_approval(self):
+        mocked = patch.object(self.store, 'start', side_effect=OSError('queue unavailable'))
+        mocked.start()
+        try:
+            self.assertRaises(OSError, self.start)
+        finally:
+            mocked.stop()
+        trials.reconcile(self.store, lambda *a: True)
+        self.assertFalse(trials.evidence_matches(learning.read(self.root, 1, self.key)))
+
+    def test_comparison_requires_matching_routes_and_measured_tokens(self):
+        self.start(); self.settle()
+        trials.reconcile(self.store, lambda *a: True)
+        r = self.record()
+        for run in r['outcomes']:
+            run['usage'] = dict(known=True, input_total=100, cache_read=0, output=20,
+                                routes=[dict(provider='test', model='same', billing='test')])
+        r['outcomes'][1]['usage']['input_total'] = 80
+        report = trials.render_report(r)
+        self.assertIn('input tokens -20', report)
+        r['outcomes'][1]['usage']['routes'][0]['model'] = 'different'
+        self.assertIn('INCONCLUSIVE', trials.render_report(r))
+        self.assertNotIn('input tokens -20', trials.render_report(r))
+
+    def test_pending_report_cannot_be_replaced_or_approved(self):
+        self.start(); self.settle()
+        self.assertRaises(OSError, trials.reconcile, self.store, lambda *a: False)
+        self.assertRaisesRegex(ValueError, 'trial is running', self.propose)
+        self.assertRaisesRegex(ValueError, 'Wait for the trial', learning.approve, self.root, 1, self.key, 7, 'ok, approve it', True)
+
+    def test_legacy_finished_trial_needs_fresh_cases(self):
+        learning.set_trial(self.root, 1, self.key, dict(done=True, baseline=0, variant=0))
+        self.assertFalse(trials.evidence_matches(learning.read(self.root, 1, self.key)))
+        self.start()
+        self.assertEqual(self.record()['version'], 2)
 
 
-TRIAL_STUB = """from pathlib import Path
+STUB = '''from pathlib import Path
 from types import SimpleNamespace as NS
-from contextlib import contextmanager
 import json, os
 from background_runtime import TaskStore
-from agent_core.trials import overridden
 AGENT_DIR = Path(__file__).resolve().parent
 store = TaskStore(AGENT_DIR)
 ident = int(os.environ["CATO_BACKGROUND_TASK"])
@@ -119,64 +272,15 @@ RUNTIME_DIR = store.directory(ident)
 _inbox = NS(local=NS())
 SYSTEM_PROMPT = "fixture"
 conversations = {}
-class RunawayStop(RuntimeError):
-    pass
+class RunawayStop(RuntimeError): pass
 def load_model_prefs(chat): pass
 def _conversation_path(chat): return RUNTIME_DIR / f"conversation_{chat}.json"
 def load_conversation(chat): return []
 def save_conversation(chat): _conversation_path(chat).write_text(json.dumps(conversations.get(chat, [])))
-def skill_text():
-    real = AGENT_DIR / "skills" / "basket" / "SKILL.md"
-    return Path(overridden(real) or real).read_text(encoding="utf-8")
 def run_turn(messages, chat):
-    return "answer with " + ("frozen membership" if "Freeze" in skill_text() else "the archives read per name")
-@contextmanager
-def _scope(names):
-    yield
+    value = 'A' if 'containing A.' in messages[-1]['content'] else 'B'
+    (RUNTIME_DIR / 'trial_output/result.txt').write_text(value, encoding='utf-8')
+    return 'Artifact saved.'
 runtime = NS(SYSTEM_PROMPT=SYSTEM_PROMPT, BACKGROUND_TASK_ID=str(ident), _tool_scope=None,
-             _all_tools=lambda p: [{"name": n} for n in ("read_file", "send_email", "web_search")],
-             tool_scope=_scope, load_memory_context=lambda: [], _ts=lambda: "[ts]",
-             run_turn=lambda messages, chat: "1. B froze the membership. 2. B. 3. none. 建议: approve | seen: "
-                                             + str("frozen membership" in messages[-1]["content"]))
-"""
-
-
-class RealWorkers(unittest.TestCase):
-    def test_two_worker_processes_run_the_trial_and_one_message_reaches_owner(self):
-        import time
-        with tempfile.TemporaryDirectory() as tmp:
-            root = (Path(tmp) / "cato").resolve(); (root / "task_state").mkdir(parents=True)
-            (root / "telegram.py").write_text(TRIAL_STUB, encoding="utf-8")
-            skill = root / "skills" / "basket" / "SKILL.md"; skill.parent.mkdir(parents=True); skill.write_text(SKILL, encoding="utf-8")
-            key = learning.propose(root, 1, "Freeze the membership first", "t1", "basket_build")
-            learning.propose_change(root, 1, key, skill, "- Read the archives for each name.", "- Freeze the membership first.")
-            store = rt.TaskStore(root)
-            source = store.start(1, "Build a US tower basket workbook", "towers")["id"]; put(store, source, "finished", "")
-            put(store, source, "finished", ""); store.tick(lambda c, t: None)                    # the source's own notice
-            out = trials.start(root, 1, key, source, store)
-            notices = []
-            try:
-                deadline = time.monotonic() + 40
-                while time.monotonic() < deadline:
-                    store.tick(lambda chat, text: notices.append(text))
-                    if notices and all(store.get(i)["status"] not in ("queued", "starting", "running") for i in (out["baseline_task"], out["variant_task"])):
-                        break
-                    time.sleep(0.05)
-                logs = "".join((store.directory(i) / "worker.log").read_text(encoding="utf-8", errors="replace")
-                               for i in (out["baseline_task"], out["variant_task"]) if (store.directory(i) / "worker.log").exists())
-                self.assertEqual(len(notices), 1, logs)
-                self.assertIn("【技能修改试验】", notices[0]); self.assertIn("seen: True", notices[0])
-                a = (store.directory(out["baseline_task"]) / "answer.txt").read_text(encoding="utf-8")
-                b = (store.directory(out["variant_task"]) / "answer.txt").read_text(encoding="utf-8")
-                self.assertEqual((a, b), ("answer with the archives read per name", "answer with frozen membership"))
-                self.assertNotIn("Freeze", skill.read_text(encoding="utf-8"))                   # nothing changed
-                self.assertTrue(learning.read(root, 1, key)["trial"]["done"])
-            finally:
-                for proc in store.processes.values():
-                    if proc.poll() is None:
-                        proc.terminate()
-                    proc.wait(timeout=5)
-
-
-if __name__ == "__main__":
-    unittest.main()
+             _all_tools=lambda p: [{"name": "read_file"}, {"name": "write_file"}])
+'''

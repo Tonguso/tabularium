@@ -32,8 +32,8 @@ class TurnNotes(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_saved_message_holds_owners_words_only(self):
-        saved = self.runtime.compose_turn(message("中国还有啥有意思的主题"), nudge=False)
-        self.assertIn("中国还有啥有意思的主题", saved)
+        saved = self.runtime.compose_turn(message("还有什么有意思的主题"), nudge=False)
+        self.assertIn("还有什么有意思的主题", saved)
         self.assertNotIn("Background work", saved)
         self.assertNotIn("Alex wrote this", saved)
 
@@ -64,13 +64,13 @@ class TurnNotes(unittest.TestCase):
 
     def test_research_hand_off_copies_owners_words(self):
         rt = self.runtime
-        rt.conversations[1] = [{"role": "user", "content": rt.compose_turn(message("中国还有啥有意思的主题"), nudge=False)}]
+        rt.conversations[1] = [{"role": "user", "content": rt.compose_turn(message("还有什么有意思的主题"), nudge=False)}]
         started = []
         rt._background.start = lambda chat, request, context: started.append(request) or {"id": 148, "request": request}
         rt._background.label = lambda task: "research"
         rt._execute_tool_unguarded("list_research_reports", {"date_from": "2026-10-05"}, 1)
         self.assertEqual(len(started), 1)
-        self.assertIn("中国还有啥有意思的主题", started[0])
+        self.assertIn("还有什么有意思的主题", started[0])
         self.assertNotIn('"task_id": 143', started[0])
         self.assertNotIn("Alex wrote this", started[0])
 

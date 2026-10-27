@@ -2,7 +2,7 @@
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
-import json, sqlite3, re, hashlib
+import json, sqlite3, re
 ROOT=Path(__file__).resolve().parent
 STAMP=re.compile(r'^\[(\d{4}-\d{2}-\d{2})\s+(?:[A-Za-z]+\s+)?(\d{2}:\d{2})(?::\d{2})?[^\]]*\]\s*')
 INTERNAL=('[Session started:', '[Local recovery record]', '[Background scope update', '[System:', 'Core memory loaded.', '[Alex asked you to use', '[Background task')

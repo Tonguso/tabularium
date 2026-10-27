@@ -1,7 +1,6 @@
 """When Alex corrects an agent, the agent works out the specifics, not Alex (2026-10-20; redesigned 2026-10-22).
 
-Alex: "Agents only learn lessons when there is specific instruction on errors and fixes. They don't learn lessons if
-I'm angry but not telling them specifics." So the reply envelope says whether his message corrected the agent
+Alex: [quote removed] So the reply envelope names the incoming message IDs that corrected the agent
 (`correction`), and the runtime, not the model's memory of a rule, starts a background diagnosis: what happened, from
 the conversation and the task records; what he expected; why; and whose it is. A fault in the agent's own method
 becomes a lesson with the exact skill edit, registered for his go. A fault in the runtime becomes a report for
@@ -28,8 +27,8 @@ BURST_NOTE = ("[Runtime note: Alex has corrected you {n} times in the last {minu
               "propose or explain anything in this reply. In two or three lines, using the words he has used, say what you "
               "now understand he means and wants, then ask whether that is right. Nothing else.]")
 
-BRIEF = """{prefix} Alex corrected you {count}, the last at {when}. In order, his words and the reply of yours each
-was reacting to:
+BRIEF = """{prefix} Recorded feedback, last at {when}. Sources and quoted targets are explicit below.
+An unspecified target must be investigated, never assumed to be the previous assistant reply:
 {items}
 This is one diagnosis for the whole thread, not one per message. Nothing you write here is sent to him; he reads
 the lesson register when he chooses. He does not have to explain the error; working it out is your job. Do this:
@@ -54,12 +53,6 @@ the lesson register when he chooses. He does not have to explain the error; work
 """
 
 
-def _text(content):
-    if isinstance(content, str):
-        return content
-    return " ".join(b.get("text", "") for b in content or [] if isinstance(b, dict) and b.get("type") == "text")
-
-
 def is_diagnosis(request):
     return str(request or "").startswith(PREFIX)
 
@@ -75,25 +68,24 @@ def _pending(agent):
         return {}
 
 
-def start(agent, chat, messages, now=None):
-    """Record the correction in the latest exchange for the next diagnosis of this chat's thread. Returns the number
-    of corrections now waiting, or None when the agent does not learn this way (Tacitus) or runs as a worker."""
-    store = agent._background
-    if agent.BACKGROUND_TASK_ID or not getattr(store.role, "learns", False):
+def start(agent, chat, message_ids, now=None):
+    """Record only explicitly selected inbox messages, with their actual quoted target."""
+    if agent.BACKGROUND_TASK_ID or not getattr(agent._background.role, 'learns', False):
         return None
-    users = [m for m in messages if m.get("role") == "user" and _text(m.get("content")).strip()]
-    words = _text(users[-1]["content"]).strip()[:1500] if users else ""
-    before = ""
-    for m in reversed(messages[:-1] if messages and messages[-1].get("role") == "assistant" else messages):
-        if m.get("role") == "assistant" and _text(m.get("content")).strip():
-            before = _text(m["content"]).strip()[:1500]
-            break
-    inbox = getattr(agent, "_inbox", None)
-    if inbox is not None and hasattr(inbox, "record_event"):
-        inbox.record_event("correction", model="owner", role="foreground")
+    sources = {m['message_id']: m for m in agent._inbox.turn_sources(chat)}
+    if any(type(i) is not int or i not in sources for i in message_ids):
+        raise ValueError('Correction must identify an incoming message in this turn.')
     pending = _pending(agent)
     items = pending.setdefault(str(chat), [])
-    items.append({"words": words, "before": before, "at": now or time.time()})
+    for ident in dict.fromkeys(message_ids):
+        if any(i.get('message_id') == ident for i in items):
+            continue
+        source = sources[ident]
+        ref = source.get('reply_to_message') or {}
+        items.append(dict(kind='human', message_id=ident, words=source['text'],
+                          reply_to=ref.get('message_id'), before=ref.get('text') or ref.get('caption') or '',
+                          at=now or time.time()))
+        agent._inbox.record_event('correction', model='owner', role='foreground', details={'message_id': ident})
     atomic_json(_pending_path(agent), pending)
     return len(items)
 
@@ -106,7 +98,7 @@ def burst_note(agent, chat, now=None):
         return ""
     now = now or time.time()
     pending = _pending(agent)
-    items = [i for i in pending.get(str(chat), []) if now - i["at"] < QUIET_SECONDS]
+    items = [i for i in pending.get(str(chat), []) if i.get("kind") == "human" and now - i["at"] < QUIET_SECONDS]
     if len(items) < 2 or now - max(i["at"] for i in items) > BURST_RECENT_SECONDS:
         return ""
     # Once per correction: the first evening it fired on every turn within three minutes, so after Alex said
@@ -124,6 +116,19 @@ def burst_note(agent, chat, now=None):
     return BURST_NOTE.format(n=len(items), minutes=minutes)
 
 
+def start_failure(agent, chat, title, evidence, now=None):
+    """A failure recorded by the runtime joins the next diagnosis: a lesson that recurred on a real task, or a declared
+    check that failed on a delivered file (2026-10-24, GEPA's point: draft the fix from the actual run). Workers may
+    record one; the foreground's minute loop starts the diagnosis. Returns the number waiting."""
+    if not getattr(agent._background.role, "learns", False):
+        return None
+    pending = _pending(agent)
+    items = pending.setdefault(str(chat), [])
+    items.append({"words": title, "before": evidence[:1500], "at": now or time.time(), "kind": "failure"})
+    atomic_json(_pending_path(agent), pending)
+    return len(items)
+
+
 def flush(agent, now=None):
     """Start one diagnosis for each chat whose thread of corrections has gone quiet. Called every minute by the
     engine's worker loop. A diagnosis already active for the chat takes the new corrections as a steer instead.
@@ -139,18 +144,23 @@ def flush(agent, now=None):
         active = [t for t in store.status(chat_id) if is_diagnosis(t.get("request"))
                   and t.get("status") in ("queued", "starting", "running")]
         if active:
-            store.control(chat_id, active[0]["id"], "steer", "Alex added, while you were diagnosing: " +
-                          " / ".join('"' + i["words"] + '"' for i in items))
+            store.control(chat_id, active[0]["id"], "steer", "Additional recorded feedback (source and target preserved): " + json.dumps(items, ensure_ascii=False))
             started.append(active[0]["id"])
         else:
             reports = agent.AGENT_DIR / "runtime_reports"
             reports.mkdir(exist_ok=True)
             lines = []
             for n, i in enumerate(items, 1):
-                lines.append(f'{n}. [{time.strftime("%H:%M", time.localtime(i["at"]))}] "{i["words"]}"\n'
-                             f'   You had said: "{i["before"]}"')
-            count = "once" if len(items) == 1 else f"{len(items)} times"
-            request = BRIEF.format(prefix=PREFIX, count=count, when=time.strftime("%Y-%m-%d %H:%M", time.localtime(items[-1]["at"])),
+                if i.get("kind") == "failure":
+                    lines.append(f'{n}. [{time.strftime("%H:%M", time.localtime(i["at"]))}] Recorded by the runtime, not Alex\'s words: '
+                                 f'{i["words"]}\n   Evidence: {i["before"]}')
+                elif i.get('kind') == 'human':
+                    lines.append(f'{n}. Alex message {i["message_id"]}: "{i["words"]}"\n'
+                                 f'   Quoted target {i["reply_to"]}: "{i["before"]}"' if i.get('reply_to') else
+                                 f'{n}. Alex message {i["message_id"]}: "{i["words"]}"\n   No quoted target supplied.')
+                else:
+                    lines.append(f'{n}. Legacy feedback, source/target unverified; check original records: ' + json.dumps(i, ensure_ascii=False))
+            request = BRIEF.format(prefix=PREFIX, when=time.strftime("%Y-%m-%d %H:%M", time.localtime(items[-1]["at"])),
                                    items="\n".join(lines), tasks=store.root, reports=reports)
             task = store.start(chat_id, request, "Full original chat: " + str(agent._conversation_path(chat_id)),
                                extra={"correction": {"words": [i["words"] for i in items], "at": items[-1]["at"]},

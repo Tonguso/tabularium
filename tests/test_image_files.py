@@ -65,6 +65,28 @@ class ImageFiles(unittest.TestCase):
         self.assertEqual(self.seen, [])
         self.assertIn("not supported", self.sent[0])
 
+    def test_a_file_over_telegrams_20_mb_cap_is_named_to_owner_not_an_internal_error(self):
+        """2026-10-26: a 20.4 MB screenshot sent as a file failed twice as "Task #2163 stopped with an error"."""
+        from agent_core.shared_handlers import FileTooBig
+        self.payload = b""
+        doc = self.document("Screenshot_2026_10_26.jpg", "image/jpeg")
+        doc.document.file_size = 21_400_000
+        self.rt.bot.get_file = lambda fid: (_ for _ in ()).throw(AssertionError("must not download"))
+        with self.assertRaises(FileTooBig) as caught:
+            self.rt.handle_document(doc)
+        self.assertIn("Screenshot_2026_10_26.jpg is 20.4 MB", str(caught.exception))
+        self.assertIn("at most 20 MB", str(caught.exception))
+        self.assertEqual(self.seen, [])
+        # the inbox turns it into one sentence to Alex and a done job, never "stopped with an error"
+        import agent_runtime
+        src = Path(agent_runtime.__file__).read_text(encoding="utf-8")
+        self.assertIn("except FileTooBig as exc:", src)
+        # Telegram's own refusal, when the size was not announced, is the same sentence
+        doc.document.file_size = None
+        self.rt.bot.get_file = lambda fid: (_ for _ in ()).throw(RuntimeError("Error code: 400. Description: Bad Request: file is too big"))
+        with self.assertRaises(FileTooBig):
+            self.rt.handle_document(doc)
+
 
 if __name__ == "__main__":
     unittest.main()

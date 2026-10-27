@@ -1,5 +1,4 @@
 """Offline tests for Telegram video intake; no bot, network or whisper calls."""
-import ast
 from pathlib import Path
 import subprocess
 import sys

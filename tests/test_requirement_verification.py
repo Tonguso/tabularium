@@ -33,13 +33,13 @@ class RequirementChecks(unittest.TestCase):
             agent, artifact = self.setup_agent(name)
             self.assertIn('verify_requirement', [t['name'] for t in agent.get_tools('anthropic')])
             self.assertEqual(json.loads(self.run_check(agent))['status'], 'passed', name)
-            self.assertIn('passed: 1 Expected content', agent._background.unrun_line(1))
+            self.assertEqual(verification.summary(agent._background, 1), '', name)          # passes are silent (2026-10-24)
             artifact.write_text('different', encoding='utf-8')
-            self.assertIn('unverified:', agent._background.unrun_line(1))
+            self.assertIn('Not checked on the delivered file:', verification.summary(agent._background, 1))
 
     def test_command_assertions_pass_and_fail_with_real_process(self):
         agent, artifact = self.setup_agent('cato')
-        spec = dict(kind='command', paths=[str(artifact)], argv=[sys.executable, "-c", "import sys; from pathlib import Path; assert Path(sys.argv[1]).read_text() == 'expected value'", "{artifact}"])
+        spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, "-c", "import sys; from pathlib import Path; assert Path(sys.argv[1]).read_text() == 'expected value'", "{artifact}"])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Compare text', critical=True, verification=spec)])
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'passed')
         artifact.write_text('wrong value', encoding='utf-8')
@@ -48,7 +48,7 @@ class RequirementChecks(unittest.TestCase):
 
     def test_tacitus_does_not_gain_shell_access(self):
         agent, artifact = self.setup_agent('tacitus')
-        spec = dict(kind='command', paths=[str(artifact)], argv=[sys.executable, '-c', 'pass', '{artifact}'])
+        spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, '-c', 'pass', '{artifact}'])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Read', critical=True, verification=spec)])
         self.assertIn('cannot use', self.run_check(agent))
         self.assertEqual(verification.status(agent._background, 1, '', 1), 'unverified')
@@ -79,7 +79,7 @@ class RequirementChecks(unittest.TestCase):
     def test_native_command_failure_is_not_hidden_by_powershell(self):
         import sys
         agent, artifact = self.setup_agent('cato')
-        spec = dict(kind='command', paths=[str(artifact)], argv=[sys.executable, "-c", "import sys; print('test completed'); sys.exit(3)", "{artifact}"])
+        spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, "-c", "import sys; print('test completed'); sys.exit(3)", "{artifact}"])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Run assertions', critical=True, verification=spec)])
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'failed')
 
@@ -107,7 +107,7 @@ class RequirementChecks(unittest.TestCase):
 
     def test_change_during_the_check_is_not_a_pass(self):
         agent, artifact = self.setup_agent('cato')
-        spec = dict(kind='command', paths=[str(artifact)], argv=[sys.executable, "-c", "import sys; from pathlib import Path; Path(sys.argv[1]).write_text('changed')", "{artifact}"])
+        spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, "-c", "import sys; from pathlib import Path; Path(sys.argv[1]).write_text('changed')", "{artifact}"])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Test exact bytes', critical=True, verification=spec)])
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'unverified')
 

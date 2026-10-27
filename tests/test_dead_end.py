@@ -1,7 +1,7 @@
 """A reply cannot leave Alex's request silently undone (2026-10-21).
 
-19:08 "继续做logo吧": Cato called generate_image, the image service refused, and his reply reported the refusal in words
-that sounded provisional while nothing was running and nothing was asked. At 19:29 Alex asked "做完了吗" and learned
+19:08 [quote removed]: Cato called generate_image, the image service refused, and his reply reported the refusal in words
+that sounded provisional while nothing was running and nothing was asked. At 19:29 Alex asked [quote removed] and learned
 he had stopped. The reply now declares where the request stands; 'blocked' is sent back once for another route
 (here the logo skill's own SVG method) or a question."""
 import contextlib, io, json, tempfile, unittest
@@ -15,7 +15,7 @@ CHAT = OWNER_CHAT_ID
 
 
 def envelope(text, request):
-    return json.dumps({"reply": text, "modality": "text", "work": "none", "answers": ["继续做logo"],
+    return json.dumps({"reply": text, "modality": "text", "work": "none", "answers": [],
                        "request": request}, ensure_ascii=False)
 
 
@@ -38,7 +38,7 @@ class DeadEnd(unittest.TestCase):
                 self.calls += 1
                 return Exchange(text=replies[min(self.calls, len(replies)) - 1])
         provider = Provider()
-        out = run(self.agent, [{"role": "user", "content": "继续做logo吧"}], CHAT, provider)
+        out = run(self.agent, [{"role": "user", "content": "继续画图吧"}], CHAT, provider)
         return out, provider.calls, seen
 
     def test_a_blocked_request_gets_one_more_try(self):

@@ -1,8 +1,8 @@
 """Publish agent model status for the dashboard, and the operator command for restarts.
 
-    python agent_control.py restart [cato tacitus callimachus vitruvius] [--no-tests] [--uncommitted]
+    python agent_control.py restart
         Refuses if tracked files have uncommitted changes (commit first: every release is a Git commit), runs the
-        offline test suites (refuses on failure), then writes <agent>/task_state/drain for each agent.
+        supervisor-owned test suites, then a coordinated release of all agents and the dashboard.
         The agent finishes its queued work, exits, and the supervisor starts it again on the current code.
     python agent_control.py status
         Supervisor state and each agent's health phase.
@@ -12,10 +12,10 @@
         Start the supervisor if nothing is running; otherwise request a restart of every agent (what start_all.bat does).
     python agent_control.py lessons [agent ...]
         Lesson triage: expire candidates untouched for 30 days, print the digest (proposals first, then themes by repeats).
-    python agent_control.py eval <agent> [--collect] [--k N] [--sample N]
-        Regression eval (agent_core.regression): rerun the agent's accepted past tasks in isolation and grade them
-        against the accepted answers. --collect adds new cases from finished tasks first. The reruns queue on the
-        agent's own background worker, so run it when the agent is quiet; a 20-case run takes an hour or more.
+    python agent_control.py eval <agent> [--interactions] [--k N] [--sample N]
+        Evaluate reviewed synthetic cases with independent artifact/state checks. Default: static artifacts on
+        background workers. --interactions: disposable processes, controlled follow-ups/restart/delegation,
+        first configured model route only; no live tasks or messages. --collect stores untrusted candidates only.
 """
 import os
 import threading
@@ -36,7 +36,6 @@ def start_controls(root, describe):
                 state.update(routing_version=1,routing_enabled=True,
                              routing_revision=read(root/'routing.json').get('revision'),
                              pid=os.getpid(),updated=time.time())
-                state.pop('options',None)
                 atomic_json(root/'task_state/ui_state.json',state)
             except Exception as exc:
                 print('[dashboard-status]',type(exc).__name__)
@@ -46,37 +45,29 @@ def start_controls(root, describe):
 
 
 
-def request_restart(agents=AGENTS, run_tests=True, root=None, allow_uncommitted=False):
-    """Write the drain flags. With run_tests, both offline suites must pass first (a broken runtime would otherwise
-    come back broken). The agents restart only onto committed code, so every release they run is a Git commit
-    (2026-10-21); allow_uncommitted is for an emergency, and says so. Returns the list of agents flagged."""
-    import subprocess, sys
+def request_restart(agents=AGENTS, root=None):
+    """Submit one release; the supervisor tests, drains, starts and verifies it."""
+    from agent_core import release
+    from supervisor import read_json
+    import uuid
     root = Path(root or Path(__file__).resolve().parent)
-    bad = [a for a in agents if a not in AGENTS]
-    if bad:
-        raise ValueError("Unknown agent: " + ", ".join(bad))
-    if (root / ".git").exists() and not allow_uncommitted:
-        from agent_core import release
-        changed = release.uncommitted(root)
-        if changed:
-            raise RuntimeError("Uncommitted changes; commit them first so the agents run a known release "
-                               "(or pass --uncommitted in an emergency):\n  " + "\n  ".join(changed[:20]))
-    if run_tests:
-        for directory in (root / "tests", root / "cato" / "tests"):
-            result = subprocess.run([sys.executable, "-X", "utf8", "-m", "unittest", "discover", "-s", str(directory)],
-                                    capture_output=True, timeout=300, encoding="utf-8", errors="replace")
-            if result.returncode:
-                raise RuntimeError("Tests failed in " + directory.name + "; no restart requested.\n" + (result.stderr or result.stdout)[-2000:])
-    for agent in agents:
-        flag = root / agent / "task_state" / "drain"
-        flag.parent.mkdir(parents=True, exist_ok=True)
-        import uuid
-        from supervisor import read_json
-        health = read_json(flag.parent/'health.json')
-        prior = read_json(flag)
-        if not prior.get('id') or prior.get('instance') != health.get('instance'):
-            atomic_json(flag, {'id': uuid.uuid4().hex, 'instance': health.get('instance'), 'requested': time.time()})
-    return list(agents)
+    if any(a not in AGENTS for a in agents):
+        raise ValueError('Unknown agent')
+    if release.uncommitted(root):
+        raise RuntimeError('Commit tracked changes before requesting a release')
+    target = release.identity(root)
+    path = root/'dashboard/restart_status.json'
+    prior = read_json(path)
+    if prior.get('target') and prior.get('status') not in ('complete', 'failed'):
+        if prior.get('target') == target:
+            return prior['components']
+        raise RuntimeError('A release is already active; finish it before requesting another')
+    # Shared runtime code has no independently deployable agent subset.
+    components = list(AGENTS)+['dashboard']
+    atomic_json(path, {'id': uuid.uuid4().hex, 'agent': 'all', 'status': 'queued',
+                      'target': target, 'components': components, 'updated': time.time()})
+    return components
+
 
 
 def status(root=None):
@@ -93,12 +84,12 @@ def supervisor_alive(root=None):
     return live_status(root)['running']
 
 
-def start_all(run_tests=True):
+def start_all():
     """The one entry point (start_all.bat): start the supervisor if it is not running (it then starts the agents and
     the dashboard), otherwise ask every agent to finish its work and restart on the current code."""
     import subprocess
     if supervisor_alive():
-        request_restart(run_tests=run_tests, allow_uncommitted=True)     # Alex's button: never blocked by an author's edit
+        request_restart()
         return "Agents already running: restart requested; each finishes its current work, then comes back on the current code."
     done = subprocess.run(["schtasks", "/Run", "/TN", "AgentsSupervisor"], capture_output=True, encoding="utf-8", errors="replace")
     if done.returncode == 0:
@@ -170,11 +161,11 @@ if __name__ == "__main__":
     if args and args[0] == "open":
         print(open_dashboard())
     elif args and args[0] == "start_all":
-        print(start_all(run_tests="--no-tests" not in args))
+        print(start_all())
     elif args and args[0] == "restart":
         names = [a for a in args[1:] if not a.startswith("--")] or list(AGENTS)
-        done = request_restart(names, run_tests="--no-tests" not in args, allow_uncommitted="--uncommitted" in args)
-        print("Restart requested for " + ", ".join(done) + "; each finishes its current work, then comes back.")
+        done = request_restart(names)
+        print("Release queued for " + ", ".join(done) + "; each finishes its current work, then comes back.")
     elif args and args[0] == "status":
         print(status())
     elif args and args[0] == "eval":
@@ -187,7 +178,10 @@ if __name__ == "__main__":
         if name not in AGENTS:
             sys.exit("Unknown agent: " + name)
         agent_root = root / name
-        store = TaskStore(agent_root, ROLES[name])
+        interactive = "--interactions" in args
+        if interactive and ("--collect" in args or "--signal" in args):
+            sys.exit("Choose one evaluation profile: interactions, collect or signal.")
+        store = None if interactive else TaskStore(agent_root, ROLES[name])
         cases = regression.load_cases(agent_root)
         if "--collect" in args:
             import json
@@ -206,11 +200,21 @@ if __name__ == "__main__":
             sys.exit(0)
         k = int(args[args.index("--k") + 1]) if "--k" in args else 1
         sample = int(args[args.index("--sample") + 1]) if "--sample" in args else 0
+        executor = execution = None
+        if interactive:
+            from agent_core import interaction_eval
+            from provider_routing import config
+            cases = interaction_eval.cases(name)
+            route = config(agent_root)['routes'][0]
+            execution = interaction_eval.execution(route)
+            regression.load_config_env(root)
+            executor = interaction_eval.executor(name, route, agent_root/'task_state/regression/attempts')
         judge = None
         if any(r["check"]["kind"] == "judgment" for c in cases for r in c["requirements"]):
             regression.load_config_env(root)
             judge = regression.judge_from_env()
-        record = regression.run(agent_root, store, OWNER_CHAT_ID, cases, judge, k=k, sample=sample)
+        record = regression.run(agent_root, store, OWNER_CHAT_ID, cases, judge, k=k, sample=sample,
+                                executor=executor, execution=execution)
         print(regression.table(record))
         print("Earlier runs (pass^k, pass@1, n, k):", regression.previous_runs(agent_root))
         print("Saved:", record["path"])

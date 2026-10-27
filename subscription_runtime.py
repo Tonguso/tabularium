@@ -226,7 +226,7 @@ def sdk_tool_names(history):
         out.append(message)
     return out
 
-def run_claude(agent, messages, chat, model, reminded=False):
+def run_claude(agent, messages, chat, model, reminded=False, retry=None):
     from agent_core import reply_envelope
     from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, AssistantMessage, create_sdk_mcp_server, query, tool
     cli = find_cli()
@@ -242,6 +242,8 @@ def run_claude(agent, messages, chat, model, reminded=False):
     turn_started = time.time()                     # an accepted start/resume/reopen after this backs "work started"
     history = agent._prepare_request_context(
         agent._sanitise_tool_history(agent.trim_history(messages, chat)), chat)
+    if retry:
+        history = history + [retry]
     images = []
 
     def serial(value):
@@ -286,6 +288,8 @@ def run_claude(agent, messages, chat, model, reminded=False):
     system_prompt_file.write_text(agent.SYSTEM_PROMPT + f'\n[Active model: {model}, Claude subscription.]',
                                   encoding='utf-8')
 
+    next_retry = []
+
     async def run(caller):
         if inbox_local is not None:
             inbox_local.job = inbox_job
@@ -301,7 +305,7 @@ def run_claude(agent, messages, chat, model, reminded=False):
                     # tool's result, the only channel into a running session (task 144, 2026-10-11).
                     from agent_core.session_lifecycle import TaskWaiting
                     try:
-                        arrived = agent._background_boundary(messages, [], chat) or []
+                        arrived = await caller.call(agent._background_boundary, messages, [], chat) or []
                     except TaskWaiting as exc:
                         events.put_nowait(exc)
                         return {'content': [{'type': 'text', 'text': 'Not executed: waiting for the recorded decision.'}], 'isError': True}
@@ -367,11 +371,42 @@ def run_claude(agent, messages, chat, model, reminded=False):
             setting_sources=[])
         final = None
         usage_recorded = False
+        seen_usage = set()
+        observed = {}
+        usage_id = agent._inbox.record_event('response', model, 'subscription', 'claude-sdk', role='sdk_total', partial=True)
+        input_fields = ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens')
+
+        def save_usage(usage, partial):
+            nonlocal usage_id
+            usage_id = agent._inbox.record_event('response', model, 'subscription', 'claude-sdk', usage,
+                                                 role='sdk_total', event_id=usage_id, partial=partial)
+
+        def record_step(event):
+            if usage_recorded or event.parent_tool_use_id or not event.message_id or not isinstance(event.usage, dict):
+                return
+            if event.message_id in seen_usage:
+                return
+            seen_usage.add(event.message_id)
+            for key in input_fields:
+                value = event.usage.get(key)
+                if type(value) is int and value >= 0:
+                    observed[key] = observed.get(key, 0) + value
+            # SDK per-step output_tokens is a placeholder. Only final result output is usable.
+            save_usage(observed, partial=True)
+
         def record_usage(usage):
             nonlocal usage_recorded
-            if not usage_recorded:
-                agent._inbox.record_event('response', model, 'subscription', 'claude-sdk', usage, role='sdk_total')
-                usage_recorded = True
+            if usage_recorded or not isinstance(usage, dict):
+                return
+            # Crash results can be zeroed: never erase already reported input with a smaller summary.
+            if any(type(usage.get(k)) is int and usage[k] < value for k, value in observed.items()):
+                return
+            valid = {k: usage[k] for k in input_fields + ('output_tokens',)
+                     if type(usage.get(k)) is int and usage[k] >= 0}
+            if not valid:
+                return
+            usage_recorded = True
+            save_usage(observed | valid, partial=len(valid) < 4)
 
         start_lock = CliStartLock().acquire()
         # The stream is pumped into a queue so the consumer can notice silence. Partial messages keep events
@@ -383,6 +418,11 @@ def run_claude(agent, messages, chat, model, reminded=False):
         async def pump():
             try:
                 async for item in query(prompt=prompt(), options=opts):
+                    # Persist before yielding to tool/wait handling; a killed worker retains its last snapshot.
+                    if isinstance(item, AssistantMessage):
+                        record_step(item)
+                    elif isinstance(item, ResultMessage):
+                        record_usage(item.usage)
                     await events.put(item)
             except BaseException as exc:          # includes CancelledError: the consumer decides what it means
                 await events.put(exc)
@@ -444,22 +484,21 @@ def run_claude(agent, messages, chat, model, reminded=False):
         structured = getattr(final, 'structured_output', None)
         text = reply_envelope.reply(structured if structured is not None else (final.result or ''))
         if not agent.BACKGROUND_TASK_ID and not reminded and                 reply_envelope.unbacked(text, agent._background.activated_since(chat, turn_started)):
-            agent._inbox.record_event('bounce', 'unbacked_promise', role='runtime')
-            messages.append({'role': 'user', 'content': reply_envelope.UNBACKED_PROMISE})
-            agent.save_conversation(chat)
-            return None                                     # one more session, with the reminder in history
+            next_retry.append(reply_envelope.retry_note(agent, 'unbacked_promise', text, reply_envelope.UNBACKED_PROMISE))
+            return None                                     # one more session, with a wire-only reminder
         if not agent.BACKGROUND_TASK_ID and not reminded and reply_envelope.dead_end(text):
-            agent._inbox.record_event('bounce', 'dead_end', role='runtime')
-            messages.append({'role': 'user', 'content': reply_envelope.DEAD_END})
-            agent.save_conversation(chat)
+            next_retry.append(reply_envelope.retry_note(agent, 'dead_end', text, reply_envelope.DEAD_END))
             return None                                     # one more session: another route or a question
         missing = [] if agent.BACKGROUND_TASK_ID or reminded else reply_envelope.unanswered(
-            text, agent._inbox.turn_messages() if hasattr(agent._inbox, 'turn_messages') else [])
+            text, await caller.call(agent._inbox.turn_messages) if hasattr(agent._inbox, 'turn_messages') else [])
         if missing:
-            agent._inbox.record_event('bounce', 'unanswered_message', role='runtime')
-            messages.append({'role': 'user', 'content': reply_envelope.unanswered_note(missing)})
-            agent.save_conversation(chat)
+            next_retry.append(reply_envelope.retry_note(agent, 'unanswered_message', text, reply_envelope.unanswered_note(missing)))
             return None                                     # one more session: cover every message Alex sent
+        from agent_core.task_decisions import completion_feedback
+        feedback = await caller.call(completion_feedback, agent, chat, text)
+        if feedback:
+            next_retry.append(feedback)
+            return None
         messages.append({'role': 'assistant', 'content': text})
         # The shared delivery boundary verifies the draft before persisting it as a reply.
         return text
@@ -467,7 +506,7 @@ def run_claude(agent, messages, chat, model, reminded=False):
     try:
         result = _run_coroutine(run)
         if result is None:
-            return run_claude(agent, messages, chat, model, reminded=True)
+            return run_claude(agent, messages, chat, model, reminded=True, retry=next_retry[0])
         return result
     except Exception as exc:
         from agent_core.session_lifecycle import TaskWaiting

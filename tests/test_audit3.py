@@ -1,12 +1,11 @@
 """Audit round 3 (2026-10-08): decisions carry Alex's words, route line on results,
 repeated lesson surfaces as OPEN when no skill changed."""
-import os, sys, tempfile, time, unittest, json, sqlite3
+import sys, tempfile, unittest, json, sqlite3
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "cato"))   # TaskStore imports project_store from the agent folder
 import background_runtime as rt
-import agent_runtime
 
 
 class Decisions(unittest.TestCase):

@@ -271,7 +271,6 @@ class AgentRuntime(SharedHandlers):
     IMAGE_MODEL = "gpt-image-2"
     ZSXQ_DEFAULT_URL  = "https://wx.zsxq.com/group/YOUR_GROUP_ID"
     ANYSEARCH_URL = "https://api.anysearch.com/v1/search"
-    SAVE_KEEP = 200
     TOOL_RESULT_HISTORY_CAP = 16000
     _REPEAT_LIMIT = 2
     RUNAWAY_STREAK = 5
@@ -319,6 +318,7 @@ class AgentRuntime(SharedHandlers):
         self._window_anchor = {}
         self._context_sizes = {}
         self._turn_notes = {}
+        self._completion_feedback = {}
         self._truncations = {}
         self._tainted = {}                 # chat -> the reader that brought external content into this turn (agent_core.taint)
         self._core_versions = {}
@@ -332,6 +332,11 @@ class AgentRuntime(SharedHandlers):
         while time.time() < deadline:
             with inbox.db() as db:
                 busy = db.execute("SELECT count(*) FROM jobs WHERE status IN ('pending','running')").fetchone()[0]
+            store = getattr(self, '_background', None)
+            if store is not None:
+                from agent_core.worker_lease import busy as lease_busy
+                busy += sum(proc.poll() is None for proc in store.processes.values())
+                busy += sum(lease_busy(path) for path in (store.agent_dir/'task_state/background').glob('*/worker.lock'))
             if not busy:
                 return True
             time.sleep(poll)
@@ -457,6 +462,9 @@ class AgentRuntime(SharedHandlers):
         """Poll Telegram until task_state/drain appears, then stop taking updates, finish queued work and exit 0.
         The supervisor starts the process again on the current code: that is how a restart works (2026-10-09).
         Updates not yet fetched stay with Telegram and reach the new process."""
+        from agent_core import release
+        if not release.same_source(release.identity(), release.LOADED):
+            raise RuntimeError('Source changed during agent startup')
         flag = self.drain_flag()
         from supervisor import read_json, RESTART_EXIT
         request = {}
@@ -496,11 +504,13 @@ class AgentRuntime(SharedHandlers):
                 pass
             time.sleep(5)
         finished = self.wait_for_quiet(self._inbox)
-        if finished:
-            self._inbox.progress('restart_ready', restart=request)
-        print("[drain] " + ("work finished" if finished else "timed out waiting for work") + "; exiting for restart")
+        while not finished:
+            print('[drain] active work still owns its slot; continuing to wait')
+            finished = self.wait_for_quiet(self._inbox)
+        self._inbox.progress('restart_ready', restart=request)
+        print('[drain] work finished; exiting for restart')
         sys.stdout.flush()
-        os._exit(RESTART_EXIT if finished else 1)
+        os._exit(RESTART_EXIT)
 
     def _claim_single_instance(self, port: int, label: str) -> None:
         import socket
@@ -658,7 +668,7 @@ class AgentRuntime(SharedHandlers):
         except Exception as e:
             return f"Advisor unavailable: {e}"
 
-    def tool_specialist_review(self, role, question, evidence, chat_id, proposed_answer="", counterevidence=""):
+    def tool_specialist_review(self, role, question, evidence, chat_id, proposed_answer="", counterevidence="", delivery_id=""):
         from agent_core.specialist_review import prompt
         try:
             system, packet = prompt(self.config.display, role, question, evidence, proposed_answer, counterevidence)
@@ -671,7 +681,7 @@ class AgentRuntime(SharedHandlers):
         primary = self.get_anthropic_model(chat_id) if self.get_provider(chat_id) == "anthropic" else self.get_openai_model(chat_id)
         model = self.advisor_model_for(primary)
         path = self.AGENT_DIR / "reports" / "specialist_reviews" / (str(time.time_ns()) + ".json")
-        record = {"role": role, "model": model, "chat": chat_id, "packet": json.loads(packet),
+        record = {"role": role, "model": model, "chat": chat_id, "packet": json.loads(packet), "delivery_id": delivery_id,
                   "status": "started", "independence": "fresh context; model and evidence-selection biases remain"}
         from agent_runtime import atomic_json
         atomic_json(path, record)
@@ -1418,7 +1428,6 @@ class AgentRuntime(SharedHandlers):
         Claude subscription, OpenAI API, Anthropic API, as saved in routing.json. Shared logic in
         D:\\Agents\\search_routing.py."""
         import search_routing
-        from types import SimpleNamespace
         return search_routing.model_search(self, query, chat_id)
 
     def tool_web_search(self, query: str, chat_id: int = 0) -> str:
@@ -1615,65 +1624,49 @@ class AgentRuntime(SharedHandlers):
                               "a resume needs a different approach, not a retry.")
         return result
 
-    def _has_tool_result(self, msg) -> bool:
-        c = msg.get("content")
-        return isinstance(c, list) and any(
-            self._block_attr(b, "type") == "tool_result" for b in c)
-
-    def _safe_start(self, messages: list, start: int) -> int:
-        """The cut must not land between an assistant's tool_use and the user message carrying
-        its tool_result — that orphans the result and the API rejects the whole request. So if
-        the window would start on a tool_result message, walk forward until it doesn't."""
-        while start < len(messages) and self._has_tool_result(messages[start]):
-            start += 1
-        return start
-
     def trim_history(self, messages: list, chat_id: int) -> list:
-        """Keep the 2 seed messages (memory context) + a window of recent history.
-
-        Trims with HYSTERESIS, not a sliding window. The old version cut to exactly 30 messages
-        on every call, so the window slid forward every turn and its first message changed
-        every turn. Prompt caching is prefix-matching: a prefix that changes every turn never
-        hits, so the whole ~22k-token history was re-billed at full price on every call.
-
-        Now the window start is anchored to a specific message and stays put while the window
-        grows from 30 up to 50. Between cuts the history is append-only, so the cached prefix
-        holds and each turn only pays for what is new. One full re-bill every ~10 turns instead
-        of every turn.
-
-        The anchor is the message object's identity, which survives everything that touches the
-        in-memory list (in-place image stripping, save_conversation's [:2]+[-200:] trim). It is
-        lost on restart or /start, which is a cold cache anyway.
-        """
-        n = len(messages)
-        if n <= self.WINDOW_HIGH + 2:
-            return self._attach_current_context(messages, chat_id)   # short enough to send whole; naturally stable
-
+        """Retain complete recent user exchanges; completed tool traces do not evict the conversation."""
+        from agent_core.context_window import exchange_starts, completed_exchanges
+        starts = exchange_starts(messages)
         anchor = self._window_anchor.get(chat_id)
-        start = next((i for i in range(2, n) if id(messages[i]) == anchor), None) if anchor else None
-
-        if start is None or n - start > self.WINDOW_HIGH:
-            # No anchor yet, anchor rolled out of the buffer, or the window has grown past
-            # the high-water mark: cut back to WINDOW_LOW and re-anchor there.
-            start = self._safe_start(messages, n - self.WINDOW_LOW)
+        position = next((n for n, i in enumerate(starts) if id(messages[i]) == anchor), None)
+        if position is not None and len(starts) - position <= self.WINDOW_HIGH:
+            start = starts[position]
+        elif len(starts) <= self.WINDOW_HIGH:
+            start = 2
+        else:
+            start = starts[-self.WINDOW_LOW]
             self._window_anchor[chat_id] = id(messages[start])
-
-        return self._attach_current_context(messages[:2] + messages[start:], chat_id)
+        window = completed_exchanges(messages[:2] + messages[start:],
+                                     self.AGENT_DIR / 'context_archive' / str(chat_id))
+        return self._attach_current_context(window, chat_id)
 
     def _attach_current_context(self, window: list, chat_id: int) -> list:
         """What is true now goes on the wire copy, next to the newest message: this turn's notes, and the core memory
         read fresh from memory.md. Nothing here is saved, so a correction is in force from the next request on and no
         older copy can contradict it. The history above stays unchanged, so it stays cacheable."""
         self._context_sizes = {}
+        if getattr(self, "_trial", None):
+            return window
         window = self._pin_contract(window[:2]) + window[2:]
         window = self._attach_turn_notes(window, chat_id)
         store = getattr(self, "_background", None)
         live = store.live_context(chat_id, int(self.BACKGROUND_TASK_ID) if self.BACKGROUND_TASK_ID else None) if store is not None else ""
+        if self.BACKGROUND_TASK_ID and store is not None:
+            import task_cost
+            budget_note = task_cost.notice(store.directory(int(self.BACKGROUND_TASK_ID)))
+            if budget_note:
+                live += '\n' + budget_note
         try:
             from agent_core import corrections
             burst = corrections.burst_note(self, chat_id) if store is not None else ""
         except (OSError, ValueError) as exc:
             burst = ""; print(f"[correction] burst note: {type(exc).__name__}: {exc}")
+        if not self.BACKGROUND_TASK_ID and hasattr(self._inbox, 'turn_sources'):
+            incoming = self._inbox.turn_sources(chat_id)
+            if incoming:
+                live += '\n[Incoming messages: ' + json.dumps([
+                    {'id': m['message_id'], 'text': m['text']} for m in incoming], ensure_ascii=False) + ']'
         if burst:
             live = (live + "\n\n" + burst) if live else burst
         if live:
@@ -1878,24 +1871,22 @@ class AgentRuntime(SharedHandlers):
     def run_turn(self, messages: list, chat_id: int) -> str:
         # The loop guards count within one turn: a failure in Alex's last request must not carry a
         # streak into his next one, and a resumed worker starts clean.
+        self._completion_feedback.pop(chat_id, None)
         self._repeat_calls.pop(chat_id, None)
         self._unproductive_streak.pop(chat_id, None)
         from agent_core import taint
         taint.reset(self, chat_id)
-        budget_note = self._task_cost.notice(self.RUNTIME_DIR)
-        if budget_note:
-            messages.append({'role': 'user', 'content': budget_note})
         from agent_core.session_lifecycle import continue_turn
         result = continue_turn(self, messages, chat_id, lambda: self._routing.run(self, messages, chat_id))
         if self.BACKGROUND_TASK_ID:
             return result
-        corrected = getattr(result, "correction", "none") == "corrected"
+        corrected = getattr(result, "correction", ())
         from agent_core.task_decisions import verify_reply
         result = verify_reply(self, messages, chat_id, result)
         if corrected:
             from agent_core import corrections
             try:
-                corrections.start(self, chat_id, messages)
+                corrections.start(self, chat_id, corrected)
             except (ValueError, OSError) as exc:     # the reply still goes out; the correction is logged as missed
                 print(f"[correction] not recorded: {type(exc).__name__}: {exc}")
         return result
@@ -2118,9 +2109,10 @@ class AgentRuntime(SharedHandlers):
 
         # Persist incoming requests before any model/tool call. Failure stops execution.
         self._recall.record(chat_id, self._serialise_messages(messages), self._conversation_path(chat_id))
-        if len(messages) > self.SAVE_KEEP + 2:
-            start = self._safe_start(messages, len(messages) - self.SAVE_KEEP)
-            messages[:] = messages[:2] + messages[start:]
+        from agent_core.context_window import exchange_starts
+        starts = exchange_starts(messages)
+        if len(starts) > 2 * self.WINDOW_HIGH:
+            messages[:] = messages[:2] + messages[starts[-self.WINDOW_HIGH]:]
         self.save_conversation(chat_id)
         try:
             self._inbox.local.tool_ids = set()

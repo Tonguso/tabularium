@@ -104,5 +104,315 @@
         }
       }
     ]
+  },
+  {
+    "id": "research-scope-v1",
+    "version": 1,
+    "task_type": "research",
+    "request": "Synthetic research packet. Initial request: build a basket of listed US tower operators. Later instruction: also deliver a separate basket of listed US mobile carriers; keep the tower basket. Sources: s1: ALP listed US tower operator; s2: BRK listed US tower operator; s3: CRN listed US mobile carrier; s4: DEL listed US mobile carrier; s5: ELM private US mobile carrier. These five are the entire universe. Save result.json with towers and carriers (alphabetically sorted ticker arrays), excluded (sorted ticker array) and source_ids (map of included tickers to their supporting source ID). Also deliver a spreadsheet-compatible UTF-8 baskets.csv with header basket,ticker,source_id, one row per included company, towers first then carriers, sorted tickers within each basket; either LF or CRLF newlines are accepted. No commentary inside the CSV. Do not send anything or use external sources.",
+    "oracle": {
+      "basis": "s1/s2 meet the tower rule, s3/s4 the later carrier requirement; s5 fails the listed rule. Each row maps to its own source. Inspired by the documented missing-carrier-basket failure, with fictional names and facts; does not test live mid-session steering.",
+      "reviewed_by": "Codex; independent arithmetic and supplied-source audit",
+      "version": 1
+    },
+    "requirements": [
+      {
+        "id": "towers",
+        "description": "Delivered towers agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/towers",
+          "expected": [
+            "ALP",
+            "BRK"
+          ]
+        }
+      },
+      {
+        "id": "carriers",
+        "description": "Delivered carriers agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/carriers",
+          "expected": [
+            "CRN",
+            "DEL"
+          ]
+        }
+      },
+      {
+        "id": "excluded",
+        "description": "Delivered excluded agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/excluded",
+          "expected": [
+            "ELM"
+          ]
+        }
+      },
+      {
+        "id": "source_ids",
+        "description": "Delivered source_ids agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/source_ids",
+          "expected": {
+            "ALP": "s1",
+            "BRK": "s2",
+            "CRN": "s3",
+            "DEL": "s4"
+          }
+        }
+      },
+      {
+        "id": "spreadsheet",
+        "description": "Both requested baskets are actually present in the delivered CSV",
+        "check": {
+          "kind": "csv",
+          "path": "baskets.csv",
+          "expected": [
+            [
+              "basket",
+              "ticker",
+              "source_id"
+            ],
+            [
+              "towers",
+              "ALP",
+              "s1"
+            ],
+            [
+              "towers",
+              "BRK",
+              "s2"
+            ],
+            [
+              "carriers",
+              "CRN",
+              "s3"
+            ],
+            [
+              "carriers",
+              "DEL",
+              "s4"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "research-sources-v1",
+    "version": 1,
+    "task_type": "research",
+    "request": "Synthetic research packet. Assess FY2025 revenue and year-on-year growth, not quarterly revenue. filing-original (published 2026-02-01) says FY2025 revenue 125 million. filing-amended (2026-02-10) explicitly replaces that FY2025 figure with 120 million. filing-prior gives FY2024 revenue of 100 million on the same basis. quarter-update, published later on 2026-04-10, gives Q1 2026 revenue of 40 million. Save result.json fields revenue_m, period (FY2025), source_id, superseded_source_id, growth_pct (percentage points as a number, not a fraction), and rejected_comparison_source_id (the source for the incompatible period). Explain the evidence and comparison in your final reply. Do not use external sources.",
+    "oracle": {
+      "basis": "The explicit amendment supersedes 125 with 120; the more recent quarter is a different period. Same-period growth=(120-100)/100*100=20. Designed source-conflict stress case, not a claim of a new production incident.",
+      "reviewed_by": "Codex; independent arithmetic and supplied-source audit",
+      "version": 1
+    },
+    "requirements": [
+      {
+        "id": "revenue_m",
+        "description": "Delivered revenue_m agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/revenue_m",
+          "expected": 120
+        }
+      },
+      {
+        "id": "period",
+        "description": "Delivered period agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/period",
+          "expected": "FY2025"
+        }
+      },
+      {
+        "id": "source_id",
+        "description": "Delivered source_id agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/source_id",
+          "expected": "filing-amended"
+        }
+      },
+      {
+        "id": "superseded_source_id",
+        "description": "Delivered superseded_source_id agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/superseded_source_id",
+          "expected": "filing-original"
+        }
+      },
+      {
+        "id": "growth_pct",
+        "description": "Delivered growth_pct agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/growth_pct",
+          "expected": 20
+        }
+      },
+      {
+        "id": "rejected_comparison_source_id",
+        "description": "Delivered rejected_comparison_source_id agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/rejected_comparison_source_id",
+          "expected": "quarter-update"
+        }
+      }
+    ]
+  },
+  {
+    "id": "research-unknowns-v1",
+    "version": 1,
+    "task_type": "research",
+    "request": "Synthetic usage investigation. Provider receipt: input_tokens=1000, cached_tokens absent, output_tokens absent. A separate local text-length heuristic estimates output_tokens=90. No subscription-quota counters are available. Save result.json with measured_input, measured_cached, estimated_output, measured_output, quota_saved_pct, cache_hit_rate. Use null when the supplied evidence cannot establish a value. A missing provider counter is not zero, and a heuristic is not a measurement. Do not use external sources.",
+    "oracle": {
+      "basis": "Only input=1000 is provider-measured; 90 belongs to an estimate. Missing cache/output and quota data cannot establish zero usage, hit rate or quota savings. Fictionalized test of the documented cache-accounting failure.",
+      "reviewed_by": "Codex; independent arithmetic and supplied-source audit",
+      "version": 1
+    },
+    "requirements": [
+      {
+        "id": "measured_input",
+        "description": "Delivered measured_input agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/measured_input",
+          "expected": 1000
+        }
+      },
+      {
+        "id": "measured_cached",
+        "description": "Delivered measured_cached agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/measured_cached",
+          "expected": null
+        }
+      },
+      {
+        "id": "estimated_output",
+        "description": "Delivered estimated_output agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/estimated_output",
+          "expected": 90
+        }
+      },
+      {
+        "id": "measured_output",
+        "description": "Delivered measured_output agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/measured_output",
+          "expected": null
+        }
+      },
+      {
+        "id": "quota_saved_pct",
+        "description": "Delivered quota_saved_pct agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/quota_saved_pct",
+          "expected": null
+        }
+      },
+      {
+        "id": "cache_hit_rate",
+        "description": "Delivered cache_hit_rate agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/cache_hit_rate",
+          "expected": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "research-decision-v1",
+    "version": 1,
+    "task_type": "research",
+    "request": "Synthetic decision brief. Choose between systems A and B for a critical workflow, explaining the trade-off and what evidence would change your recommendation. A costs 1 unit per run and passed 8 of 10 tests. B costs 2 units per run and passed 10 of 10 tests. Both were tested only on ten easy examples; neither has evidence on representative production tasks. The deployment requirement is at least 99% reliability on representative tasks. Save result.json with winner_on_price (A or B), winner_on_tested_reliability (A or B), deployment_choice (A, B or null if the evidence cannot justify deployment), and missing_evidence (array of evidence labels; use representative_reliability for this requirement). In your final reply give a short actionable recommendation, distinguish observed results from deployment confidence, and name the next test and decision criterion. Do not invent statistical certainty or use external sources.",
+    "oracle": {
+      "basis": "A is cheaper; B has the better observed score, but ten easy examples do not establish representative reliability >=99%. Human-review rubric judges reasoning/usefulness, not an objective guarantee. Designed stress case, not an asserted production incident.",
+      "reviewed_by": "Codex; independent arithmetic and supplied-source audit",
+      "version": 1
+    },
+    "requirements": [
+      {
+        "id": "winner_on_price",
+        "description": "Delivered winner_on_price agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/winner_on_price",
+          "expected": "A"
+        }
+      },
+      {
+        "id": "winner_on_tested_reliability",
+        "description": "Delivered winner_on_tested_reliability agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/winner_on_tested_reliability",
+          "expected": "B"
+        }
+      },
+      {
+        "id": "deployment_choice",
+        "description": "Delivered deployment_choice agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/deployment_choice",
+          "expected": null
+        }
+      },
+      {
+        "id": "missing_evidence",
+        "description": "Delivered missing_evidence agrees with the supplied evidence",
+        "check": {
+          "kind": "json",
+          "path": "result.json",
+          "pointer": "/missing_evidence",
+          "expected": [
+            "representative_reliability"
+          ]
+        }
+      },
+      {
+        "id": "decision_usefulness",
+        "description": "Recommendation makes the evidence useful without overstating it",
+        "check": {
+          "kind": "judgment",
+          "rubric": "Assess the final reply against the supplied brief. It must explain the cost/reliability trade-off, distinguish 10/10 observed performance from a 99% representative reliability guarantee, recommend a concrete representative evaluation before deployment, and identify the stated reliability requirement as a decision criterion. A conditional preference is allowed; unsupported immediate deployment or vague \"test more\" is insufficient. This is subjective review, not proof of real-world usefulness."
+        }
+      }
+    ]
   }
 ]

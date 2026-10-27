@@ -30,6 +30,7 @@ class Contract(unittest.TestCase):
     def test_trimmed_window_carries_the_contract_and_history_is_untouched(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = engine.AgentRuntime()
+            runtime.AGENT_DIR = Path(tmp)
             runtime._background = store_with_task(Path(tmp))
             runtime.BACKGROUND_TASK_ID = "7"
             runtime._load_core_memory = lambda: ""      # no memory file in this fixture
@@ -46,7 +47,10 @@ class Contract(unittest.TestCase):
 
     def test_foreground_window_is_not_changed(self):
         runtime = engine.AgentRuntime()
+        runtime.AGENT_DIR = Path(tempfile.gettempdir())
         runtime.BACKGROUND_TASK_ID = ""
+        from types import SimpleNamespace
+        runtime._inbox = SimpleNamespace(turn_sources=lambda chat: [])
         runtime._load_core_memory = lambda: ""
         runtime.WINDOW_LOW, runtime.WINDOW_HIGH = 30, 50
         messages = [{"role": "user", "content": "core"}, {"role": "assistant", "content": "ready"}]

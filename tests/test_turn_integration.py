@@ -4,10 +4,9 @@ Loads each agent's telegram.py in isolation (as a background worker, so it does 
 replaces only the model call, and drives one turn: the scripted model asks for read_file on the identity file, the real
 tool runs, the model answers OK. This exercises the tool schema, the dispatcher, the tool, the history handling and
 the action receipts. It would have caught Tacitus's missing-name failure of 7-9 October and the tool-name mismatch."""
-import json, os, sys, tempfile, unittest
+import json, sys, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
-from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from agent_harness import AGENTS, load_agent
@@ -21,6 +20,8 @@ class Turn(unittest.TestCase):
                 root.mkdir()
                 scope = load_agent(agent, root)
                 runtime = scope["runtime"]
+                runtime._background.checkpoint(1,1,'','',[],guesses=[],completion_items=[
+                    {'item':'Read identity and answer','check':'Read response'}])
                 runtime.OPENAI_API_KEY = "test"
                 token = runtime._routing.ACTIVE.set({"kind": "openai_api", "model": "gpt-test"})
                 calls = []
@@ -33,7 +34,7 @@ class Turn(unittest.TestCase):
                         item = NS(type="function_call", name="read_file", call_id="c1",
                                   arguments=json.dumps({"path": str(root / "SKILL.md")}))
                     else:
-                        item = NS(type="message", content=[NS(type="output_text", text='{"reply": "OK"}')])
+                        item = NS(type="message", content=[NS(type="output_text", text='{"reply": "OK", "task_outcome": "completed"}')])
                     return NS(output=[item], status="completed", incomplete_details=None, usage=None), "", [], []
                 runtime._responses_call = fake
                 try:

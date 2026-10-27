@@ -1,5 +1,5 @@
 """Process lifecycle (2026-10-09): supervisor decisions, drain-flag restarts, quiet detection."""
-import os, sys, json, sqlite3, tempfile, time, unittest
+import sys, sqlite3, tempfile, time, unittest
 from pathlib import Path
 from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,26 +38,20 @@ class Decide(unittest.TestCase):
 
 
 class Restart(unittest.TestCase):
-    def test_flags_written_without_tests(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            done = agent_control.request_restart(["cato", "vitruvius"], run_tests=False, root=tmp)
-            self.assertEqual(done, ["cato", "vitruvius"])
-            self.assertTrue((Path(tmp) / "cato" / "task_state" / "drain").exists())
-            self.assertFalse((Path(tmp) / "tacitus" / "task_state" / "drain").exists())
-
-    def test_failed_tests_write_no_flag(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            from types import SimpleNamespace
-            with patch.object(agent_control, "subprocess", create=True) as sp:
-                pass
-            with patch("subprocess.run", return_value=SimpleNamespace(returncode=1, stdout="", stderr="boom")):
-                with self.assertRaises(RuntimeError):
-                    agent_control.request_restart(["cato"], run_tests=True, root=tmp)
-            self.assertFalse((Path(tmp) / "cato" / "task_state" / "drain").exists())
+    def test_release_is_submitted_without_direct_drain_flags(self):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        root=Path(temp.name)
+        from agent_core import release
+        p=patch.object(release,'identity',return_value={'commit':'one','digest':'one'});p.start()
+        q=patch.object(release,'uncommitted',return_value=[]);q.start()
+        try:done=agent_control.request_restart(['cato','vitruvius'],root=root)
+        finally:q.stop();p.stop()
+        self.assertIn('dashboard',done)
+        self.assertTrue((root/'dashboard/restart_status.json').exists())
+        self.assertFalse((root/'cato/task_state/drain').exists())
 
     def test_unknown_agent_refused(self):
-        with self.assertRaises(ValueError):
-            agent_control.request_restart(["nobody"], run_tests=False)
+        self.assertRaises(ValueError,agent_control.request_restart,['nobody'])
 
 
 class Quiet(unittest.TestCase):

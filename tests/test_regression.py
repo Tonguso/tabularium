@@ -148,8 +148,8 @@ class Evaluation(unittest.TestCase):
             usage=folder/'task_state';usage.mkdir()
             db=sqlite3.connect(usage/'inbox.sqlite3')
             try:
-                db.execute('CREATE TABLE usage_events(id INTEGER,kind TEXT,metrics TEXT,provider TEXT,model TEXT,billing TEXT)')
-                db.execute('INSERT INTO usage_events VALUES(1,?,?,?,?,?)',('response',json.dumps(dict(input_total=100,cache_read=20,output=10)),'test','model','test'))
+                db.execute('CREATE TABLE usage_events(id INTEGER,created REAL,kind TEXT,metrics TEXT,provider TEXT,model TEXT,billing TEXT)')
+                db.execute('INSERT INTO usage_events VALUES(1,0,?,?,?,?,?)',('response',json.dumps(dict(input_total=100,cache_read=20,output=10)),'test','model','test'))
                 db.commit()
             finally: db.close()
             put(store,ident,'finished')

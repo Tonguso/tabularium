@@ -1,111 +1,176 @@
-"""Trials: evidence before Alex approves a skill edit (2026-10-20).
-
-A lesson used to go from 'proposed' to 'applied' on the strength of Cato's argument for it. A trial reruns one finished
-past task twice in the background, once with the current skill (baseline) and once with the proposed edit (variant),
-and sends Alex both answers with a short comparison. Alex stays the judge; the trial only gives him two real outputs
-to judge instead of a promise. Nothing is adopted by the trial: approval still needs his own words (learning.approve).
-
-How the variant sees the edit without anything changing on disk: the edited skill file is written to the trial folder,
-and the worker maps the real skill path to it (AGENT_SKILL_OVERRIDES), so discover_skills, the system prompt and
-read_file all read the edited text in that one process. Trial runs cannot send, deliver, delegate, start tasks or write
-memory (tool scope), and write_file/edit_file only inside their own trial_output folder. A command run through
-execute_command can still write elsewhere; the run is told not to, and the limit is stated here rather than hidden.
+"""Paired lesson screening using the shared independent artifact evaluator.
+Freeze cases and skills before scheduling. Only settled runs are graded, including failures.
+No model-written recommendation and no automatic adoption.
 """
+import hashlib
 import json
 import os
 import time
+import uuid
 from pathlib import Path
-
-from agent_core import learning
+from agent_core import learning, regression
 from agent_core.outcome import Refused
 
-ELIGIBLE = ("basket_build", "basket_verification", "research")
-BLOCKED_TOOLS = {"send_email", "send_document", "send_photo", "speak", "delegate", "background_task", "lesson",
-                 "project_record", "remember", "log_activity"}
 OVERRIDES_ENV = "AGENT_SKILL_OVERRIDES"
-LOCAL = {}                       # in-process overrides (memory consolidation trials), never inherited by workers
 TRIAL_DIR_ENV = "AGENT_TRIAL_DIR"
+READS_ENV = "AGENT_TRIAL_READS"
+LOCAL = {}
+BLOCKED_TOOLS = {"send_email", "send_document", "send_photo", "speak", "delegate", "background_task", "lesson", "project_record", "remember", "log_activity"}
 
 
-def _note(arm, output):
-    return (f"\n\n[Trial run, {arm}: a rerun of a finished task to test a proposed skill edit. Nothing from this run goes "
-            f"to Alex or anyone else: sending, delivering, delegating, starting tasks and writing memory are switched off. "
-            f"Save every file you produce under {output} and nowhere else, including files a script writes; never "
-            f"overwrite an existing deliverable. Otherwise do the task exactly as it was asked, as well as you can.]")
+def proposal_id(proposal):
+    return hashlib.sha256(json.dumps(proposal, sort_keys=True).encode()).hexdigest()
 
 
-def start(agent_root, chat, key, source_task, store):
-    """Start the two arms for lesson `key` on finished task `source_task`. Returns a summary for Cato."""
-    agent_root = Path(agent_root).resolve()
-    lesson = learning.read(agent_root, chat, key)
+def evidence_matches(lesson):
+    r = lesson.get("trial") or {}
+    if not (r.get("done") and r.get("notified") and r.get("version") == 2 and not r.get("scheduling_error")
+            and r.get("proposal") == proposal_id(lesson.get("proposal") or {})):
+        return False
+    expected = len(r.get("cases", [])) * r.get("repetitions", 0) * 2
+    if not expected or len(r.get("outcomes", [])) != expected:
+        return False
+    try:
+        return learning._sha(Path(r["folder"]) / "variant.md") == r["candidate_sha"]
+    except OSError:
+        return False
+
+
+
+def case_identity(case):
+    return regression.fingerprint([{k: case.get(k) for k in ("request", "context")}])
+
+
+def start(agent_root, chat, key, spec, store, system_prompt="Complete the supplied task using the supplied skill."):
+    root = Path(agent_root).resolve()
+    lesson = learning.read(root, chat, key)
     if lesson.get("status") != "proposed" or not lesson.get("proposal"):
-        raise ValueError("Only a proposed lesson can be trialled: propose the exact edit first.")
-    if (lesson.get("trial") or {}).get("baseline") and not (lesson.get("trial") or {}).get("done"):
-        raise ValueError("A trial for this lesson is already running.")
-    task = store.get(source_task)
-    if task["chat"] != chat or task["status"] != "finished":
-        raise ValueError("Pick a finished task from this chat to rerun.")
-    if learning.task_type_for(task["request"]) not in ELIGIBLE:
-        raise ValueError("Trials rerun research and basket tasks only.")
-    context = json.loads((store.directory(source_task) / "context.json").read_text(encoding="utf-8")).get("context", "")
-
+        raise ValueError("Only a proposed lesson can be trialled.")
+    previous = lesson.get("trial") or {}
+    if previous.get("version") == 2 and not previous.get("notified"):
+        raise ValueError("A trial is already running; finish its workers first.")
+    if previous and previous.get('version') != 2:
+        old_ids = [previous[n] for n in ('baseline', 'variant') if previous.get(n)]
+        if any(store.get(i)['status'] in regression.ACTIVE or store.lease_busy(i) for i in old_ids):
+            raise ValueError('Legacy trial workers still active; stop them before scheduling reviewed cases.')
+    if not isinstance(spec, dict):
+        raise ValueError("Select reviewed development_cases and heldout_cases; past-task replay is retired.")
+    from agent_core import lesson_cases
+    spec = lesson_cases.default_spec(root, chat, key, spec)      # the skill's own approved cases when none are chosen (2026-10-26)
+    development, heldout = spec.get("development_cases", []), spec.get("heldout_cases", [])
+    ids = development + heldout
+    if not development or not heldout or len(set(ids)) != len(ids):
+        raise ValueError("Development and held-out cases must be nonempty, distinct and disjoint.")
+    repetitions, steps = spec.get("repetitions", 2), spec.get("max_steps", 12)
+    if type(repetitions) is not int or not 1 <= repetitions <= 5 or type(steps) is not int or not 1 <= steps <= 60:
+        raise ValueError("Use 1–5 repetitions and 1–60 steps per run.")
+    available = {c["id"]: c for c in regression.load_cases(root)}
+    if any(i not in available for i in ids):
+        raise ValueError("Use reviewed benchmark IDs; collected answers are not independent oracles.")
+    cases = [available[i] for i in ids]
+    history = lesson.get("trial_history", []) + ([previous] if previous else [])
+    exposed = {f for r in history for f in r.get("exposed", [])}
+    if any(case_identity(available[i]) in exposed for i in heldout):
+        raise ValueError("Held-out inputs already exposed by this lesson; use fresh cases.")
     p = lesson["proposal"]
     method = Path(p["method_path"]).resolve()
     if learning._sha(method) != p["file_sha256"]:
-        raise ValueError("The skill file changed since the proposal; propose the edit again first.")
-    text = method.read_text(encoding="utf-8")
-    edited = text.replace(p["current_text"], p["new_text"], 1) if p["current_text"] else text.rstrip("\n") + "\n\n" + p["new_text"] + "\n"
-    folder = agent_root / "task_state" / "trials" / key
-    patched = folder / method.relative_to(agent_root / "skills")
-    patched.parent.mkdir(parents=True, exist_ok=True)
-    patched.write_text(edited, encoding="utf-8")
-
-    ids = {}
-    for arm, overrides in (("baseline", {}), ("variant", {str(method): str(patched)})):
-        label = {"baseline": "current skill", "variant": "with the proposed edit"}[arm]
-        request = f"[Trial {key}, {label}] " + task["request"]
-        row = store.start(chat, request, context, extra={"trial": {"lesson": key, "arm": arm, "source_task": int(source_task),
-                                                                    "overrides": overrides}, "notify_telegram": False})
-        ids[arm] = row["id"]
-        out = store.directory(row["id"]) / "trial_output"
-        out.mkdir(parents=True, exist_ok=True)
-        ctx_path = store.directory(row["id"]) / "context.json"
-        ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
-        ctx["context"] = ctx["context"] + _note(label, out)
-        ctx_path.write_text(json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    learning.set_trial(agent_root, chat, key, {"source_task": int(source_task), "baseline": ids["baseline"],
-                                               "variant": ids["variant"], "started": time.time(), "done": False})
-    return {"key": key, "source_task": int(source_task), "baseline_task": ids["baseline"], "variant_task": ids["variant"],
-            "note": "Both runs are queued and send nothing. When the second finishes, Alex gets both answers with a comparison."}
+        raise ValueError("The skill file changed; propose the edit again.")
+    baseline = method.read_text(encoding="utf-8")
+    folder = root / "task_state" / "trials" / key / uuid.uuid4().hex
+    folder.mkdir(parents=True)
+    for arm, text in (("baseline", baseline), ("variant", learning.render_change(baseline, key, p))):
+        (folder / (arm + ".md")).write_text(text, encoding="utf-8")
+    record = dict(version=2, proposal=proposal_id(p), folder=str(folder), cases=cases,
+                  splits={i: "development" if i in development else "heldout" for i in ids},
+                  exposed=[case_identity(c) for c in cases], repetitions=repetitions, max_steps=steps,
+                  started=time.time(), done=False, ready=False, runs=[], system_prompt=system_prompt,
+                  baseline_sha=learning._sha(folder / "baseline.md"), candidate_sha=learning._sha(folder / "variant.md"))
+    def reserve(d):
+        if d.get('status') != 'proposed' or proposal_id(d['proposal']) != record['proposal']:
+            raise ValueError('Proposal changed while preparing trial.')
+        if d.get('trial', {}).get('version') == 2 and not d['trial'].get('notified'):
+            raise ValueError('A trial is already running.')
+        if d.get('trial'):
+            d.setdefault('trial_history', []).append(d['trial'])
+        d['trial'] = record
+    learning._update(root, chat, key, reserve)
+    try:
+        for case in cases:
+            for attempt in range(repetitions):
+                for arm in (("baseline", "variant") if attempt % 2 == 0 else ("variant", "baseline")):
+                    skill = folder / (arm + ".md")
+                    trial = dict(lesson=key, cohort=str(folder), arm=arm, max_steps=steps,
+                                 skill=str(skill), skill_sha=learning._sha(skill),
+                                 system_prompt=skill_prompt(system_prompt, baseline, skill.read_text(encoding="utf-8")),
+                                 overrides={str(method): str(skill)})
+                    row = store.start(chat, f"[Evaluation {folder.name}/{len(record['runs'])}] " + case["request"],
+                                      str(case.get("context", "")), extra={"trial": trial, "notify_telegram": False})
+                    record["runs"].append(dict(task=row["id"], case=case["id"], attempt=attempt + 1, arm=arm))
+                    learning.set_trial(root, chat, key, record)
+    except Exception as exc:
+        record["scheduling_error"] = str(exc)
+        raise
+    finally:
+        record["ready"] = True
+        learning.set_trial(root, chat, key, record)
+    return dict(key=key, tasks=[r["task"] for r in record["runs"]], note="Frozen screening queued; file checks and usage follow after all runs settle. Approval still controls adoption.")
 
 
 def isolated(context):
-    """True for a run that must not reach anyone: a lesson trial or a regression-eval rerun (agent_core.regression)."""
-    context = context or {}
-    return bool(context.get("trial") or context.get("eval"))
+    return bool((context or {}).get("trial") or (context or {}).get("eval"))
 
 
 def prepare_worker(context, folder):
-    """Before the agent module loads in an isolated worker: fence file writes; for a trial, point skill reads at the
-    edited file."""
     if not isolated(context):
         return
-    os.environ[TRIAL_DIR_ENV] = str(Path(folder) / "trial_output")
-    if (context.get("eval") or {}).get("benchmark"):
-        (Path(folder) / "trial_output").mkdir(parents=True, exist_ok=True)
-    trial = (context or {}).get("trial")
+    output = Path(folder) / "trial_output"
+    output.mkdir(parents=True, exist_ok=True)
+    os.environ[TRIAL_DIR_ENV] = str(output)
+    trial = context.get("trial")
     if trial:
-        os.environ[OVERRIDES_ENV] = json.dumps(trial.get("overrides") or {})
+        if not trial.get("cohort"):
+            raise ValueError("Legacy trial retired; schedule reviewed cases for the current proposal.")
+        if learning._sha(trial["skill"]) != trial["skill_sha"]:
+            raise ValueError("Frozen trial skill changed.")
+        os.environ[OVERRIDES_ENV] = json.dumps(trial["overrides"])
+        os.environ[READS_ENV] = json.dumps([trial["skill"]])
 
 
 def scope(runtime, context=None):
-    """In an isolated worker after the agent loads: only non-outward tools exist."""
     names = {(t.get("function") or t).get("name") for t in runtime._all_tools("anthropic")}
     runtime._tool_scope = names - BLOCKED_TOOLS
-    if ((context or {}).get("eval") or {}).get("benchmark"):
+    trial = (context or {}).get("trial")
+    if trial:
+        runtime._tool_scope &= {"read_file", "write_file"}
+        runtime._trial = trial
+        runtime.MAX_TOOL_ITERATIONS = trial["max_steps"]
+    elif ((context or {}).get("eval") or {}).get("benchmark"):
         runtime._tool_scope &= {"read_file", "write_file", "task_checkpoint", "verify_requirement"}
 
+
+def skill_prompt(prompt, baseline, candidate):
+    # Standing methods may already be in the seed. Replace that copy instead of injecting contradictory rules.
+    body = lambda text: text.partition('\n---')[2].lstrip() if text.startswith('---') and '\n---' in text else text
+    before, after = body(baseline), body(candidate)
+    if before and before in prompt:
+        return prompt.replace(before, after)
+    return prompt + "\n\nSkill under evaluation:\n" + candidate
+
+
+def worker_prompt(context):
+    return context['trial']['system_prompt']
+
+
+
+def read_refusal(path):
+    reads = os.environ.get(READS_ENV)
+    if reads is None:
+        return None
+    resolved = Path(path).resolve()
+    if resolved in {Path(p).resolve() for p in json.loads(reads)} or resolved.is_relative_to(Path(os.environ[TRIAL_DIR_ENV]).resolve()):
+        return None
+    return Refused("Trial reads are limited to the frozen skill and this run's outputs. Task inputs are in the request.")
 
 def overridden(path):
     """The edited copy of a skill or memory file for this process, or None."""
@@ -143,49 +208,66 @@ def write_refusal(path):
     return None if inside else Refused(f"Trial run: files go under {fence} only; nothing was written to {path}.")
 
 
-COMPARE = ("Two runs of the same past task, for Alex to judge a proposed change to one of your skills. Run A used the "
-           "current skill. Run B used the skill with this edit:\n\n{edit}\n\nOriginal request:\n{request}\n\n=== Run A "
-           "(current skill) ===\n{a}\n\n=== Run B (with the edit) ===\n{b}\n\nWrite, in Alex's language (简体中文 unless "
-           "the request is in English), exactly three short numbered lines: 1. what actually differs between the two "
-           "answers, with specifics; 2. which one meets the original request better, and why; 3. any risk or cost the "
-           "edit introduces. Then one line starting 建议: approve, reject, or rerun on another task. Do not invent "
-           "differences; if they are the same in substance, say so.")
+
+def reconcile(store, send):
+    db = learning.ProjectStore(store.agent_dir).connect()
+    try:
+        rows = list(db.execute("SELECT chat,key,data FROM records WHERE kind='lesson' AND json_extract(data, '$.trial.version')=2"))
+    finally:
+        db.close()
+    for row in rows:
+        record = json.loads(row['data'])['trial']
+        if not record.get('ready') or record.get('notified'):
+            continue
+        if not record.get('done'):
+            tasks = [store.get(r['task']) for r in record['runs']]
+            if any(t['status'] in regression.ACTIVE or store.lease_busy(t['id']) for t in tasks):
+                continue
+            cases = {c['id']: c for c in record['cases']}
+            outcomes = []
+            for run, task in zip(record['runs'], tasks):
+                folder = store.directory(task['id'])
+                answer = folder / 'result.txt'
+                text = answer.read_text(encoding='utf-8') if answer.exists() else ''
+                grade = regression.grade(None, cases[run['case']], text, folder / 'trial_output')
+                if task['status'] != 'finished':
+                    grade.update(passed=False, quality=0, note='Run did not finish: ' + task['status'])
+                outcomes.append(dict(run, status=task['status'], grade=grade,
+                                     usage=regression.generation_usage(folder), answer=str(answer)))
+            record.update(done=True, finished=time.time(), outcomes=outcomes)
+            (Path(record['folder']) / 'evidence.json').write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
+            path = Path(record['folder']) / 'report.md'
+            path.write_text(render_report(record), encoding='utf-8')
+            record['report'] = str(path)
+            learning.set_trial(store.agent_dir, row['chat'], row['key'], record)
+        delivered = send(row['chat'], Path(record['report']).read_text(encoding='utf-8'))
+        if delivered is False:
+            raise OSError('Lesson comparison was not delivered')
+        record['notified'] = True
+        learning.set_trial(store.agent_dir, row['chat'], row['key'], record)
 
 
-def after_arm(agent, store, ident, context, result):
-    """Called by a trial worker with its final answer. The first arm to finish stays silent. The second writes the
-    comparison and returns the message Alex receives (its own answer is kept as answer.txt)."""
-    trial = (context or {}).get("trial")
-    if not trial:
-        return result
-    folder = store.directory(ident)
-    (folder / "answer.txt").write_text(result or "", encoding="utf-8")
-    root = store.agent_dir.resolve()
-    lesson = learning.read(root, store.get(ident)["chat"], trial["lesson"])
-    record = lesson.get("trial") or {}
-    other = record.get("variant") if trial["arm"] == "baseline" else record.get("baseline")
-    if not other or not (store.directory(other) / "answer.txt").exists():
-        return result                                               # the other run has no answer yet: stay silent
-    answers = {trial["arm"]: result or ""}
-    other_answer = store.directory(other) / "answer.txt"
-    answers["variant" if trial["arm"] == "baseline" else "baseline"] = other_answer.read_text(encoding="utf-8") if other_answer.exists() else ""
-    p = lesson["proposal"]
-    edit = (f"REPLACE:\n{p['current_text']}\nWITH:\n{p['new_text']}" if p["current_text"] else f"ADD:\n{p['new_text']}")
-    source = store.get(record["source_task"])
-    prompt = COMPARE.format(edit=edit, request=source["request"][:4000], a=answers["baseline"][:12000], b=answers["variant"][:12000])
-    messages = agent.runtime.load_memory_context() + [{"role": "user", "content": f"{agent.runtime._ts()} {prompt}"}]
-    with agent.runtime.tool_scope(set()):
-        comparison = str(agent.runtime.run_turn(messages, store.get(ident)["chat"]) or "").strip()
-    report = (f"【技能修改试验】{lesson.get('title', trial['lesson'])}\n"
-              f"重跑了任务 #{record['source_task']}，一次用现有技能（#{record['baseline']}），一次用提议的修改（#{record['variant']}）。\n\n"
-              f"{comparison}\n\n两个完整回答：\n- 现有技能：{store.directory(record['baseline']) / 'answer.txt'}\n"
-              f"- 修改后：{store.directory(record['variant']) / 'answer.txt'}\n"
-              f"批准或不批准，直接跟我说；这次试验没有改动任何东西。")
-    (root / "task_state" / "trials" / trial["lesson"] / "report.md").write_text(report, encoding="utf-8")
-    learning.set_trial(root, store.get(ident)["chat"], trial["lesson"], dict(record, done=True, finished=time.time(),
-                                                                             report=str(root / "task_state" / "trials" / trial["lesson"] / "report.md")))
-    ctx_path = folder / "context.json"
-    ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
-    ctx["notify_telegram"] = True                                   # this arm's notice carries the report to Alex
-    ctx_path.write_text(json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")
-    return report
+def render_report(record):
+    lines = ['Skill trial: paired screening, not proof of general improvement.',
+             'Development and held-out scores stay separate. No automatic approval. Subjective checks remain unverified.',
+             f"Allowance: one session, at most {record['max_steps']} steps; {record['repetitions']} repetitions. This is not a token ceiling."]
+    if record.get('scheduling_error'):
+        lines.append('INCONCLUSIVE: incomplete scheduling: ' + record['scheduling_error'])
+    for case in record['cases']:
+        lines.append(f"\n{record['splits'][case['id']]} — {case['id']}")
+        for attempt in range(1, record['repetitions'] + 1):
+            pair = [r for r in record['outcomes'] if r['case'] == case['id'] and r['attempt'] == attempt]
+            for run in pair:
+                u, g = run['usage'], run['grade']
+                usage = f"input={u.get('input_total')}, cached={u.get('cache_read')}, output={u.get('output')}" if u.get('known') else 'usage unknown; no token-saving claim'
+                lines.append(f"  {attempt} {run['arm']}: {run['status']}; quality={g['quality']:.2f}, all checks pass={g['passed']}; {usage}. Output: {run['answer']}")
+            comparable = len(pair) == 2 and all(r['status'] == 'finished' and r['usage'].get('known') and r['usage'].get('routes') for r in pair)
+            comparable = comparable and sorted(pair[0]['usage']['routes'], key=str) == sorted(pair[1]['usage']['routes'], key=str)
+            if comparable:
+                arms = {r['arm']: r for r in pair}
+                a, b = arms['baseline'], arms['variant']
+                lines.append(f"  Change: quality {b['grade']['quality'] - a['grade']['quality']:+.2f}; input tokens {b['usage']['input_total'] - a['usage']['input_total']:+}; output tokens {b['usage']['output'] - a['usage']['output']:+}.")
+            else:
+                lines.append('  INCONCLUSIVE: incomplete run or missing/mismatched measured route and usage.')
+    lines.append('Review files and case relevance before deciding. No skill changed. Evidence: ' + record['folder'])
+    return '\n'.join(lines)

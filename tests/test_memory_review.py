@@ -10,7 +10,7 @@ MEMORY = """# Memory
 ## Alex — Who He Is
 - Alex prefers short replies and plain prose without decoration.
 - Alex prefers short replies in plain prose, without decoration.
-- Alex's name is written Alex, never translated.
+- Alex likes green tea.
 
 ## Recent Activity
 - Alex prefers short replies and plain prose without decoration.
@@ -19,9 +19,9 @@ MEMORY = """# Memory
 <!-- MEMORY-DETAIL-BELOW -->
 
 ## Ongoing Situations
-### Alpha Index Engine — ACTIVE (started 2026-01-10)
+### Garden Plan Review — ACTIVE (started 2026-01-10)
 - last touched 2026-02-01, nothing since.
-### Project Two — ACTIVE
+### Book Club Notes — ACTIVE
 - updated 2026-10-09 with the new file names.
 
 ## Sourced facts
@@ -51,7 +51,7 @@ class Review(unittest.TestCase):
         self.assertEqual(len(r["duplicates"]), 1)                       # the pair in Who He Is; Recent Activity skipped
         self.assertEqual(r["duplicates"][0]["a_section"], "Alex — Who He Is")
         self.assertEqual([f["id"] for f in r["expired_facts"]], ["aaaaaaaaaaaaaaaa"])   # c is already historical
-        self.assertEqual([s["heading"][:12] for s in r["stale_active"]], ["Alpha Index "])
+        self.assertEqual([s["heading"][:12] for s in r["stale_active"]], ["Garden Plan "])
         self.assertEqual(r["candidates"], 3)
         self.assertLess(r["core_lines"], r["total_lines"])
 

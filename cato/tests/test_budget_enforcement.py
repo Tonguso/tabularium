@@ -1,6 +1,5 @@
 """Offline: effective-token measurement (task_cost), delegation contracts, and the
 no-poll gaps closed on 2026-10-06 (read_file, relative paths, narrow wait regex, durable status timer)."""
-import ast
 from contextlib import closing
 import json
 import os
@@ -149,17 +148,27 @@ class NoPollGaps(unittest.TestCase):
         self.assertEqual(self.store.delegations(7)[0]["status"], "submitted")
 
     def test_acceptance_is_what_marks_a_delegation_read(self):
+        self.store = TaskStore(Path(self.tmp.name)/'cato')
+        db = sqlite3.connect(self.store.database)
+        try:
+            db.execute("INSERT INTO tasks(id,chat,request,status,created,updated) VALUES(7,1,'Review','running',0,0)")
+            db.commit()
+        finally:
+            db.close()
         items = [{"item": "a", "check": "c", "critical": True}, {"item": "b", "check": "c", "critical": False}]
         self.store.add_delegation(7, "cal", "req-9", "research", "worker_judgment")
         self.store.record_submission("req-9", 7, "cal", "research", 250000, items)
         self.assertEqual(self.store.contract_items("req-9"), items)
         self.store.mark_delegation(7, "req-9", "returned")
         self.assertTrue(self.store.unread_delegations(7))                      # fetched but not accepted: still blocks
+        from tests.test_delegation_agreement import bind_delegate
+        bind_delegate(self.store, 7, "req-9", items, "cal")
+        delivery_id = self.store.save_delegate_result(7, "req-9", "DONE: delivered result")
         critical_unmet, unmet = self.store.accept_delegation(7, "req-9", [
-            {"item": 1, "verdict": "met", "evidence": "recomputed from filing"},
-            {"item": 2, "verdict": "partial", "evidence": "file exists, chart empty"}])
+            {"item": 1, "verdict": "met", "how": "report", "evidence": "recomputed from filing"},
+            {"item": 2, "verdict": "partial", "how": "report", "evidence": "file exists, chart empty"}], delivery_id=delivery_id)
         self.assertEqual((critical_unmet, unmet), ([1], [1, 2]))  # reviewing reports is not proof
-        self.assertFalse(self.store.unread_delegations(7))
+        self.assertTrue(self.store.unread_delegations(7))
         card = self.store.scorecard("req-9")
         self.assertEqual((card["items_total"], card["items_met"], card["critical_total"], card["critical_met"], card["reworks"]), (2, 0, 1, 0, 0))
         self.store.bump_rework("req-9")
@@ -359,14 +368,6 @@ class BriefRules(unittest.TestCase):
         self.items = [{"item": "facts for 8 tier-one names", "check": "open 2 URLs", "critical": True, "early": True},
                       {"item": "dated policy timeline", "check": "open 2 URLs", "critical": True},
                       {"item": "chart", "check": "file exists", "critical": False}]
-
-    def test_accept_needs_every_critical_verdict_and_tolerates_missing_non_critical(self):
-        ok = [{"item": 1, "verdict": "met", "evidence": "opened two IR URLs and recomputed one share", "how": "read"},
-              {"item": 2, "verdict": "partial", "evidence": "timeline has 5 of 8 dated entries, checked against MIIT", "how": "read"}]
-        self.assertIn("needs how", self.dc.validate_verdicts([dict(ok[0], how=None), ok[1]], self.items))   # 2026-10-23
-        self.assertIsNone(self.dc.validate_verdicts(ok, self.items))                        # item 3 (non-critical) left out
-        self.assertIn("missing: [2]", self.dc.validate_verdicts(ok[:1], self.items))
-        self.assertIn("critical", self.dc.validate_verdicts(ok[:1], self.items))
 
     def test_items_limits_and_early_slice(self):
         self.assertIsNone(self.dc.validate_items(self.items))

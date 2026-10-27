@@ -45,6 +45,35 @@ class CompletionTests(unittest.TestCase):
             agent._execute_tool_unguarded('verify_requirement', {'task_id': 1, 'item': 1}, 1)
             self.assertEqual(store.finish(1, result), 'finished', name)
 
+    def test_judgment_requirements_finish_and_add_nothing_to_the_message(self):
+        """2026-10-24, Alex: [quote removed] (a research result delivered under "Completion not
+        verified: Requirement 1 Direct comparator table ...: unverified."). Requirements no machine can check are the
+        owner's to judge by reading; they never block finishing and never reach the message. A declared check still
+        has to pass, and only a failed or unrun declared check is named, in plain words."""
+        from agent_core import verification
+        for name in AGENTS:
+            root = self.root / ("judge-" + name); root.mkdir(exist_ok=True)
+            agent = make_agent(name, root, background=True)
+            store = agent._background
+            store.checkpoint(1, 1, '', '', [], guesses=[], completion_items=[
+                {'item': 'Direct comparator table', 'check': 'Owner reads it'},
+                {'item': 'Conclusion and README pitch', 'check': 'Owner reads it'}])
+            self.assertEqual(store.finish(1, Reply('Report attached.', task_outcome='completed')), 'finished', name)
+            self.assertEqual(verification.summary(store, 1), '', name)
+            self.assertEqual(verification.summary(store, 1), '', name)
+            # mixed: one judgment item and one declared check that was never run
+            put(store, 1, 'running')
+            artifact = root / 'report.md'; artifact.write_text('table', encoding='utf-8')
+            store.checkpoint(1, 1, '', '', [], guesses=[], completion_items=[
+                {'id': 3, 'item': 'Report saved', 'check': 'File exists with the table',
+                 'verification': {'kind': 'contains', 'paths': [str(artifact)], 'text': 'table'}}])
+            self.assertEqual(store.finish(1, Reply('Report attached.', task_outcome='completed')), 'needs_attention', name)
+            self.assertEqual(verification.summary(store, 1), 'Not checked on the delivered file: Report saved.', name)
+            put(store, 1, 'running')
+            agent._execute_tool_unguarded('verify_requirement', {'task_id': 1, 'item': 3}, 1)
+            self.assertEqual(store.finish(1, Reply('Report attached.', task_outcome='completed')), 'finished', name)
+            self.assertEqual(verification.summary(store, 1), '', name)
+
     def test_prose_cannot_bypass_unaccepted_delegation(self):
         agent, _ = self.agent()
         store = agent._background
@@ -63,13 +92,20 @@ class CompletionTests(unittest.TestCase):
         p.write_text('{broken', encoding='utf-8')
         self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'needs_attention')
 
-    def test_new_scope_invalidates_old_completion_proof(self):
+    def test_an_added_instruction_without_a_declared_requirement_does_not_block_finishing(self):
+        """2026-10-24, Alex: [quote removed] (task 348 delivered under "Not complete: Instructions without
+        declared requirements: [235]"; 235 was the runtime's own resume note). Whether an instruction carries a
+        declared requirement is guidance to the worker, never evidence against finished work. Earlier proof stays
+        valid, and no reason about it reaches completion.json."""
         agent, _ = self.agent()
         store = agent._background
         agent._execute_tool_unguarded('verify_requirement', {'task_id': 1, 'item': 1}, 1)
-        store.control(1, 1, 'steer', 'Also deliver a second artifact')
+        store.control(1, 1, 'steer', 'Continue the read-through from the saved checkpoint; same constraints as the brief.')
         store.acknowledge([x['id'] for x in store.pending_controls(1)])
-        self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'needs_attention')
+        self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'finished')
+        decision = json.loads((store.directory(1) / 'completion.json').read_text())
+        self.assertTrue(decision['passed'])
+        self.assertNotIn('without declared requirements', ' '.join(decision['reasons']))
 
     def test_inflight_dependency_parks_without_model_calls_and_wakes_on_return(self):
         agent, _ = self.agent()
@@ -82,14 +118,20 @@ class CompletionTests(unittest.TestCase):
         store.poll_waiting()
         self.assertEqual(store.get(1)['status'], 'queued')
 
-    def test_eval_missing_artifact_cannot_finish_as_success(self):
+    def test_eval_generation_is_recorded_but_missing_artifact_is_not_success(self):
         agent, _ = self.agent()
         store = agent._background
         from agent_core import regression
         case = regression.load_cases(self.root)[0]
         context = {'eval': {'case': case['id'], 'benchmark': regression.fingerprint([case])}, 'notify_telegram': False}
         (store.directory(1) / 'context.json').write_text(json.dumps(context), encoding='utf-8')
-        self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'needs_attention')
+        self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'finished')
+        completion = json.loads((store.directory(1) / 'completion.json').read_text(encoding='utf-8'))
+        self.assertEqual(completion['verdict'], 'recorded')
+        self.assertFalse(completion['passed'])
+        graded = regression.grade(None, case, 'Done', store.directory(1) / 'trial_output')
+        self.assertFalse(graded['passed'])
+        self.assertTrue(all(item['status'] == 'unverified' for item in graded['items']))
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from tests.agent_harness import make_agent, put
+from tests.agent_harness import make_agent
 from background_runtime import TaskStore
 from agent_core.task_decisions import answer_record
 from agent_core.roster import AGENTS

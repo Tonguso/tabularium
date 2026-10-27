@@ -10,7 +10,6 @@ The examiner is the cheapest Anthropic model on the paid API, the route the advi
 answer runs on his usual route. Nothing is sent to Telegram and nothing is written to memory."""
 import json
 import random
-import re
 import time
 from contextlib import closing
 from datetime import datetime, timedelta

@@ -4,7 +4,8 @@ Why: run_turn_openai and run_turn_anthropic each carried the whole turn: boundar
 execution, budget warning, step limit, envelope, saving. Every fix this week was made twice (the reply envelope, the
 cut-off note, the step limit); the reasoning leak took three fixes because there were three places to leak from.
 Now agent_core.turn_loop.run owns the turn and asks a provider for one exchange at a time."""
-import re, sys, tempfile, unittest
+import sys, tempfile, unittest
+from copy import deepcopy
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "tests"))
@@ -19,9 +20,10 @@ FILES = [ROOT / "engine.py", ROOT / "subscription_runtime.py", *sorted((ROOT / "
 class Scripted:
     """A provider that answers from a script of Exchange objects (or a str for an early reply)."""
     def __init__(self, script):
-        self.script = list(script); self.seen = []
+        self.script = list(script); self.seen = []; self.wire = []
     def exchange(self, api_messages):
         self.seen.append(len(api_messages))
+        self.wire.append(deepcopy(api_messages))
         return self.script.pop(0)
 
 
@@ -45,7 +47,8 @@ class OneLoop(unittest.TestCase):
 
     def run_loop(self, script, messages=None):
         messages = messages if messages is not None else [{"role": "user", "content": "hi"}]
-        return turn_loop.run(self.agent, messages, 1, Scripted(script)), messages
+        self.provider = Scripted(script)
+        return turn_loop.run(self.agent, messages, 1, self.provider), messages
 
     def test_each_turn_rule_is_written_once(self):
         for literal in ONCE:
@@ -66,14 +69,16 @@ class OneLoop(unittest.TestCase):
         messages = [{"role":"user", "content":"work"}]
         self.agent.conversations[1] = messages
         try:
-            turn_loop.run(self.agent, messages, 1, Scripted(script))
+            provider = Scripted(script)
+            turn_loop.run(self.agent, messages, 1, provider)
             self.fail("Expected a session boundary, not a final reply")
         except turn_loop.SessionLimit:
             pass
         self.assertEqual(messages[-1]["role"], "user")
         warnings = [b for m in messages if isinstance(m.get("content"), list) for b in m["content"]
                     if b.get("type") == "text" and "tool rounds used" in b.get("text", "")]
-        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings, [])
+        self.assertIn("tool rounds used", str(provider.wire[2]))
         self.assertEqual(len(self.ran), 4)
 
     def test_three_cut_offs_end_the_turn(self):
@@ -81,7 +86,9 @@ class OneLoop(unittest.TestCase):
         reply, messages = self.run_loop([cut, cut, cut])
         self.assertFalse(reply.complete); self.assertIn("three times", reply)
         notes = [m for m in messages if m["role"] == "user" and isinstance(m["content"], list) and "CUT OFF" in m["content"][0].get("text", "")]
-        self.assertEqual(len(notes), 2)                       # after the first two; the third ends the turn
+        self.assertEqual(notes, [])                         # warnings are wire-only
+        self.assertIn("CUT OFF", str(self.provider.wire[1]))
+        self.assertIn("CUT OFF", str(self.provider.wire[2]))
 
     def test_unexpected_stop_is_reported_not_delivered_as_an_answer(self):
         reply, _ = self.run_loop([Exchange(stop="refusal")])
@@ -96,8 +103,9 @@ class OneLoop(unittest.TestCase):
         asks = Exchange(text='{"reply": "要我现在开始研究吗？", "work": "awaiting_go"}')
         reply, messages = self.run_loop([promise, asks])
         self.assertEqual((str(reply), reply.work), ("要我现在开始研究吗？", "awaiting_go"))
-        self.assertIn("work=started", messages[1]["content"])            # the reminder, saved in history
-        self.assertEqual(messages[1]["role"], "user")
+        self.assertNotIn("work=started", str(messages))
+        self.assertIn("work=started", str(self.provider.wire[1]))
+        self.assertEqual(messages[1]["role"], "assistant")
         self.assertFalse(any("收窄" in str(m["content"]) for m in messages))   # the empty promise was never delivered or saved
 
     def test_a_promise_backed_by_a_task_is_delivered(self):
@@ -106,7 +114,7 @@ class OneLoop(unittest.TestCase):
                 self.agent._background.start(1, "研究 change-point detection")
                 return super().exchange(api_messages)
         provider = Starts([Exchange(text='{"reply": "已经开始研究。", "work": "started"}')]); provider.agent = self.agent
-        reply = turn_loop.run(self.agent, [{"role": "user", "content": "那你倒是研究啊"}], 1, provider)
+        reply = turn_loop.run(self.agent, [{"role": "user", "content": "那就开始研究吧"}], 1, provider)
         self.assertEqual((str(reply), reply.work), ("已经开始研究。", "started"))
 
     def test_abort_stops_before_the_next_exchange(self):

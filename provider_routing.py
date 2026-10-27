@@ -57,11 +57,6 @@ def config(root):
     return validate(value)
 
 
-def enabled(root):
-    value = config(root)
-    return True  # Sequences are the only primary-model control.
-
-
 def save(root, value):
     value = validate(value)
     value.update(revision=uuid.uuid4().hex, updated=time.time())

@@ -2,7 +2,7 @@
 Run with the agent interpreter. Baseline 9198d70, synthetic quality oracle and usage only.
 """
 from pathlib import Path
-import tempfile,json,subprocess,importlib.util,sys
+import tempfile,json,subprocess,importlib.util
 from types import SimpleNamespace
 from openai import OpenAI
 from agent_core.openai_chatgpt import ChatGPTPlan

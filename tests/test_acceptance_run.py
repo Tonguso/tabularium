@@ -24,8 +24,11 @@ class RunBeforeReady(unittest.TestCase):
                       dict(item='drag result', check='Required drag result text', critical=True,
                            verification=dict(kind='contains', paths=[str(self.artifact)], text='drag works'))]
         self.store.add_delegation(self.task, 'vit', 'req-test', 'document', 'owner_decision')
+        from tests.test_delegation_agreement import bind_delegate
+        self.remote, self.child = bind_delegate(self.store, self.task, 'req-test', self.items)
         self.store.record_submission('req-test', self.task, 'vit', 'engineering', 0, self.items)
         self.store.mark_delegation(self.task, 'req-test', 'returned')
+        self.delivery_id = self.store.save_delegate_result(self.task, 'req-test', 'DONE: delivered result')
         self.returned = self.store.delegation_returned_at('req-test', self.task)
         import delegation_contract
         patcher = patch.object(delegation_contract, 'BRIEFS', self.root / 'briefs')
@@ -33,13 +36,14 @@ class RunBeforeReady(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def run_check(self, number):
+        self.delivery_id = self.store.save_delegate_result(self.task, 'req-test', 'DONE: delivered result')
         return json.loads(self.agent._execute_tool_unguarded('verify_requirement',
             dict(task_id=self.task, request_id='req-test', item=number), 1))
 
     def accept(self, how='ran'):
         values = [dict(item=n, verdict='met', how=how, evidence='Agent description alone is not evidence.') for n in (1, 2)]
         return self.agent.tool_delegate(action='accept', chat_id=1, agent='vit', request_id='req-test',
-                                       task_id=self.task, verdicts=values,
+                                       task_id=self.task, verdicts=values, delivery_id=self.delivery_id,
                                        brief_lesson='The actual check failed; correct the artifact before calling it ready.')
 
     def receipt(self, tool, failed=False):
@@ -72,7 +76,7 @@ class RunBeforeReady(unittest.TestCase):
         self.assertEqual(result['critical_unmet'], [])
         self.assertEqual(result['scorecard']['items_met'], 2)
         self.assertFalse(self.store.unread_delegations(self.task))
-        self.assertIn('passed: 1 launch result, 2 drag result', self.store.unrun_line(self.task))
+        self.assertEqual(verification.summary(self.store, self.task, 'req-test'), '')               # passes are silent (2026-10-24)
 
     def test_artifact_change_invalidates_proof_and_delivery_summary(self):
         self.run_check(1)
@@ -80,7 +84,7 @@ class RunBeforeReady(unittest.TestCase):
         json.loads(self.accept())
         self.artifact.write_text('changed build', encoding='utf-8')
         self.assertNotIn('"accepted": true', self.accept())
-        self.assertIn('unverified: 1 launch result, 2 drag result', self.store.unrun_line(self.task))
+        self.assertIn('Not checked on the delivered file: launch result; drag result.', verification.summary(self.store, self.task, 'req-test'))
 
     def test_failed_requirement_cannot_be_overridden_by_met(self):
         self.artifact.write_text('launch works only', encoding='utf-8')
@@ -89,14 +93,17 @@ class RunBeforeReady(unittest.TestCase):
         result = json.loads(self.accept())
         self.assertEqual(result['critical_unmet'], [2])
         self.assertEqual(result['scorecard']['items_met'], 1)
-        self.assertIn('failed: 2 drag result', self.store.unrun_line(self.task))
+        self.assertIn('Check failed: drag result.', verification.summary(self.store, self.task, 'req-test'))
 
     def test_report_is_reviewed_but_never_counts_as_pass(self):
+        folder = self.agent.AGENT_DIR / 'reports' / 'specialist_reviews'      # a report-only verdict needs the cold read first
+        folder.mkdir(parents=True)
+        (folder / '1.json').write_text(json.dumps(dict(role='delivery', delivery_id=self.delivery_id, status='finished')), encoding='utf-8')
         result = json.loads(self.accept('report'))
-        self.assertTrue(result['accepted'])
+        self.assertFalse(result['accepted'])
         self.assertEqual(result['critical_unmet'], [1, 2])
         self.assertEqual(result['scorecard']['items_met'], 0)
-        self.assertIn('unverified:', self.store.unrun_line(self.task))
+        self.assertIn('Not checked on the delivered file:', verification.summary(self.store, self.task, 'req-test'))
 
     def test_direct_store_call_cannot_bypass_the_check(self):
         self.assertRaises(ValueError, self.store.accept_delegation, self.task, 'req-test',

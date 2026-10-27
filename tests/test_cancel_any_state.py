@@ -1,6 +1,6 @@
 """Cancel works on a task in any non-terminal state and says so when there is nothing to cancel (2026-10-12).
 
-Task 143 sat in needs_attention; Alex said "delete it" and "kill it", Cato called cancel twice, the store returned the
+Task 143 sat in needs_attention; Alex said [quote removed] and "kill it", Cato called cancel twice, the store returned the
 task unchanged without an error, Cato reported "killed", and the task stayed in the live list injected into every
 message, so Cato kept bringing it up."""
 import sys, tempfile, unittest

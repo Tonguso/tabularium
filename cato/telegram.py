@@ -36,9 +36,8 @@ from agent_core import verification
 # Brief-quality rules (decompose, size, tier, know your delegate) live in delegation_contract.py so tests
 # can import them; the judgment they cannot make is in the work-delegation skill and its references/.
 _validate_items = _contract.validate_items
-_validate_verdicts = _contract.validate_verdicts
 
-DELEGATE_TOOL = {"name": "delegate", "description": "Send focused work to Cal (research, evidence packs) or Vit (engineering) and track it to acceptance. Delegate when the work would bloat your own context (evidence gathering across many sources), can run in parallel with yours, needs a capability only they have, or needs an independent check; keep the judgment yourself. Before submit, load the work-delegation skill and read the delegate card (skills/work-delegation/references/delegates/<agent>.json). submit needs agent, brief, purpose, completion_items (numbered, checkable, critical first, item 1 the early judgment slice), completion_condition, budget_tokens (a target the delegate sizes by and reports against; never a stop), output_path inside the delegate's writable paths, and for Vit allowed_paths. result fetches the text; accept records one verdict with evidence per completion item and is what counts as read (delivery of your own task is blocked until every attached request is accepted or cancelled). rework resumes the delegate on named items; rescope updates checks and adds obligations without removing existing items; extend sets a new target; status while it runs returns its latest checkpoint. Never poll in a loop: finish independent work, checkpoint, end the turn; the runtime resumes you when the result returns.",
+DELEGATE_TOOL = {"name": "delegate", "description": "Send focused work to Cal (research, evidence packs) or Vit (engineering) and track it to acceptance. Delegate when the work would bloat your own context (evidence gathering across many sources), can run in parallel with yours, needs a capability only they have, or needs an independent check; keep the judgment yourself. Before submit, load the work-delegation skill and read the delegate card (skills/work-delegation/references/delegates/<agent>.json). submit needs agent, brief, purpose, completion_items (numbered, checkable, critical first, item 1 the early judgment slice), completion_condition, budget_tokens (a target the delegate sizes by and reports against; never a stop), output_path inside the delegate's writable paths, and for Vit allowed_paths. result fetches the current delivery and shared agreement; accept reviews that exact delivery, with one verdict per item (delivery of your own task is blocked until every attached request is accepted or cancelled). rework resumes the delegate on named items; rescope updates checks and adds obligations without removing existing items; extend sets a new target; status while it runs returns its latest checkpoint. Never poll in a loop: finish independent work, checkpoint, end the turn; the runtime resumes you when the result returns.",
      "input_schema": {"type": "object", "properties": {
          "action": {"type": "string", "enum": ["submit", "status", "result", "accept", "rework", "rescope", "extend", "cancel", "answer"]},
          "agent": {"type": "string", "enum": ["cal", "vit"]},
@@ -51,11 +50,13 @@ DELEGATE_TOOL = {"name": "delegate", "description": "Send focused work to Cal (r
          "completion_condition": {"type": "string", "description": "submit: one-line summary of done."},
          "budget_tokens": {"type": "integer", "minimum": 1, "description": "Effective-token target for this request (submit), or a new target (extend/rework/rescope). Information for the delegate, never a stop."},
          "guesses_verdict": {"type": "string", "description": "accept: verdict on the delegate's stated assumptions (its checkpoint guesses): 'ok' if each matches Alex's intent, or 'wrong: <which and what was meant>' (counts as a rework; rework the affected items)"},
-         "verdicts": {"type": "array", "items": {"type": "object", "properties": {"item": {"type": "integer"}, "verdict": {"type": "string", "enum": ["met", "partial", "not_met", "unverified"]}, "evidence": {"type": "string"}, "how": {"type": "string", "enum": ["ran", "read", "report", "judgment"], "description": "ran: you executed, launched or opened the deliverable yourself; read: you inspected its content or output yourself; report: taken from the delegate's report only. Status is derived from verify_requirement for the declared check and exact artifacts. Report and judgment without executable proof remain unverified."}}, "required": ["item", "verdict", "evidence", "how"]}, "description": "accept: one per completion item; evidence names what was checked and how."},
+         "verdicts": {"type": "array", "items": {"type": "object", "properties": {"item": {"type": "integer"}, "verdict": {"type": "string", "enum": ["met", "partial", "not_met", "unverified"]}, "evidence": {"type": "string"}, "how": {"type": "string", "enum": ["ran", "read", "report", "judgment"], "description": "ran: you executed, launched or opened the deliverable yourself; read: you inspected its content or output yourself; report: taken from the delegate's report only. For executable checks, proof is derived from verify_requirement. For subjective items, read/judgment records your assessment; report alone cannot establish success. Explicit rejection remains open."}}, "required": ["item", "verdict", "evidence", "how"]}, "description": "accept: one per completion item; evidence names what was checked and how."},
          "items": {"type": "array", "items": {"type": "integer"}, "description": "rework: completion item numbers to redo."},
          "note": {"type": "string", "description": "rework/rescope: the gap or the reason, passed to the delegate; answer: the answer to the delegate's question."},
          "stop_rule": {"type": "string", "description": "Optional stop instruction in words (method and when to stop), e.g. 'one search pass per name; save filings locally and extract with a script; stop when no membership change is likely'. Not money: the target is budget_tokens."},
          "title": {"type": "string"}, "allowed_paths": {"type": "array", "items": {"type": "string"}},
+         "delivery_id": {"type": "string", "description": "accept: exact delivery_id returned by result; binds this review to the delivery you saw."},
+         "owner_tier": {"type": "string", "description": "submit: why Alex's yes is needed before the result is applied or merged (it touches his work computer, index calculation, reference data, or sends on his behalf). Leave empty for everything else: Cato applies or merges on green checks."},
          "request_id": {"type": "string"}, "task_id": {"type": "integer", "description": "Foreground only: an existing background task this request belongs to. Leave it out to hand work over on its own: the delegate starts now, the runtime creates the task that will receive and deliver the result, and you carry on. Never queue a background task of your own just to hand work over."}},
          "required": ["action", "agent"]}}
 
@@ -151,11 +152,11 @@ class CatoApp(AgentApp):
 
     def tool_delegate(self, action: str, chat_id: int, agent: str = "", brief: str = "", purpose: str = "",
                       completion_condition: str = "", stop_rule: str = "", budget: str = "", title: str = "", allowed_paths=None,
-                      request_id: str = "", task_id: int = 0, budget_tokens: int = 0, owner_approved: bool = False,
+                      request_id: str = "", task_id: int = 0, budget_tokens: int = 0, owner_tier: str = "",
                       task_type: str = "", completion_items=None, size_reason: str = "", verdicts=None, items=None, guesses_verdict: str = "",
                       note: str = "", sizing=None, output_path: str = "", override_reason: str = "", brief_lesson: str = "",
                       delegation_reason: str = "", reason_detail: str = "", direct_cost_tokens: int = 0,
-                      fields=None, _runner=None) -> str:
+                      fields=None, delivery_id="", _runner=None) -> str:
         """Wrap scripts/delegate_local.py (its credential checks and audit) and keep the per-task register."""
         stop_rule = stop_rule or budget          # 'budget' was the old name of the free-text stop rule (renamed 2026-10-08)
         if agent not in ("cal", "vit"):
@@ -173,50 +174,60 @@ class CatoApp(AgentApp):
             # Local: a result counts as read only after a verdict per completion item, each with evidence.
             if not request_id:
                 return "accept needs request_id."
-            contract_items = self._background.contract_items(request_id)
-            error = _validate_verdicts(verdicts, contract_items)
-            if error:
-                return error
+            try:
+                contract_items = self._background.contract_items(request_id)
+            except ValueError as exc:
+                return str(exc)
             error = _contract.guesses_refusal(self._background.guesses(request_id), guesses_verdict)
             if error:
                 return error
+            report_only = [v.get('item') for v in (verdicts or []) if isinstance(v, dict) and v.get('how') == 'report']
+            if report_only and not verification.cold_review(self.AGENT_DIR, delivery_id):
+                return (f"Items {report_only} rest on the delegate's word. Get a cold read of this delivery first: "
+                        f"specialist_review(role='delivery', delivery_id='{delivery_id}', question=<the completion condition>, "
+                        "evidence=<the result text and the numbered completion items>), then accept.")
             if guesses_verdict:
                 self._background.record_guesses_verdict(request_id, guesses_verdict.strip())
                 if guesses_verdict.strip().lower().startswith("wrong:"):
                     self._background.bump_rework(request_id)        # a wrong assumption is a brief defect, counted like a rework
-            try:
-                verdicts = verification.verdicts(self._background, target or (self._background.delegation_tasks(request_id) or [0])[0], request_id, verdicts)
-            except ValueError as exc:
-                return str(exc)
-            # A failed critical item costs Cato one sentence on what the brief should have said; it goes into the
-            # scorecard and references/briefs/lessons.md, where he reads before the next brief.
-            provisional_unmet = [v["item"] for v in verdicts if v["verdict"] == "not_met" and contract_items[v["item"] - 1].get("critical")]
-            if provisional_unmet and len(brief_lesson.strip()) < 20:
-                return (f"Critical items {provisional_unmet} not met. accept needs brief_lesson: one sentence on what the brief should "
-                        "have said or sized differently so this would have been met (not what the delegate did wrong).")
             idents = [target] if target else self._background.delegation_tasks(request_id)
             critical_unmet, unmet = [], []
             try:
                 for ident in idents or [None]:
-                    critical_unmet, unmet = self._background.accept_delegation(ident, request_id, verdicts)
+                    critical_unmet, unmet = self._background.accept_delegation(ident, request_id, verdicts, delivery_id=delivery_id)
             except ValueError as exc:
                 return str(exc)
             card = self._background.scorecard(request_id)
+            verdicts = json.loads(card['verdicts'])
+            provisional_unmet = [v['item'] for v in verdicts if v['verdict'] == 'not_met' and contract_items[v['item']-1].get('critical')]
+            if provisional_unmet and len(brief_lesson.strip()) < 20:
+                return f"Review recorded as rejected on items {provisional_unmet}. Add brief_lesson naming how the brief should improve, then request rework."
             if provisional_unmet:
                 self._background.record_lesson(request_id, brief_lesson.strip())
                 _contract.append_lesson(request_id, (card or {}).get("agent", agent), brief_lesson, critical_unmet)
                 card = self._background.scorecard(request_id)
-            elif not critical_unmet and card and not card.get("reworks"):
+            elif not unmet and card and not card.get("reworks"):
                 _contract.save_exemplar(card, "accepted")       # first pass, all critical met: a worked example for next time
             if critical_unmet:
                 guidance = (f"Critical items failed or unverified: {critical_unmet}. Either rework (request_id, items={critical_unmet}, note=<the gap>) "
-                            "so the delegate resumes on those alone, or accept the gap and state it plainly in your deliverable and to Alex. "
+                            "so the delegate resumes on those alone, record the unresolved gap and keep this delivery open. "
                             "Do not present this result as complete.")
             elif unmet:
-                guidance = f"All critical items met; non-critical items {unmet} are partial or open. Say so in the deliverable."
+                guidance = f"Non-critical items {unmet} remain open; request targeted rework. This delivery is not fully accepted."
             else:
                 guidance = "All items met. Report the scorecard line to Alex: asked, delivered, verified how, cost."
-            return json.dumps({"accepted": True, "verified": not unmet, "critical_unmet": critical_unmet, "unmet": unmet, "scorecard": card, "next": guidance}, ensure_ascii=False)
+                tier = (json.loads(card.get('brief') or '{}') if card and (card.get('brief') or '').startswith('{') else {}).get('owner_tier')
+                if tier:
+                    # Cato's accept is never Alex's approval (2026-10-27): an owner-tier result waits on his yes.
+                    question = f"Request {request_id} is accepted by Cato and is owner tier ({tier}). Apply or merge it only on your yes."
+                    try:
+                        decision = self._background.ask(chat_id, idents[0], question) if idents else None
+                        why = "no owner task to hold the decision"
+                    except ValueError as exc:
+                        decision, why = None, str(exc)
+                    guidance = ("All items met. Owner tier: " + (f"decision #{decision['id']} is pending; deliver the result with that "
+                                "question and apply or merge nothing until Alex says yes." if decision else f"ask Alex before anything is applied or merged ({why})."))
+            return json.dumps({"accepted": not unmet, "verified": not unmet and all(not verification.is_judgment(it) for it in contract_items), "critical_unmet": critical_unmet, "unmet": unmet, "scorecard": {k: card.get(k) for k in ("items_total", "items_met", "critical_total", "critical_met", "budget", "spent", "reworks", "verdicts")}, "next": guidance}, ensure_ascii=False)
         if action == "submit":
             if not brief.strip() or not purpose.strip():
                 return "submit needs a self-contained brief and a short purpose."
@@ -251,6 +262,8 @@ class CatoApp(AgentApp):
                        "budget_effective_tokens": int(budget_tokens)}
             if output_path:
                 request["output_path"] = output_path
+            if owner_tier.strip():
+                request["owner_tier"] = owner_tier.strip()
             if card.get("writable_paths"):
                 request["writable_paths"] = card["writable_paths"]
             if agent == "cal":
@@ -281,17 +294,24 @@ class CatoApp(AgentApp):
                 return "extend needs the new budget_tokens."
             if action == "rework" and not (isinstance(items, list) and items and all(isinstance(i, int) for i in items)):
                 return "rework needs items: the completion item numbers to redo, plus a note naming the gap."
+            snapshot = {}
+            if action == "rework":
+                owner = target or next(iter(self._background.delegation_tasks(request_id)), 0)
+                refusal = verification.rework_refusal(self._background, owner, request_id, items)
+                if refusal:
+                    return refusal
+                snapshot = verification.rework_snapshot(self._background, owner, request_id, items) if owner else {}
             if action == "rescope":
-                error = _validate_items(completion_items)
-                if error:
-                    return error
+                try:
+                    verification.validate_items(completion_items)
+                except ValueError as exc:
+                    return str(exc)
             request = {"request_id": request_id, "note": note}
             if has_budget:
                 request["budget_effective_tokens"] = int(budget_tokens)
             if action == "rework":
                 request["items"] = items
             if action == "rescope":
-                completion_items = verification.merge_items(self._background.contract_items(request_id), completion_items)
                 request["completion_items"] = completion_items
             temp = self.RUNTIME_DIR / "scratch" / f"delegate_{action}_{request_id}.json"
             temp.parent.mkdir(parents=True, exist_ok=True)
@@ -344,9 +364,7 @@ class CatoApp(AgentApp):
             self._background.record_submission(request_id, target, agent, task_type, budget_tokens, completion_items, brief=request,
                                                reason=delegation_reason, direct_cost=int(direct_cost_tokens or 0))
         elif action == "rework":
-            self._background.bump_rework(request_id)
-        elif action == "rescope":
-            self._background.bump_rework(request_id, items=completion_items, count=False)
+            self._background.bump_rework(request_id, sent=items, snapshot=snapshot)
         if action == "submit" and target:
             source = "worker_judgment" if own else "owner_decision"
             self._background.add_delegation(target, agent, request_id, purpose, source)
@@ -383,11 +401,18 @@ class CatoApp(AgentApp):
         if action == "result" and not response.get("text"):
             response["delegate_note"] = "No result text yet; this does not count as read. Poll status and fetch again."
         elif action == "result":
-            for ident in tasks:                                  # kept verbatim: Alex reads it under Cato's verdict (2026-10-24)
-                self._background.save_delegate_result(ident, request_id, response.get("text") or "")
+            try:
+                for ident in tasks:
+                    response["delivery_id"] = self._background.save_delegate_result(ident, request_id, response.get("text") or "")
+            except (ValueError, OSError) as exc:
+                return str(exc)
+            owner_task = tasks[0] if tasks else 0
+            remote_store, remote_task = verification.delegate(self._background, owner_task, request_id)
+            response['contract'] = dict(response.get('contract') or {}, completion_items=self._background.contract_items(request_id),
+                                        instructions=remote_store.scope_updates(remote_task))
             response["delegate_note"] = ("Fetched, NOT yet accepted. Verify each completion item (verify_artifact, review_output, recompute "
                                          "numbers, open sources; consult_advisor for judgment calls), then delegate(action='accept', "
-                                         "verdicts=[{item, verdict, evidence}]) for every item. Delivery stays blocked until then.")
+                                         "delivery_id=<returned id>, verdicts=[{item, verdict, evidence, how}]) for every item. Delivery stays blocked until then.")
         if remote == "capped":
             response["delegate_note"] = ("Legacy status from before 2026-10-08 (a delegate paused at a cap). Read the partial result and "
                                          "checkpoint; rework/rescope on the open critical items, or accept the partial with verdicts.")

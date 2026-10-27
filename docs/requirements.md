@@ -95,3 +95,10 @@ cumulatively once): 1,220,582 input / 21,779 output tokens. Offline tests make n
 A separate operational issue delayed the last restart: three clean exits were treated as a crash
 loop. Queued tests survived and all agents recovered automatically. See the incident record
 incidents/2026-10-23-clean-restarts-delayed-agents.md. Supervisor policy was not changed in this work.
+
+## Shared delegation agreement (2026-10-25)
+
+Mapped delegations resolve directly to the delegate task's requirements and instructions. Owner-side
+acceptance no longer maintains a separately updated copy. Rescope uses stable delegate item IDs and
+instruction sources. Requirement-bound proof is reusable by worker and reviewer; acceptance separately
+refers to the returned delivery. See verification.md for current semantics and measurement limits.

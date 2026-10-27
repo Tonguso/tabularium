@@ -7,7 +7,6 @@ from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 import unittest.mock
-from unittest.mock import Mock
 
 import requests
 from telebot.apihelper import ApiTelegramException
@@ -62,16 +61,30 @@ class Delivery(unittest.TestCase):
         """21:47 2026-10-22: a 502 then read timeouts on every retry for minutes, while curl reached Telegram at
         once: the bot's pooled connection was dead. The retry loop resets the pool before retrying."""
         resets = []
-        box = Outbox(self.tmp.name, lambda: self.bot, None, reset=lambda: resets.append(time.time()))
+        box = Outbox(self.tmp.name, lambda: self.bot, None, reset=lambda: resets.append(True))
         self.bot.down = True
         box.put(CHAT, ["stuck reply"])
-        with unittest.mock.patch.object(outbox_mod, "RETRY_SECONDS", (0.01,)):
-            box.start()
-            time.sleep(0.1)                                   # first retry: still down, counted as a failure
-            self.bot.down = False
-            time.sleep(0.1)
+        # Drive the real retry loop synchronously: failed retry, recovered retry, then stop.
+        # No daemon can outlive this test and keep its temporary SQLite database open.
+        class EndLoop(BaseException):
+            pass
+        waits = []
+        def wait(delay):
+            waits.append(delay)
+            if len(waits) == 3:
+                raise EndLoop()
+            self.bot.down = len(waits) == 1
+        box.wake = unittest.mock.Mock()
+        box.wake.wait.side_effect = wait
+        patch = unittest.mock.patch.object(outbox_mod.threading, "Thread")
+        thread = patch.start()
+        self.addCleanup(patch.stop)
+        box.start()
+        thread.return_value.start.assert_called_once()
+        self.assertRaises(EndLoop, thread.call_args.kwargs['target'])
         self.assertEqual([t for t, _, _ in self.bot.sent], ["stuck reply"])
-        self.assertGreaterEqual(len(resets), 1)               # the pool was dropped before the retry that delivered
+        self.assertEqual(resets, [True])
+        self.assertEqual(box.pending(), [])
 
     def test_a_stall_is_logged_once_per_message_as_it_starts(self):
         self.bot.down = True

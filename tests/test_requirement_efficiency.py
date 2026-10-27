@@ -105,7 +105,7 @@ class EfficiencyTests(unittest.TestCase):
             self.assertEqual(text.count(value), 1, value)
 
     def test_requirement_changed_during_check_cannot_report_passed(self):
-        agent = self.agent('cato'); store = agent._background
+        agent = self.agent('cato')
         item = self.item(agent, 'towers')
         self.declare(agent, [item])
         original = agent._execute_tool_unguarded

@@ -23,7 +23,8 @@ OVER_ESTIMATE_MULTIPLE = 2.0   # past this x the agent's own estimate the line a
 
 def effective_tokens(metrics):
     """Heuristic only, never billing or quota. Missing cache splits are conservatively estimated."""
-    m = metrics or {}
+    m = dict((metrics or {}).get("known_subtotals") or {})
+    m.update({k: v for k, v in (metrics or {}).items() if v is not None})
     if m.get('input_uncached') is None and m.get('input_total') is not None:
         cached = m.get('cache_read') or 0
         m = dict(m, input_uncached=max(0, (m['input_total'] or 0) - cached - (m.get('cache_write') or 0)))
@@ -93,7 +94,7 @@ def spend(directory):
         con = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5)
         try:
             role = "role" if "role" in {r[1] for r in con.execute("PRAGMA table_info(usage_events)")} else "''"
-            rows = con.execute(f"SELECT kind, metrics, {role} FROM usage_events WHERE kind IN ('response','tool_started') ORDER BY id").fetchall()
+            rows = con.execute(f"SELECT kind, metrics, {role} FROM usage_events WHERE kind IN ('response','tool_started') ORDER BY created,id").fetchall()
         finally:
             con.close()
     records, pending = [], 0

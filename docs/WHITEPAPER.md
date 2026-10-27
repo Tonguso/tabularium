@@ -223,6 +223,20 @@ change. The delegate's own result is kept as fetched, and its DONE, OPEN, EVIDEN
 unedited beneath the coordinator's verdict, so the owner reads what the delegate claimed and what it left open. A
 scorecard records, per request, what was asked, delivered, verified how, at what cost, with how many reworks.
 
+Review has to converge. The Claude Code team's account of its own code review (October 2026) found that one change
+went through more than fifty rounds of agent review and fixes, most of them re-flagging old code, and that a cap of
+three rounds before the author rethinks raised once-through passes from 65% to 78%. Tabularium enforces the same cap
+at the delegate tool: three reworks on one request, then the coordinator either accepts with the open items marked
+not met, so the owner sees them, or writes a new brief. An item the current review accepted as met cannot be sent
+back again. Each rework snapshots the artifacts behind the items sent back, and the next review records whether the
+delegate changed them or waved the finding off; the weekly scorecard counts both, which is the post's measure of
+reviewer noise, taken from the record instead of the reviewer's opinion. A verdict that rests only on the delegate's
+word is refused until a cold reader, a stateless model call that sees the result and the numbered requirements and
+nothing of the coordinator's conversation, has read that exact delivery. Finally, a request can be submitted as owner
+tier, naming why the owner's yes is needed before the result is applied (it touches his machine, his index
+calculation, his reference data, or sends on his behalf); acceptance then records a decision for him, because the
+coordinator's accept is never the owner's approval. Everything else is applied on green checks without him.
+
 The earlier acceptance kept three copies of the agreement (the requirements, the verdicts on the delegation row and
 the scorecard) and never checked that the delegation had returned, so a report-only verdict could accept work still
 in progress and a rejected requirement could vanish in a rework. Both were found by reading the code, not by an
@@ -351,6 +365,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Truthful live status | A dead process shown idle; planned restarts counted as crashes | Status from process identity; unknowns shown as unknown |
 | Lesson approval | Agents changing their own rules | Owner's words only, after a trial |
 | Incoming files | A 20 MB screenshot reported twice as an internal error | One size gate for every incoming file; the owner is told the size and the limit |
+| Owner tier | A coordinator's accept presented as the owner's approval | An owner-tier request records a decision for the owner at acceptance; nothing is applied until he answers |
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
 | Checkpoints and receipts | A crash losing work | Every tool call is a receipt; progress is checkpointed |
 | Drain restart | Restarting mid-task or onto broken code | Waits for work, runs all tests, refuses uncommitted code |
@@ -410,6 +425,11 @@ Tabularium borrows from, and departs from, several lines of published work.
   curated by merging and retiring, instead of rewriting a prompt. Tabularium's lesson ledger follows that shape, with
   two differences: counts come from the runtime's recorded checks rather than the model's own grading, and every
   addition, merge and retirement waits for the owner's words.
+- **Claude Code's code review** (Anthropic, October 2026) stacks checks by what could go wrong, caps review rounds at
+  three, re-reviews only the new diff, never repeats a finding, measures reviewer noise by what the author did with
+  each comment, and sets the risk tier by what a change touches, with an agent's approval never counting as a
+  person's. Tabularium's delegate acceptance now carries the cap, the no-repeat rule, the per-finding outcome and the
+  owner tier; the merge queue, feature flags and staged rollout are left out as a large team's concerns.
 - **GEPA** evolves prompts by reflecting on execution traces and searching over variants under a metric. Tabularium
   takes the reflection and the separation of proposal from evaluation: a recurred lesson or a failed declared check
   feeds the diagnosis with the actual run, and a proposed edit is screened on frozen development and reserved cases.
@@ -467,6 +487,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-10-25 | A lesson trial reran one task and let a model pick the winner | Frozen candidate, development and reserved cases, repeated runs, artifact checks only |
 | 2026-10-25 | Acceptance never checked that the delegation had returned, and three copies of the agreement could disagree | One delivery-bound agreement, read by review and completion alike |
 | 2026-10-26 | A 20 MB screenshot failed twice as "stopped with an error" | One size gate; a cause the owner can fix is said in one sentence |
+| 2026-10-27 | Delegate reworks could loop without end (one engineering job cost about 1.8M tokens in rework rounds) | Three reworks are the cap; a met item cannot be re-flagged; each rework records whether the delegate changed anything |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

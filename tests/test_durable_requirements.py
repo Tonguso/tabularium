@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from tests.agent_harness import make_agent, put
+from tests.agent_harness import make_agent
 from agent_core import verification
 from agent_core.roster import AGENTS
 from agent_core.reply_envelope import Reply
@@ -41,15 +41,18 @@ class RequirementsTests(unittest.TestCase):
             restored = TaskStore(agent._background.agent_dir, agent._background.role)
             self.assertEqual([x['item'] for x in verification.contract(restored, 1)[0]], ['towers', 'carriers'])
 
-    def test_later_instruction_cannot_be_covered_by_redeclaring_the_old_list(self):
+    def test_later_instruction_stays_listed_as_uncovered_guidance_but_does_not_block_finishing(self):
+        # 2026-10-24: coverage is guidance in the worker's context; completion rests on declared checks only.
         agent = self.setup_agent('cato')
         store = agent._background
         self.checkpoint(agent, [self.item('towers')])
         store.control(1, 1, 'steer', 'Also deliver carriers')
-        store.acknowledge([x['id'] for x in store.pending_controls(1)])
+        added = store.pending_controls(1)[0]['id']
+        store.acknowledge([added])
         self.checkpoint(agent, [self.item('towers')])
+        self.assertIn('Instructions without declared requirements: [%d]' % added, store.contract(1))
         agent._execute_tool_unguarded('verify_requirement', {'task_id': 1, 'item': 1}, 1)
-        self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'needs_attention')
+        self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'finished')
 
     def test_delegated_rescope_cannot_shrink_the_contract(self):
         agent = self.setup_agent('cato')

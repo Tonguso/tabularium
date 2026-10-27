@@ -2,7 +2,7 @@
 
 Cato designed a brand logo with logo-designer on 2026-10-03 (SVG build scripts, Alex's feedback round after
 round). On 2026-10-21 he loaded the same skill for another logo, used an image model instead and was blocked twice.
-Alex: "Why do I have to tell him that, he should know." Now the skill tool appends the agent's track record: real
+Alex: [quote removed] Now the skill tool appends the agent's track record: real
 tasks before chat turns, the most recent ones plus the first time (even from a task archived into a zip), never
 diagnoses, trials or eval reruns, never the current work."""
 import contextlib, io, json, sqlite3, tempfile, time, unittest, zipfile
@@ -39,7 +39,7 @@ class SkillRecord(unittest.TestCase):
         with closing(sqlite3.connect(self.recall)) as db, db:
             said = time.strftime("%Y-%m-%dT%H:%M", time.localtime(now - 18 * DAY + 3600))
             db.execute("INSERT INTO messages(fingerprint,chat,speaker,said_at,text) VALUES ('f1',?,'user',?,?)",
-                       (str(CHAT), said, "[2026-10-03 Saturday 12:02] 林用印篆体"))
+                       (str(CHAT), said, "[2026-10-03 Saturday 12:02] 用印篆体"))
 
     def task(self, request, at, files, archive=False):
         ident = self.store.start(CHAT, request)["id"]
@@ -74,7 +74,7 @@ class SkillRecord(unittest.TestCase):
         self.assertIn("Logo colour study", out)
         self.assertIn(f"task {self.first}, the first time you used this skill", out)
         self.assertIn("build_logo_logo_concepts.py", out)           # read from the zipped task
-        self.assertIn("林用印篆体", out)                                 # his reaction, timestamp prefix removed
+        self.assertIn("用印篆体", out)                                 # his reaction, timestamp prefix removed
         self.assertNotIn("[2026-10-03", out)
         self.assertLess(len(out), 1200)
 

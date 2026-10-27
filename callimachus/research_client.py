@@ -99,7 +99,7 @@ def call(action, request=None, request_id=None):
             ctx_path=directory/'context.json'; ctx=json.loads(ctx_path.read_text(encoding='utf-8')); deal=ctx.setdefault('contract',{})
             if action=='rescope':
                 from agent_core import verification
-                updates = verification.delegated_items(body['completion_items']) if body.get('completion_items') else verification.saved_items(store, task['id'])
+                updates = body['completion_items'] if body.get('completion_items') else verification.saved_items(store, task['id'])
                 verification.declare(store, task['id'], updates)
                 deal.pop('completion_items', None)
                 task_cost.reset_estimate(directory)   # new scope, new estimate before more work

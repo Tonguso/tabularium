@@ -136,7 +136,7 @@ class TaskStore:
                        "budget INTEGER, items TEXT, spent INTEGER, items_total INTEGER, items_met INTEGER, critical_total INTEGER, "
                        "critical_met INTEGER, reworks INTEGER DEFAULT 0, verdicts TEXT, created REAL, accepted REAL, brief TEXT, brief_lesson TEXT)")
             score_columns = {r[1] for r in db.execute("PRAGMA table_info(scorecard)")}
-            for column in ("brief TEXT", "brief_lesson TEXT", "reason TEXT", "direct_cost INTEGER", "guesses TEXT", "guesses_verdict TEXT"):
+            for column in ("brief TEXT", "brief_lesson TEXT", "reason TEXT", "direct_cost INTEGER", "guesses TEXT", "guesses_verdict TEXT", "rework_log TEXT"):
                 if column.split()[0] not in score_columns:
                     db.execute("ALTER TABLE scorecard ADD COLUMN " + column)
 
@@ -440,10 +440,27 @@ class TaskStore:
     def save_delegate_result(self, ident, request_id, text):
         """The delegate's result text as fetched, under the owner task (delegate_results/<request_id>.txt)."""
         import re
+        from agent_core import verification
         from agent_core.memory_store import atomic_text
+        snapshot = verification.delivery(self, ident, request_id)
+        remote, child = verification.delegate(self, ident, request_id)
+        if text != (remote.directory(child) / 'result.txt').read_text(encoding='utf-8'):
+            raise ValueError('The returned text is stale; fetch the current delivery.')
         folder = self.directory(ident) / "delegate_results"
         folder.mkdir(parents=True, exist_ok=True)
         atomic_text(folder / (re.sub(r"[^A-Za-z0-9_.-]", "_", request_id) + ".txt"), text or "")
+        db = sqlite3.connect(self.database, timeout=30)
+        try:
+            previous = verification.review_record(self, ident, request_id)
+            unchanged = previous.get('delivery') == snapshot
+            record = previous if unchanged else dict(delivery=snapshot, verdicts=[])
+            state = next(d['status'] for d in self.delegations(ident) if d['request_id'] == request_id) if unchanged else 'returned'
+            db.execute("UPDATE delegations SET acceptance=?,status=?,updated=? WHERE task=? AND request_id=?",
+                       (json.dumps(record, ensure_ascii=False), state, time.time(), ident, request_id))
+            db.commit()
+        finally:
+            db.close()
+        return verification.delivery_id(snapshot)
 
     def delegate_account(self, ident):
         """The delegate's own head lines (DONE / OPEN / EVIDENCE / COST), unedited, for the message to Alex
@@ -470,15 +487,6 @@ class TaskStore:
                 parts.append(f"{who}'s result for {d.get('purpose', '')} carried no DONE / OPEN / EVIDENCE / COST lines; only Cato's reading above.")
         return "\n\n".join(parts)
 
-    def unrun_line(self, ident):
-        """Current requirement status, including stale evidence and report-only results."""
-        from agent_core import verification
-        lines = [verification.summary(self, ident)]
-        for delegation in self.delegations(ident):
-            if delegation["status"] == "read":
-                lines.append(verification.summary(self, ident, delegation["request_id"]))
-        return "\n".join(line for line in lines if line)
-
     def mark_delegation(self, ident, request_id, status):
         """Advance status; never moves a read/cancelled entry backwards."""
         with self.db() as db:
@@ -498,8 +506,15 @@ class TaskStore:
             db.execute("INSERT OR IGNORE INTO scorecard(request_id,task,agent,task_type,budget,items,created,brief,reason,direct_cost) VALUES (?,?,?,?,?,?,?,?,?,?)",
                        (request_id, int(task or 0), agent, task_type, int(budget or 0), None, time.time(),
                         brief if isinstance(brief, str) or brief is None else json.dumps(brief, ensure_ascii=False), reason, int(direct_cost or 0)))
-            db.execute("INSERT OR IGNORE INTO requirements(task,request,items) VALUES (?,?,?)",
-                       (int(task or 0), request_id, json.dumps(items, ensure_ascii=False)))
+        from agent_core import verification
+        if not verification.delegate(self, int(task or 0), request_id):
+            db = sqlite3.connect(self.database, timeout=30)
+            try:
+                db.execute("INSERT OR IGNORE INTO requirements(task,request,items) VALUES (?,?,?)",
+                           (int(task or 0), request_id, json.dumps(items, ensure_ascii=False)))
+                db.commit()
+            finally:
+                db.close()
 
     def record_guesses(self, request_id, guesses):
         """The delegate's stated assumptions, copied from its checkpoint when Cato fetches status or result."""
@@ -527,7 +542,9 @@ class TaskStore:
         card = self.scorecard(request_id)
         return verification.saved_items(self, int(card["task"]), request_id) if card else []
 
-    def bump_rework(self, request_id, items=None, count=True):
+    def bump_rework(self, request_id, items=None, count=True, sent=None, snapshot=None):
+        """sent: the item numbers sent back, with the hashes of their artifacts as delivered, so the next review can
+        record whether the delegate changed anything (2026-10-27)."""
         from agent_core import verification
         if items is not None:
             card = self.scorecard(request_id)
@@ -536,29 +553,37 @@ class TaskStore:
         try:
             if count:
                 db.execute("UPDATE scorecard SET reworks=COALESCE(reworks,0)+1 WHERE request_id=?", (request_id,))
+                if sent:
+                    row = db.execute("SELECT reworks, rework_log FROM scorecard WHERE request_id=?", (request_id,)).fetchone()
+                    log = json.loads((row[1] if row else None) or "[]")
+                    log.append(dict(round=row[0] if row else 1, items=list(sent), artifacts=snapshot or {}))
+                    db.execute("UPDATE scorecard SET rework_log=? WHERE request_id=?", (json.dumps(log, ensure_ascii=False), request_id))
             db.commit()
         finally:
             db.close()
 
-    def accept_delegation(self, ident, request_id, verdicts, spent=None):
-        """Store the per-item verdicts (each with evidence), mark the request read, update the scorecard.
-        Returns (critical_unmet, unmet) item numbers so the caller can decide on rework."""
+    def accept_delegation(self, ident, request_id, verdicts, spent=None, delivery_id=""):
+        """Review one fetched delivery. Rejection stays open; proof and judgment stay distinct."""
         from agent_core import verification
-        verdicts = verification.verdicts(self, ident, request_id, verdicts)
+        record, critical_unmet, unmet = verification.acceptance(self, ident, request_id, verdicts, delivery_id)
+        verdicts = record['verdicts']
         items = self.contract_items(request_id)
-        by_number = {int(v["item"]): v for v in verdicts}
-        unmet = [n for n in range(1, len(items) + 1) if by_number.get(n, {}).get("verdict") != "met"]
-        critical_unmet = [n for n in unmet if n - 1 < len(items) and items[n - 1].get("critical")]
-        met = len(items) - len(unmet)
-        critical_total = sum(1 for it in items if it.get("critical"))
-        with self.db() as db:
-            if ident:
-                db.execute("UPDATE delegations SET acceptance=?,updated=? WHERE task=? AND request_id=?",
-                           (json.dumps(verdicts, ensure_ascii=False), time.time(), int(ident), request_id))
-            db.execute("UPDATE scorecard SET spent=?, items_total=?, items_met=?, critical_total=?, critical_met=?, verdicts=?, accepted=? WHERE request_id=?",
-                       (spent, len(items), met, critical_total, critical_total - len(critical_unmet), json.dumps(verdicts, ensure_ascii=False), time.time(), request_id))
-        if ident:
-            self.mark_delegation(ident, request_id, "read")
+        db = sqlite3.connect(self.database, timeout=30)
+        try:
+            db.execute("UPDATE delegations SET acceptance=?,status=?,updated=? WHERE task=? AND request_id=?",
+                       (json.dumps(record, ensure_ascii=False), 'returned' if unmet else 'read', time.time(), int(ident), request_id))
+            critical_total = sum(bool(it.get('critical')) for it in items)
+            db.execute("UPDATE scorecard SET spent=?,items_total=?,items_met=?,critical_total=?,critical_met=?,verdicts=?,accepted=? WHERE request_id=?",
+                       (spent,len(items),len(items)-len(unmet),critical_total,critical_total-len(critical_unmet),
+                        json.dumps(verdicts,ensure_ascii=False),None if unmet else time.time(),request_id))
+            row = db.execute("SELECT rework_log FROM scorecard WHERE request_id=?", (request_id,)).fetchone()
+            log = json.loads((row[0] if row else None) or "[]")
+            if log and 'outcome' not in log[-1]:           # the review after a rework: did the delegate change anything?
+                log[-1]['outcome'] = verification.rework_outcome(log[-1], record['delivery'], items)
+                db.execute("UPDATE scorecard SET rework_log=? WHERE request_id=?", (json.dumps(log, ensure_ascii=False), request_id))
+            db.commit()
+        finally:
+            db.close()
         return critical_unmet, unmet
 
     def scorecard(self, request_id=None):
@@ -575,6 +600,10 @@ class TaskStore:
                 saved = card.pop("durable_items")
                 if saved is not None:
                     card["items"] = saved
+                from agent_core import verification
+                resolved = verification.delegate(self, card['task'], card['request_id'])
+                if resolved:
+                    card['items'] = json.dumps(verification.saved_items(*resolved), ensure_ascii=False)
                 result.append(card)
             return (result[0] if result else None) if request_id else result
         finally:
@@ -583,7 +612,7 @@ class TaskStore:
     def reopen_delegation(self, ident, request_id):
         """A capped delegate resumed after a budget extension is in flight again."""
         with self.db() as db:
-            db.execute("UPDATE delegations SET status='submitted',updated=? WHERE task=? AND request_id=?",
+            db.execute("UPDATE delegations SET status='submitted',acceptance=NULL,updated=? WHERE task=? AND request_id=?",
                        (time.time(), int(ident), request_id))
 
     def unread_delegations(self, ident):
@@ -862,7 +891,7 @@ class TaskStore:
         value["items_done"] = sorted({int(i) for i in (items_done if items_done is not None else previous.get("items_done") or [])})
         # The plan (plan-first regime, 2026-10-08) persists like the estimate; a new one replaces it whole.
         # Ledger (Magentic-One task ledger, 2026-10-08): facts established, guesses still open, decisions with their owner
-        # ("Alex:" or "Cato:"). Each list replaces the previous one whole when given, so the checkpoint is the current truth.
+        # ("Alex: [quote removed]Cato:"). Each list replaces the previous one whole when given, so the checkpoint is the current truth.
         bad = unquoted_owner_decisions(decisions)
         if bad:
             raise ValueError(DECISION_QUOTE_RULE + " Offending: " + bad)
@@ -946,6 +975,8 @@ class TaskStore:
                 data = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
+            if data.get("trial"):
+                continue  # Failed experimental attempts count; retries would bias the comparison.
             retries = data.get("retries", 0)
             if retries >= 2 or time.time() - task["updated"] < 30 * (retries + 1):
                 continue
@@ -1112,6 +1143,9 @@ class TaskStore:
                 self.processes.pop(ident, None)
         self.stop_stalled()
         self.reap_orphans()
+        from agent_core import trials, lesson_cases
+        trials.reconcile(self, send)
+        lesson_cases.reconcile(self)
         self.report_worker_failures(send)
         self.launch_next()
         with self.db() as db:
@@ -1281,7 +1315,7 @@ def worker(ident, agent_dir, role, attempt=None):
             messages = agent.load_conversation(chat)
             if not saved:
                 context = json.loads((folder / "context.json").read_text(encoding="utf-8"))
-                if (context.get("eval") or {}).get("benchmark"):
+                if (context.get("eval") or {}).get("benchmark") or context.get("trial"):
                     context["context"] += f"\nEvaluation output directory: {folder / 'trial_output'}. Write the requested deliverables there."
                 from agent_core.learning import task_type_for
                 # A trial arm gets no lesson hints: the proposed edit is the only difference between its two runs.
@@ -1290,7 +1324,7 @@ def worker(ident, agent_dir, role, attempt=None):
                                  + ("\n\nLessons from earlier tasks, each labelled with its status:\n" + lessons if lessons else "")})
             else:
                 from agent_core.learning import task_type_for
-                lessons = store.lessons(chat, task_type_for(task["request"]))
+                lessons = "" if task_context.get("trial") else store.lessons(chat, task_type_for(task["request"]))
                 messages.append({"role": "user", "content": "Continue from the current task contract and its proof status. Inspect actions with missing outcomes before repeating them; never automatically resend emails." + ("\n\nLessons from earlier tasks, each labelled with its status:\n" + lessons if lessons else "")})
             agent.conversations[chat] = messages
             agent.save_conversation(chat)
@@ -1305,6 +1339,8 @@ def worker(ident, agent_dir, role, attempt=None):
                 "work actually succeeded. Do not promise recovery unless it has actually been started. "
                 "Keep relevant findings, evidence and deliverables; avoid an administrative preamble."
             )
+            if task_context.get("trial"):
+                agent.runtime.SYSTEM_PROMPT = trials.worker_prompt(task_context)
             from agent_core.memory_store import atomic_text
             try:
                 result = agent.run_turn(messages, chat)
@@ -1319,15 +1355,11 @@ def worker(ident, agent_dir, role, attempt=None):
             agent.save_conversation(chat)
             # No budget branch here since 2026-10-08: nothing pauses or caps a worker. Loops end in RunawayStop above;
             # cost is reported in the result and the awareness line.
-            result = trials.after_arm(agent, store, ident, task_context, result)
             atomic_text(folder / "result.txt", result or "No final answer generated; inspect saved tool records.")
             outcome = result
-            repeat = store.repeat_lesson_open(ident)
+            repeat = "" if task_context.get("trial") else store.repeat_lesson_open(ident)
             if repeat:
                 result = (result or "") + "\nOPEN: " + repeat
-            unrun = store.unrun_line(ident)                 # what Alex is about to touch that nobody here ran
-            if unrun:
-                result = (result or "") + "\n" + unrun
             account = store.delegate_account(ident)         # the delegate's own words under the verdict (2026-10-24)
             if account:
                 result = (result or "") + "\n\n" + account
@@ -1340,7 +1372,12 @@ def worker(ident, agent_dir, role, attempt=None):
                 return
             if state == "needs_attention":
                 decision = json.loads((folder / "completion.json").read_text(encoding="utf-8"))
-                atomic_text(folder / "result.txt", "Completion not verified: " + "; ".join(decision["reasons"]) + "\n\n" + str(result))
+                # The result reaches Alex as written; what the checks found is a dashboard segment (completion.json),
+                # never a prefix on his message (2026-10-24, Alex: [quote removed]).
+                failed = [r for r in decision.get("reasons", []) if r.startswith("Check failed")]
+                if failed and not task_context.get("trial"):     # a failed declared check joins the next diagnosis (2026-10-24)
+                    from agent_core import corrections
+                    corrections.start_failure(agent, chat, f"Task {ident}: a declared check failed", "; ".join(failed))
         except TaskStopped:
             store.move(ident, "cancel", "cancelled", "Stopped; completed actions remain recorded.", quiet=True)
         except Exception as exc:

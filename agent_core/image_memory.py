@@ -145,13 +145,3 @@ class ImageMemory:
             except Exception as exc:
                 print("[image-memory] Telegram recovery pending:",type(exc).__name__)
         return restored
-
-    def catalog(self, chat):
-        rows=self.list(chat,limit=12)
-        if not rows:
-            return ""
-        lines=["[Available images (local originals). Use view_image on the relevant path when pixels are absent; do not ask Alex to resend a saved photo."]
-        for row in rows:
-            lines.append(f"{row['date']} | {row['id'][:16]} | {row['path']} | {row['caption'][:140]}")
-        lines.append("Use list_images for more uploads. Dates may be archival time; check date_basis.]")
-        return "\n".join(lines)

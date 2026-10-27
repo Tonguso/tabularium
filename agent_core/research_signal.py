@@ -1,4 +1,4 @@
-"""Research-quality signal: are the agent's answers to real past tasks drifting? (2026-10-24, Alex: "OK")
+"""Research-quality signal: are the agent's answers to real past tasks drifting? (2026-10-24, Alex: [quote removed])
 
 The regression eval (agent_core.regression) decides pass or fail from declared checks on synthetic cases, and it is
 right to: a model grading a model's prose passed a wrong file. But nothing then tracks the work Alex cares about,
@@ -90,7 +90,7 @@ def answer_text(store, ident):
     'verified' under the completion rule, so its result arrives as needs_attention with the text after a
     'Completion not verified: ...' paragraph (first signal run, 2026-10-24: all three counted as further unread)."""
     text = regression._read(store.directory(ident) / "result.txt").strip()
-    if text.startswith("Completion not verified:"):
+    if text.startswith(("Completion not verified:", "Not complete:")):
         text = text.split("\n\n", 1)[1].strip() if "\n\n" in text else ""
     return re.sub(r"\n\[Route\][^\n]*$", "", text).strip()
 
