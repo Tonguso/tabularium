@@ -307,6 +307,18 @@ owner between the second and third.
    any success returns the lesson to candidate. Every such check also counts for the ledger entry, helped or hurt,
    and a verified entry stays in the ledger and keeps being counted.
 
+Every lesson also carries its own benchmark case. When a correction becomes a lesson, the runtime drafts a case from
+it: the task's request as the input, the owner's rule, and a placeholder for the expected answer and the checkable
+points, which the agent fills in through the same lesson tool. Before a case can count, it is calibrated: two
+isolated runs with the skill as it stands, one given the request alone and one given the request with the rule
+stated outright. A case that fails even when told the rule is broken; a case the current skill already passes proves
+nothing; both are refused by code, and the rest wait for the owner's quoted yes before joining the benchmark, frozen.
+Two or three approved cases of one skill recombine, by code, into a reserved case: one request carrying the others'
+rules, held out so a trial can tell a learned rule from a memorised task. A trial with no chosen cases runs on the
+skill's own development and reserved cases. The agent still writes the oracle, which is the risk; calibration catches
+an internally broken case, and only the owner's spot-check catches a wrong reading of what he meant. This follows
+GDPevo's construction of held-out tests from atomic rules, with the owner's gate in place of its reviewer agents.
+
 The weekly digest curates the ledger from those counts: it offers for retirement an entry that has hurt more often
 than it helped, and for a merge two entries in one skill that say nearly the same thing. Retirement, like approval,
 happens only on the owner's quoted words; the counts come from recorded checks with evidence, never from the agent's
