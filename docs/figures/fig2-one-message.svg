@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#2d3142">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <style>
+    .box{fill:#fff;stroke:#2d3142;stroke-width:1.5}
+    .store{fill:#f3f4f6;stroke:#2d3142;stroke-width:1.5}
+    .t{font-weight:700}
+    .s{fill:#6b7280;font-size:11px}
+    .l{stroke:#6b7280;stroke-width:1.5;fill:none;marker-end:url(#a)}
+    .acc{stroke:#c2410c;stroke-width:1.5;fill:none;marker-end:url(#b)}
+    .n{fill:#6b7280;font-size:11px;font-weight:700}
+  </style>
+
+  <text x="20" y="36" class="s">Every message is one turn. A background task is the same loop in a worker process, with checkpoints, a lease, requirements and a delivery gate.</text>
+
+  <rect x="20" y="70" width="130" height="86" rx="6" class="box"/>
+  <text x="30" y="88" class="n">1</text>
+  <text x="85" y="106" text-anchor="middle" class="t">Message</text>
+  <text x="85" y="124" text-anchor="middle" class="s">text, voice, file, photo,</text>
+  <text x="85" y="140" text-anchor="middle" class="s">recorded in the inbox</text>
+
+  <rect x="180" y="70" width="160" height="86" rx="6" class="store"/>
+  <text x="190" y="88" class="n">2</text>
+  <text x="260" y="106" text-anchor="middle" class="t">Request built</text>
+  <text x="260" y="124" text-anchor="middle" class="s">history, memory read fresh,</text>
+  <text x="260" y="140" text-anchor="middle" class="s">live tasks, questions, rulings</text>
+
+  <rect x="370" y="70" width="160" height="86" rx="6" class="box"/>
+  <text x="380" y="88" class="n">3</text>
+  <text x="450" y="106" text-anchor="middle" class="t">Model works</text>
+  <text x="450" y="124" text-anchor="middle" class="s">tools run by the runtime,</text>
+  <text x="450" y="140" text-anchor="middle" class="s">each with a receipt on disk</text>
+
+  <rect x="560" y="70" width="160" height="86" rx="6" class="box"/>
+  <text x="570" y="88" class="n">4</text>
+  <text x="640" y="106" text-anchor="middle" class="t">Reply envelope</text>
+  <text x="640" y="124" text-anchor="middle" class="s">text plus declared claims:</text>
+  <text x="640" y="140" text-anchor="middle" class="s">work, question, answers</text>
+
+  <rect x="750" y="70" width="130" height="86" rx="6" class="store"/>
+  <text x="760" y="88" class="n">5</text>
+  <text x="815" y="106" text-anchor="middle" class="t">Claims checked</text>
+  <text x="815" y="124" text-anchor="middle" class="s">against the task</text>
+  <text x="815" y="140" text-anchor="middle" class="s">store and the inbox</text>
+
+  <path d="M150,113 L180,113" class="l"/>
+  <path d="M340,113 L370,113" class="l"/>
+  <path d="M530,113 L560,113" class="l"/>
+  <path d="M720,113 L750,113" class="l"/>
+
+  <path d="M790,156 L790,196 L450,196 L450,156" class="acc"/>
+  <text x="620" y="190" text-anchor="middle" class="s" fill="#c2410c">a discrepancy goes back to the model, once</text>
+
+  <rect x="560" y="236" width="320" height="60" rx="6" class="box"/>
+  <text x="570" y="254" class="n">6</text>
+  <text x="720" y="264" text-anchor="middle" class="t">Outbox, then Telegram</text>
+  <text x="720" y="284" text-anchor="middle" class="s">a question records its message id on the decision</text>
+  <path d="M850,156 L850,236" class="l"/>
+
+  <text x="20" y="262" class="s">Checked: a promise of work with no job started, a reply that skips</text>
+  <text x="20" y="278" class="s">one of the owner's messages, a status that contradicts the task store.</text>
+</svg>

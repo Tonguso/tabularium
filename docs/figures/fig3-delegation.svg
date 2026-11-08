@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#2d3142">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <style>
+    .box{fill:#fff;stroke:#2d3142;stroke-width:1.5}
+    .store{fill:#f3f4f6;stroke:#2d3142;stroke-width:1.5}
+    .t{font-weight:700}
+    .s{fill:#6b7280;font-size:11px}
+    .l{stroke:#6b7280;stroke-width:1.5;fill:none;marker-end:url(#a)}
+    .d{stroke:#6b7280;stroke-width:1.5;fill:none;marker-end:url(#a);stroke-dasharray:5 4}
+    .acc{stroke:#c2410c;stroke-width:1.5;fill:none;marker-end:url(#b)}
+    .lane{fill:#6b7280;font-size:11px;letter-spacing:1px}
+  </style>
+
+  <text x="20" y="80" class="lane">COORDINATOR</text>
+  <text x="20" y="210" class="lane">DELEGATE</text>
+  <text x="20" y="325" class="lane">OWNER</text>
+  <line x1="20" y1="150" x2="880" y2="150" stroke="#e5e7eb"/>
+  <line x1="20" y1="270" x2="880" y2="270" stroke="#e5e7eb"/>
+
+  <!-- coordinator row -->
+  <rect x="140" y="50" width="170" height="84" rx="6" class="store"/>
+  <text x="225" y="72" text-anchor="middle" class="t">Brief, a contract</text>
+  <text x="225" y="90" text-anchor="middle" class="s">numbered items, critical first,</text>
+  <text x="225" y="106" text-anchor="middle" class="s">how each is verified, a budget</text>
+  <text x="225" y="122" text-anchor="middle" class="s">target, an early judgment slice</text>
+
+  <rect x="540" y="50" width="150" height="84" rx="6" class="box"/>
+  <text x="615" y="78" text-anchor="middle" class="t">Acceptance</text>
+  <text x="615" y="96" text-anchor="middle" class="s">verdict per item, from the</text>
+  <text x="615" y="112" text-anchor="middle" class="s">checks, not the report</text>
+
+  <rect x="740" y="50" width="140" height="84" rx="6" class="box"/>
+  <text x="810" y="78" text-anchor="middle" class="t">Report</text>
+  <text x="810" y="96" text-anchor="middle" class="s">unproven items named</text>
+  <text x="810" y="112" text-anchor="middle" class="s">as unproven</text>
+
+  <!-- delegate row -->
+  <rect x="140" y="170" width="170" height="80" rx="6" class="box"/>
+  <text x="225" y="196" text-anchor="middle" class="t">Work, in checkpoints</text>
+  <text x="225" y="214" text-anchor="middle" class="s">a question frees the slot</text>
+  <text x="225" y="230" text-anchor="middle" class="s">until the answer arrives</text>
+
+  <rect x="340" y="170" width="170" height="80" rx="6" class="store"/>
+  <text x="425" y="196" text-anchor="middle" class="t">Delivery</text>
+  <text x="425" y="214" text-anchor="middle" class="s">files and a declared result,</text>
+  <text x="425" y="230" text-anchor="middle" class="s">bound to the agreement</text>
+
+  <rect x="540" y="170" width="150" height="80" rx="6" class="box"/>
+  <text x="615" y="196" text-anchor="middle" class="t">Checks run</text>
+  <text x="615" y="214" text-anchor="middle" class="s">on the delivered bytes,</text>
+  <text x="615" y="230" text-anchor="middle" class="s">no model judge</text>
+
+  <!-- owner row -->
+  <rect x="540" y="290" width="340" height="56" rx="6" class="store"/>
+  <text x="710" y="312" text-anchor="middle" class="t">Owner-tier decision</text>
+  <text x="710" y="332" text-anchor="middle" class="s">anything that changes the owner's world waits for his answer</text>
+
+  <!-- flows -->
+  <path d="M225,134 L225,170" class="l"/>
+  <path d="M310,210 L340,210" class="l"/>
+  <path d="M510,210 L540,210" class="l"/>
+  <path d="M615,170 L615,134" class="l"/>
+  <path d="M690,92 L740,92" class="l"/>
+  <path d="M615,50 L615,28 L225,28 L225,50" class="d"/>
+  <text x="420" y="22" text-anchor="middle" class="s">rework named items, three at most; a rescope only adds obligations</text>
+  <path d="M690,120 L715,120 L715,290" class="acc"/>
+  <text x="722" y="206" class="s" fill="#c2410c">recorded at</text>
+  <text x="722" y="220" class="s" fill="#c2410c">acceptance</text>
+  <path d="M810,134 L810,290" class="l"/>
+</svg>

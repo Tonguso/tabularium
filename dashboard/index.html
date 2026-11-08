@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>Tabularium · Operations</title>
+<link rel="icon" type="image/png" href="/assets/tabularium.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#050809">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="/assets/apple-touch.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/assets/app-icon-512.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+<script src="/messaging.js" defer></script>
+</head>
+<body>
+<aside>
+  <div class="brand-row">
+    <a class="brand" href="/" aria-label="Tabularium home">
+      <span class="brand-mark"><img src="/assets/tabularium.svg" alt="Tabularium seal"></span>
+      <span class="wordmark">TABULARIUM<small>OPERATIONS</small></span>
+    </a>
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="main-nav" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div class="workspace-tag"><span class="status-dot"></span>PRIVATE · LOCAL</div>
+  <p class="navlabel">CONSOLE</p>
+  <nav id="main-nav" aria-label="Main navigation">
+    <button class="nav active" data-view="overview"><i>01</i><span>Overview</span></button>
+    <button class="nav" data-view="waiting"><i>02</i><span>Waiting on you</span></button>
+    <button class="nav" data-view="agents"><i>03</i><span>Agents</span></button>
+    <button class="nav" data-view="tasks"><i>04</i><span>Background work</span></button>
+    <button class="nav" data-view="messaging"><i>05</i><span>Messaging</span></button>
+    <button class="nav" data-view="history"><i>06</i><span>Conversations</span></button>
+    <button class="nav" data-view="communications"><i>07</i><span>Agent traffic</span></button>
+    <button class="nav" data-view="diagnostics"><i>08</i><span>Diagnostics</span></button>
+  </nav>
+  <p class="navlabel roster-label">ROSTER</p>
+  <div class="sidebar-roster">
+    <button data-view="agents"><img src="/assets/cato.jpg" alt=""><span>Cato<small>Chief of staff</small></span><i id="side-cato" class="presence"></i></button>
+    <button data-view="agents"><img src="/assets/tacitus.jpg" alt=""><span>Tacitus<small>Private agent</small></span><i id="side-tacitus" class="presence"></i></button>
+    <button data-view="agents"><img src="/assets/callimachus.jpg" alt=""><span>Cal<small>Librarian</small></span><i id="side-callimachus" class="presence"></i></button>
+    <button data-view="agents"><img src="/assets/vitruvius.jpg" alt=""><span>Vit<small>Engineer</small></span><i id="side-vitruvius" class="presence"></i></button>
+  </div>
+  <div class="sidebar-bottom"><span class="owner-avatar">A</span><div>Alex<small>UTC</small></div></div>
+</aside>
+<main>
+  <div class="topbar">
+    <span class="crumb">TABULARIUM <b>//</b> <span id="breadcrumb">OVERVIEW</span></span>
+    <span class="clock" id="clock" aria-live="off">--:--:--</span>
+    <span class="linkstate"><span id="connection" class="badge neutral">LINK · CONNECTING</span></span>
+  </div>
+  <header>
+    <div>
+      <p class="eyebrow" id="subtitle">Four agents. One board.</p>
+      <h1 id="heading">Overview</h1>
+    </div>
+    <div class="topright">
+      <button id="refresh" class="button secondary">Refresh</button>
+      <small id="updated">Waiting for status</small>
+    </div>
+  </header>
+  <div id="error" class="notice danger" role="alert" hidden></div>
+  <div id="toast" class="notice" role="status" hidden></div>
+  <div id="restart-status" class="notice" role="status" hidden></div>
+
+  <section id="overview" class="view">
+    <section id="waiting-notice" class="panel alert-panel" hidden>
+      <div class="section-title"><div><h2>Waiting on you <span id="waiting-count" class="count">0</span></h2><p class="muted" id="waiting-summary"></p></div><button class="link" data-view="waiting">Deal with them →</button></div>
+    </section>
+    <section id="checks-section" class="panel alert-panel" hidden>
+      <div class="section-title"><div><h2>Checks</h2><p class="muted">What the runtime could not confirm about delivered work. The result still reached you as written; nothing here is in your messages.</p></div></div>
+      <div id="checks"></div>
+    </section>
+    <div class="board">
+      <section class="panel">
+        <div class="section-title"><div><h2>Live now <span id="live-count" class="count">0</span></h2><p class="muted">Background work in progress. <span id="attention-count"></span></p></div><button class="link" data-view="tasks">All work →</button></div>
+        <div id="live-now" class="live-list"></div>
+      </section>
+      <section class="panel">
+        <div class="section-title"><div><h2>Today</h2><p class="muted">Model responses recorded by these agents since midnight, UTC.</p></div><button class="link" data-view="agents">Agents →</button></div>
+        <div id="usage-summary" class="stats"></div>
+      </section>
+    </div>
+    <div class="section-title"><div><h2>Agents</h2><p class="muted">Status, model and last reply. Controls and telemetry are under Agents.</p></div></div>
+    <div id="agent-tiles" class="tiles"></div>
+    <section class="panel">
+      <div class="section-title"><div><h2>This week against last</h2><p class="muted">From records only: turns, bounced replies, corrections, tasks, delegation items met, the memory exam, lessons. No model calls.</p></div></div>
+      <div class="tablewrap"><table id="scorecard"></table></div>
+    </section>
+  </section>
+
+  <section id="agents" class="view" hidden>
+    <div class="section-title"><div><h2>Status, models and usage</h2><p class="muted">Everything about each agent in one place. Model changes apply at the next turn; a running background worker keeps its model.</p></div><div class="actions"><button id="refresh-subscriptions" class="button secondary">Refresh allowance</button><button id="restart-agents" class="button danger">Restart all</button></div></div>
+    <div id="agent-board" class="agent-board"></div>
+    <div class="section-title"><div><h2>Subscription allowance</h2><p class="muted">Provider-reported limits. Shared account usage includes activity outside these agents.</p></div></div>
+    <div id="subscriptions" class="two-up"></div>
+    <section class="panel" id="search-order-panel">
+      <h2>Search order</h2>
+      <p class="muted">One order for all four agents, tried top to bottom. Saved settings apply to the next search, no restart.</p>
+      <div id="search-order" class="routing-controls"></div>
+    </section>
+    <section class="panel usage-panel">
+      <h2>Today's recorded model usage</h2>
+      <p id="usage-note" class="muted"></p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Agent / model</th><th>Billing route</th><th>Role</th><th class="num">Calls</th><th class="num">Input tokens</th><th class="num">Output tokens</th></tr></thead>
+        <tbody id="usage-rows"></tbody>
+      </table></div>
+      <p class="muted">Dollar estimates are unavailable until verified pricing is configured. Missing token measurements are shown explicitly.</p>
+    </section>
+  </section>
+
+  <section id="waiting" class="view" hidden>
+    <p class="notice subtle">Every question an agent asked you and every skill edit awaiting your go, oldest first. Open one and answer it here; the agent records your answer and carries on, and the item leaves this list.</p>
+    <div id="waiting-list"></div>
+  </section>
+  <section id="tasks" class="view" hidden>
+    <p class="notice subtle">Updates come from worker activity and saved checkpoints. Open a result to review the work before resuming a stopped task.</p>
+    <div id="all-tasks"></div>
+  </section>
+
+  <section id="messaging" class="view" hidden>
+    <section class="panel">
+      <div class="section-title"><button id="message-menu" class="button secondary" type="button" aria-label="Dashboard menu" aria-expanded="false" aria-controls="main-nav">Menu</button><label>Talk to <select id="message-agent"><option value="cato">Cato</option><option value="callimachus">Cal</option><option value="vitruvius">Vit</option><option value="tacitus">Tacitus</option></select></label><span id="message-connection" role="status">Connecting</span></div>
+      <p class="muted">Only dashboard messages appear here. Your agent also remembers what you say on Telegram.</p>
+      <div id="message-list" role="log" aria-label="Messages" aria-live="polite"></div>
+      <div id="message-question" hidden></div>
+      <form id="message-form"><label for="message-text">Message</label><textarea id="message-text" rows="3" maxlength="4000" placeholder="Write to this agent…"></textarea><div class="message-actions"><span id="message-notice" role="status"></span><button id="message-send" class="button" disabled>Send</button></div></form>
+      <p class="muted" id="message-history-note"></p><details class="message-install"><summary>Add to your phone</summary><p>With Tailscale connected, open this HTTPS page in Chrome. In the browser menu, choose Install app or Add to Home screen. Keep Tailscale connected when using the app. Voice, images, videos and files are supported, up to 50 MB each (audio: 25 MB). Notifications are not enabled. <a href="/agents.apk">Download Android APK</a>.</p></details>
+    </section>
+  </section>
+  <section id="history" class="view" hidden>
+    <section class="panel history-toolbar">
+      <form id="history-form">
+        <label>Agent<select id="history-agent"><option value="cato">Cato</option><option value="tacitus">Tacitus</option><option value="callimachus">Cal</option><option value="vitruvius">Vit</option></select></label>
+        <label>From<input id="history-from" type="date"></label>
+        <label>To<input id="history-to" type="date"></label>
+        <label class="search-field">Find in messages<input id="history-query" type="search" placeholder="Search a word or topic" maxlength="300"></label>
+        <button class="button" type="submit">Apply</button>
+      </form>
+      <div class="history-actions">
+        <span id="history-count" class="muted">Choose an agent to browse locally retained messages.</span>
+        <div><button id="export-md" class="button secondary">Download Markdown</button><button id="export-json" class="button secondary">Download JSON</button></div>
+      </div>
+    </section>
+    <p id="history-note" class="muted history-note">Exports contain locally retained text, not necessarily your complete Telegram history. Downloads are saved by your browser.</p>
+    <div id="history-messages"></div>
+    <div class="history-pagination"><button id="history-prev" class="button secondary" disabled>Newer</button><span id="history-page" class="muted"></span><button id="history-next" class="button secondary" disabled>Older</button></div>
+  </section>
+
+  <section id="communications" class="view" hidden>
+    <p class="notice subtle">Cato's audited wrapper only, not all agent traffic. Vit and Cal only; Tacitus excluded. No hidden reasoning. Mutable logs are not tamper-proof. Credential filtering is not comprehensive DLP.</p>
+    <section class="panel history-toolbar">
+      <form id="audit-form" class="audit-form">
+        <label>Agent<select id="audit-agent"><option value="">Vit and Cal</option><option value="vit">Vit</option><option value="cal">Cal</option></select></label>
+        <label>Event date<input type="date" id="audit-date"></label>
+        <label>Status<select id="audit-status"><option value="">All observed statuses</option></select></label>
+        <label>Exact request ID<input id="audit-request" maxlength="200" type="search"></label>
+        <button class="button" type="submit">Apply filters</button>
+      </form>
+      <div class="history-actions">
+        <span id="audit-count" class="muted">Apply filters to read audit records.</span>
+        <div><button class="button secondary" id="audit-json">Download JSON</button><button class="button secondary" id="audit-jsonl">Download JSONL</button><button class="button secondary" id="audit-txt">Download text</button></div>
+      </div>
+    </section>
+    <p class="muted history-note">Status is the last observed status within these filters, not a live probe. Events are chronological in request details. Downloads use the full filtered set, not only this page. Limits: 5,000 events, 100 requests per export, 8 MB response.</p>
+    <div id="audit-requests"></div>
+    <div class="history-pagination"><button id="audit-prev" class="button secondary" disabled>Newer</button><span id="audit-page" class="muted"></span><button id="audit-next" class="button secondary" disabled>Older</button></div>
+    <section id="audit-detail" class="panel" hidden>
+      <div class="section-title"><h2 id="audit-detail-title">Request records</h2><button id="audit-close" class="button secondary">Close details</button></div>
+      <p class="muted">Correlation uses request_id; operation_id links returned messages to intents. Full event objects retain the exact submitted request, responses, errors and artifact references. No path below opens a file.</p>
+      <div id="audit-selected-exports"></div>
+      <div id="audit-events"></div>
+    </section>
+  </section>
+
+  <section id="diagnostics" class="view" hidden>
+    <section class="panel">
+      <h2>Search &amp; browser</h2>
+      <p id="search-status" class="muted"></p>
+      <p class="muted">Saved browser profiles do not prove that a website login or membership is currently valid.</p>
+    </section>
+    <section class="panel logpanel">
+      <div class="section-title"><h2>Technical log</h2><div><select id="log-agent" aria-label="Agent log"><option value="cato">Cato</option><option value="tacitus">Tacitus</option><option value="callimachus">Cal</option><option value="vitruvius">Vit</option></select> <button class="button secondary" id="load-log">Read latest</button></div></div>
+      <pre id="logs">Select an agent to read its latest log. Common credential formats are redacted.</pre>
+    </section>
+  </section>
+
+  <footer><span>TABULARIUM</span><span>Management and messaging · on this computer · no model calls to refresh</span></footer>
+</main>
+<dialog id="detail"><div class="section-title"><h2 id="detail-title">Saved result</h2><button id="close-detail" class="button secondary">Close</button></div><pre id="detail-text"></pre></dialog>
+<dialog id="confirm"><h2 id="confirm-title">Confirm action</h2><p id="confirm-text" class="muted prose"></p><div class="dialog-actions"><button id="confirm-no" class="button secondary">Keep as is</button><button id="confirm-yes" class="button">Confirm</button></div></dialog>
+</body>
+</html>

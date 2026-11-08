@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 450" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#2d3142">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <style>
+    .box{fill:#fff;stroke:#2d3142;stroke-width:1.5}
+    .store{fill:#f3f4f6;stroke:#2d3142;stroke-width:1.5}
+    .proc{fill:#fff;stroke:#2d3142;stroke-width:1.5;stroke-dasharray:5 4}
+    .t{font-weight:700}
+    .s{fill:#6b7280;font-size:11px}
+    .l{stroke:#6b7280;stroke-width:1.5;fill:none;marker-end:url(#a)}
+    .lb{stroke:#6b7280;stroke-width:1.5;fill:none;marker-end:url(#a);marker-start:url(#a)}
+    .acc{stroke:#c2410c;stroke-width:1.5;fill:none;marker-end:url(#b)}
+    .cap{fill:#6b7280;font-size:11px;font-style:italic}
+  </style>
+
+  <!-- owner -->
+  <rect x="20" y="150" width="120" height="70" rx="6" class="box"/>
+  <text x="80" y="180" text-anchor="middle" class="t">Owner</text>
+  <text x="80" y="198" text-anchor="middle" class="s">Telegram, dashboard</text>
+
+  <!-- agent process -->
+  <rect x="200" y="40" width="400" height="300" rx="8" class="proc"/>
+  <text x="212" y="60" class="s">ONE AGENT PROCESS (four of them, one engine)</text>
+
+  <rect x="220" y="150" width="90" height="70" rx="6" class="store"/>
+  <text x="265" y="180" text-anchor="middle" class="t">Inbox</text>
+  <text x="265" y="198" text-anchor="middle" class="s">durable queue</text>
+
+  <rect x="340" y="110" width="150" height="150" rx="6" class="box"/>
+  <text x="415" y="138" text-anchor="middle" class="t">Turn loop</text>
+  <text x="415" y="160" text-anchor="middle" class="s">model call</text>
+  <text x="415" y="178" text-anchor="middle" class="s">tool dispatch, receipts</text>
+  <text x="415" y="196" text-anchor="middle" class="s">reply envelope</text>
+  <text x="415" y="214" text-anchor="middle" class="s">claims checked</text>
+  <text x="415" y="232" text-anchor="middle" class="s">against records</text>
+
+  <rect x="500" y="150" width="90" height="70" rx="6" class="store"/>
+  <text x="545" y="180" text-anchor="middle" class="t">Outbox</text>
+  <text x="545" y="198" text-anchor="middle" class="s">written, then sent</text>
+
+  <!-- worker -->
+  <rect x="340" y="282" width="150" height="46" rx="6" class="box"/>
+  <text x="415" y="301" text-anchor="middle" class="t">Worker process</text>
+  <text x="415" y="318" text-anchor="middle" class="s">same loop, per task, leased</text>
+
+  <!-- records -->
+  <rect x="660" y="80" width="220" height="190" rx="6" class="store"/>
+  <text x="770" y="106" text-anchor="middle" class="t">Records</text>
+  <text x="770" y="130" text-anchor="middle" class="s">task store: tasks, decisions,</text>
+  <text x="770" y="146" text-anchor="middle" class="s">delegations, requirements, proof</text>
+  <text x="770" y="170" text-anchor="middle" class="s">memory file and conversation archive</text>
+  <text x="770" y="194" text-anchor="middle" class="s">skills with lesson ledgers</text>
+  <text x="770" y="218" text-anchor="middle" class="s">receipts, checkpoints, health</text>
+  <text x="770" y="250" text-anchor="middle" class="cap">the only authority on fact</text>
+
+  <!-- supervisor and dashboard -->
+  <rect x="200" y="370" width="180" height="44" rx="6" class="box"/>
+  <text x="290" y="389" text-anchor="middle" class="t">Supervisor</text>
+  <text x="290" y="405" text-anchor="middle" class="s">starts, watches, releases</text>
+
+  <rect x="660" y="370" width="220" height="44" rx="6" class="box"/>
+  <text x="770" y="389" text-anchor="middle" class="t">Dashboard</text>
+  <text x="770" y="405" text-anchor="middle" class="s">reads records, never commands</text>
+
+  <!-- flows -->
+  <path d="M140,170 L220,170" class="l"/>
+  <text x="180" y="162" text-anchor="middle" class="s">message</text>
+  <path d="M310,185 L340,185" class="l"/>
+  <path d="M490,185 L500,185" class="l"/>
+  <path d="M545,220 L545,250 L80,250 L80,220" class="l"/>
+  <text x="312" y="245" text-anchor="middle" class="s">reply</text>
+  <path d="M490,140 L660,140" class="lb"/>
+  <text x="575" y="132" text-anchor="middle" class="s">read, write</text>
+  <path d="M490,305 L620,305 L620,230 L660,230" class="l"/>
+  <path d="M415,260 L415,282" class="acc"/>
+  <text x="425" y="276" class="s" fill="#c2410c">long work</text>
+  <path d="M290,370 L290,340" class="l"/>
+  <path d="M770,370 L770,270" class="l"/>
+  <path d="M660,392 L140,392 L140,220" class="l"/>
+
+  <text x="450" y="438" text-anchor="middle" class="cap">The owner answers questions on the dashboard; the answer re-enters through the inbox like any message.</text>
+</svg>
