@@ -10,12 +10,12 @@ import unittest
 from unittest.mock import patch
 
 from agent_harness import make_agent, put
-from agent_core.session_lifecycle import SessionLimit, continue_turn
-from agent_core.worker_lease import WorkerLease
-from agent_core.roster import ROLES
-from agent_core.turn_loop import run, Exchange
-from background_runtime import TaskStore, worker
-import subscription_runtime as bridge
+from tabularium.core.session_lifecycle import SessionLimit, continue_turn
+from tabularium.records.worker_lease import WorkerLease
+from tabularium.core.roster import ROLES
+from tabularium.core.turn_loop import run, Exchange
+from tabularium.records.background_runtime import TaskStore, worker
+from tabularium.models import subscription_runtime as bridge
 import claude_agent_sdk as sdk
 from claude_agent_sdk._errors import ResultError
 
@@ -148,7 +148,7 @@ class Ownership(unittest.TestCase):
         store = TaskStore(self.root)
         ident = store.start(1,'work')['id']
         folder = store.directory(ident)
-        code = "from pathlib import Path; import time; from agent_core.worker_lease import WorkerLease; p=Path(__import__('sys').argv[1]); l=WorkerLease(p/'worker.lock'); assert l.acquire(); (p/'ready').touch(); time.sleep(30)"
+        code = "from pathlib import Path; import time; from tabularium.records.worker_lease import WorkerLease; p=Path(__import__('sys').argv[1]); l=WorkerLease(p/'worker.lock'); assert l.acquire(); (p/'ready').touch(); time.sleep(30)"
         proc = subprocess.Popen([sys.executable,'-B','-c',code,str(folder)],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         try:
             deadline = time.monotonic()+5
@@ -199,8 +199,8 @@ class Ownership(unittest.TestCase):
         from test_worker import STUB
         # Exercise the actual subprocess entry point and full worker cleanup, without a live model.
         stub = STUB[:STUB.index('def run_turn(')] + '''
-from agent_core.session_lifecycle import continue_turn, SessionLimit
-from agent_runtime import atomic_json
+from tabularium.core.session_lifecycle import continue_turn, SessionLimit
+from tabularium.core.agent_runtime import atomic_json
 _inbox.record_event = lambda *a, **kw: None
 rounds = 0
 def run_turn(messages, chat):
@@ -217,7 +217,7 @@ def run_turn(messages, chat):
     import sys
     return continue_turn(sys.modules[__name__] if __name__ in sys.modules else NS(RUNTIME_DIR=RUNTIME_DIR, save_conversation=save_conversation, _inbox=_inbox), messages, chat, session)
 '''
-        (self.root/'telegram.py').write_text(stub,encoding='utf-8')
+        (self.root/'agent.py').write_text(stub,encoding='utf-8')
         store = TaskStore(self.root)
         ident = store.start(1,'work')['id']
         store.launch_next()
@@ -245,13 +245,12 @@ def run_turn(messages, chat):
 
     def test_legacy_launch_receives_an_identity_under_lease(self):
         from test_worker import STUB
-        (self.root/'telegram.py').write_text(STUB,encoding='utf-8')
+        (self.root/'agent.py').write_text(STUB,encoding='utf-8')
         store = TaskStore(self.root)
         ident = store.start(1,'work')['id']
         put(store, ident,'starting')
         env = dict(os.environ,CATO_BACKGROUND_TASK=str(ident))
-        runtime = str(Path(__file__).resolve().parents[1] / 'background_runtime.py')   # not D:/Agents: the public export runs elsewhere (2026-10-24)
-        proc = subprocess.run([sys.executable,'-B',runtime,'--worker',str(ident),
+        proc = subprocess.run([sys.executable,'-B','-m','tabularium','worker',str(ident),
                                '--agent',str(self.root),'--role','cato'],env=env,capture_output=True,timeout=10,
                               creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         self.assertEqual(proc.returncode,0,proc.stderr)

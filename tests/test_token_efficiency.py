@@ -6,11 +6,11 @@ import tempfile
 from types import SimpleNamespace as NS
 import unittest
 from agent_harness import make_agent
-from agent_core.responses_context import ResponsesContext
-from agent_core.command_output import command_result
-from agent_core.context_window import prepare_context
-from agent_core.outcome import Failed
-from agent_core.turn_loop import OpenAIResponses, run
+from tabularium.core.responses_context import ResponsesContext
+from tabularium.core.command_output import command_result
+from tabularium.core.context_window import prepare_context
+from tabularium.core.outcome import Failed
+from tabularium.core.turn_loop import OpenAIResponses, run
 
 
 class Efficiency(unittest.TestCase):
@@ -73,7 +73,7 @@ class Efficiency(unittest.TestCase):
         self.assertLess(len(result), len(output) // 3)
 
     def test_web_content_removes_code_not_visible_evidence_and_retrieves_middle(self):
-        from agent_core.web_content import visible_text, page_result
+        from tabularium.tools.web_content import visible_text, page_result
         html = b"<html><head><script>tracking_payload = 999999;</script><style>.x{color:red}</style></head><body>"
         html += b"<p>Unrelated visible text.</p>" * 350
         html += b"<table><tr><td>Revenue</td><td>123.4 million USD</td></tr></table>"

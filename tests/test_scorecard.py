@@ -3,9 +3,9 @@ import contextlib, io, json, sqlite3, tempfile, unittest
 from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
-from agent_core import scorecard
-from agent_core.turn_loop import Exchange
-from agent_core import turn_loop
+from tabularium.ops import scorecard
+from tabularium.core.turn_loop import Exchange
+from tabularium.core import turn_loop
 from agent_harness import make_agent
 
 NOW = datetime(2026, 10, 16, 20, 0, tzinfo=scorecard.LOCAL)       # a Friday

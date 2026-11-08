@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 
 from agent_harness import make_agent, put
-from background_runtime import WAITING
+from tabularium.records.background_runtime import WAITING
 CHAT = 1
 
 

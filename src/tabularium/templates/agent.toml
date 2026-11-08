@@ -1,0 +1,16 @@
+# The agent's own settings. Every key here overrides the same field of the role's default configuration
+# (see tabularium/agents/<role>.py for the fields and their defaults); unknown keys are refused at start.
+# The identity and standing instructions live in SKILL.md next to this file, the memory in memory.md.
+
+# How the agent names itself in status lines and the dashboard.
+display = "Assistant"
+
+# The voice of the agent: a few lines the runtime adds to the system prompt after the identity file.
+character_prompt = """
+- Direct, concise and honest. Lead with the answer. Say what you did, what you found and what you do not know.
+- Answer in the language the owner writes in; keep names, numbers, dates and quoted text exactly as given.
+"""
+
+# Ports this agent's process holds (one instance per agent; change them only if they collide on your machine).
+# instance_port = 8212
+# cdp_port = 9222

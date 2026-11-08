@@ -3,14 +3,13 @@ a looping agent is stopped with the runtime's own words and the task needs atten
 import sys, tempfile, time, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-import background_runtime
+from tabularium.records import background_runtime
 from agent_harness import put
 
 STUB = '''from pathlib import Path
 from types import SimpleNamespace as NS
 import json, os
-from background_runtime import TaskStore
+from tabularium.records.background_runtime import TaskStore
 AGENT_DIR = Path(__file__).resolve().parent
 store = TaskStore(AGENT_DIR)
 ident = int(os.environ["CATO_BACKGROUND_TASK"])
@@ -35,7 +34,7 @@ class LoopingWorker(unittest.TestCase):
     def test_a_looping_agent_is_stopped_in_the_runtimes_words(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "cato"; root.mkdir()
-            (root / "telegram.py").write_text(STUB, encoding="utf-8")
+            (root / "agent.py").write_text(STUB, encoding="utf-8")
             store = background_runtime.TaskStore(root)
             task = store.start(1, "Review the workbook")
             notices = []

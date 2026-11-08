@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 from tests.agent_harness import make_agent, put
-from agent_core import task_decisions as td
-from agent_core.conversation_recall import ConversationRecall
-from agent_core.outcome import Failed, Refused
+from tabularium.records import task_decisions as td
+from tabularium.memory.conversation_recall import ConversationRecall
+from tabularium.core.outcome import Failed, Refused
 
 
 class DecisionContext(unittest.TestCase):
@@ -67,7 +67,7 @@ class DecisionContext(unittest.TestCase):
         self.assertIn('sent', controls[0]['text'])
 
     def test_reply_cannot_recreate_question_after_preparing_its_action(self):
-        from agent_core.reply_envelope import Reply
+        from tabularium.core.reply_envelope import Reply
         agent = self.agent()
         decision = self.question(agent)
         td.execute(agent, 1, dict(action='prepare', decision_id=decision['id'],
@@ -159,7 +159,7 @@ class DecisionContext(unittest.TestCase):
             self.assertEqual(trace, history[5:-2])
 
     def test_followup_does_not_orphan_an_unfinished_tool_call(self):
-        from agent_core.context_window import completed_exchanges
+        from tabularium.core.context_window import completed_exchanges
         history = [{'role': 'user', 'content': 'seed'}, {'role': 'assistant', 'content': 'Ready'},
             {'role': 'user', 'content': 'Start'},
             {'role': 'assistant', 'content': [{'type': 'tool_use', 'id': 'pending', 'name': 'read_file', 'input': {}}]},
@@ -169,7 +169,7 @@ class DecisionContext(unittest.TestCase):
         self.assertEqual(wire, history)
 
     def test_both_provider_formats_retain_approval_and_current_calls(self):
-        import subscription_runtime
+        from tabularium.models import subscription_runtime
         agent = self.agent()
         history = agent.load_memory_context() + [
             {'role': 'user', 'content': 'Delete the redraw.'},
@@ -183,7 +183,7 @@ class DecisionContext(unittest.TestCase):
             self.assertIn('Keep section B', str(value))
 
     def test_ordinary_conversation_is_unchanged_and_canonical_history_is_verbatim(self):
-        from agent_core.context_window import completed_exchanges
+        from tabularium.core.context_window import completed_exchanges
         agent = self.agent()
         history = agent.load_memory_context()
         for n in range(9):

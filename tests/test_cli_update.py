@@ -5,9 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent_harness import make_agent
-import subscription_runtime as bridge
-
-
+from tabularium.models import subscription_runtime as bridge
 class CliUpdate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

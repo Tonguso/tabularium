@@ -4,9 +4,8 @@ import sys, tempfile, unittest
 from contextlib import closing
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tests"))
 from agent_harness import make_agent
-from agent_core.project_store import ProjectStore
+from tabularium.records.project_store import ProjectStore
 
 
 class Remember(unittest.TestCase):

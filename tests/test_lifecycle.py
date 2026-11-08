@@ -3,12 +3,8 @@ import sys, sqlite3, tempfile, time, unittest
 from pathlib import Path
 from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "cato"))      # engine imports the agent-folder modules (openai_chatgpt, ...)
-import supervisor
-import agent_control
-
-
+from tabularium.ops import supervisor
+from tabularium.ops import agent_control
 class Decide(unittest.TestCase):
     def test_start_when_not_running(self):
         c = supervisor.Child("cato")
@@ -41,7 +37,7 @@ class Restart(unittest.TestCase):
     def test_release_is_submitted_without_direct_drain_flags(self):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         root=Path(temp.name)
-        from agent_core import release
+        from tabularium.ops import release
         p=patch.object(release,'identity',return_value={'commit':'one','digest':'one'});p.start()
         q=patch.object(release,'uncommitted',return_value=[]);q.start()
         try:done=agent_control.request_restart(['cato','vitruvius'],root=root)
@@ -56,7 +52,7 @@ class Restart(unittest.TestCase):
 
 class Quiet(unittest.TestCase):
     def test_wait_for_quiet_reads_the_inbox(self):
-        import engine
+        from tabularium.core import engine
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "inbox.sqlite3"
             con = sqlite3.connect(path)

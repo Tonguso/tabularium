@@ -31,31 +31,33 @@ git clone https://github.com/Tonguso/tabularium.git
 cd tabularium
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt && pip install -e . --no-deps
-copy config.example.bat config.bat
-copy examples\minimal\SKILL.md cato\SKILL.md && copy examples\minimal\memory.md cato\memory.md
+mkdir %USERPROFILE%\agents && cd %USERPROFILE%\agents
+tabularium init cato
 ```
 
-Then:
+`init` writes the agent's folder (`cato\SKILL.md`, `memory.md`, `agent.toml`, `routing.json`) and the installation's
+`.env` and `POLICY.md` into the current folder, the *home* of this installation. Then:
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and get your own Telegram user id (message
-   [@userinfobot](https://t.me/userinfobot)). Open `config.bat` and fill in `OWNER_TELEGRAM_USER_ID`,
+   [@userinfobot](https://t.me/userinfobot)). Open `.env` and fill in `OWNER_TELEGRAM_USER_ID`,
    `TELEGRAM_BOT_TOKEN` and one model key, `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. The agent answers your user id
    and refuses everyone else.
-2. Open `cato\SKILL.md` and write who the agent is and who you are. The example is a plain assistant; everything
-   from the tone to what it must ask before doing is yours to change.
+2. Open `cato\SKILL.md` and write who the agent is and who you are. The template is a plain assistant; everything
+   from the tone to what it must ask before doing is yours to change. `agent.toml` holds the settings that are the
+   agent's own (its display name, its voice lines, its ports).
 3. Start it:
 
 ```bat
-call config.bat
-python cato\telegram.py
+tabularium run cato
 ```
 
-4. Message your bot. In a second terminal, `call config.bat && python dashboard.py` and open
+4. Message your bot. In a second terminal, in the same folder, `tabularium dashboard` and open
    <http://127.0.0.1:8220> to see the agent's turns, tasks and anything waiting on you.
 
+Every `tabularium` command works on the home folder: the current directory, or `--home PATH`, or `TABULARIUM_HOME`.
 `cato` is the coordinator slot of the roster: the agent that can learn from your corrections and, once the other
-agents exist, delegate to them. On its own it is a complete single agent. The example files are in
-[examples/minimal](examples/minimal/README.md).
+agents exist, delegate to them. On its own it is a complete single agent. What the folder holds and how to shape the
+agent is in [examples/minimal](examples/minimal/README.md).
 
 ## What you get
 
@@ -79,23 +81,26 @@ agents exist, delegate to them. On its own it is a complete single agent. The ex
 
 ## Add the rest of the cast
 
-The roster is one table in `agent_core/roster.py`. The repository ships four entry points:
+The roster is one table in `src/tabularium/core/roster.py`; each slot names the role module that runs it:
 
-| Slot | Folder | Role | Needs |
-|---|---|---|---|
-| Coordinator | `cato/` | Talks to you, researches, delegates, learns | `TELEGRAM_BOT_TOKEN` |
-| Librarian | `callimachus/` | Evidence gathering and knowledge records for the coordinator; two parallel workers | `CALLIMACHUS_TELEGRAM_BOT_TOKEN` |
-| Engineer | `vitruvius/` | Builds and tests artifacts on the machine for the coordinator | `VITRUVIUS_TELEGRAM_BOT_TOKEN` |
-| Private agent | `tacitus/` | Personal matters in confidence: no shell, no delegation, no learning loop | `TACITUS_TELEGRAM_BOT_TOKEN` |
+| Slot | Folder in the home | Role module | Does | Needs |
+|---|---|---|---|---|
+| `cato` | `cato/` | `agents/coordinator.py` | Talks to you, researches, delegates, learns | `TELEGRAM_BOT_TOKEN` |
+| `callimachus` | `callimachus/` | `agents/librarian.py` | Evidence gathering and knowledge records for the coordinator; two parallel workers | `CALLIMACHUS_TELEGRAM_BOT_TOKEN` |
+| `vitruvius` | `vitruvius/` | `agents/engineer.py` | Builds and tests artifacts on the machine for the coordinator | `VITRUVIUS_TELEGRAM_BOT_TOKEN` |
+| `tacitus` | `tacitus/` | `agents/private.py` | Personal matters in confidence: no shell, no delegation, no learning loop | `TACITUS_TELEGRAM_BOT_TOKEN` |
 
-Each needs its own bot token, a `SKILL.md` and an empty `memory.md`. With more than one agent, run them under the
-supervisor instead of by hand: `start_supervisor.bat` starts every configured agent and the dashboard, restarts a
-crashed one, and runs the test gate before a release (`python agent_control.py restart`).
+`tabularium init <slot>` writes each folder; each needs its own bot token. With more than one agent, run them under
+the supervisor instead of by hand: `tabularium supervisor` starts every configured agent and the dashboard, restarts
+a crashed one, and runs the test gate before a release (`tabularium restart`). On Windows, register it to start at
+logon with Task Scheduler, task name `AgentsSupervisor`, action `pythonw -m tabularium supervisor` in the home
+folder; `tabularium start` then starts or restarts everything, and `tabularium status` reports it.
 
 ## Configuration
 
-Everything is an environment variable, set in `config.bat` (git-ignored) from `config.example.bat`. The minimal set
-for one agent is three values; the rest are optional.
+Everything is an environment variable, set in the home folder's `.env` (git-ignored), which `tabularium init`
+writes from the template. A variable already set in the environment wins over the file. The minimal set for one
+agent is three values; the rest are optional.
 
 | Variable | Required | What it is |
 |---|---|---|
@@ -103,8 +108,9 @@ for one agent is three values; the rest are optional.
 | `TELEGRAM_BOT_TOKEN` | yes | The coordinator's bot token; one token per agent, never shared |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | one of them | Model access. Both may be set; routing prefers the configured subscription route and falls back to the API |
 | `CLAUDE_CODE_OAUTH_TOKEN` | no | Claude subscription route through the Claude Code CLI |
+| `TABULARIUM_HOME` | no | The home folder, when the command is not run inside it (`--home PATH` does the same) |
 | `CALLIMACHUS_…`, `VITRUVIUS_…`, `TACITUS_TELEGRAM_BOT_TOKEN` | per agent | Tokens for the other slots |
-| `TAVILY_API_KEY`, `ANYSEARCH_API_KEY` | no | Web search providers, tried in the order in `search_order.json` |
+| `TAVILY_API_KEY`, `ANYSEARCH_API_KEY` | no | Web search providers, tried in the order set on the dashboard |
 | `ELEVENLABS_API_KEY` | no | Spoken replies to voice notes |
 | `EDGAR_IDENTITY` | no | Name and e-mail that SEC EDGAR requires of every client |
 | `KNOWLEDGE_BASE_DIR` | no | The librarian's writable knowledge-base folder |
@@ -132,24 +138,42 @@ after: [verification](docs/verification.md), [requirements](docs/requirements.md
 
 ## Layout
 
+The code is one package, `src/tabularium/`; an installation's agents and records live in a separate home folder.
+
 | Path | What it is |
 |---|---|
-| `engine.py`, `agent_core/` | The runtime: turn loop, reply envelope, tools, lifecycle, decisions, verification, memory, learning, outbox |
-| `background_runtime.py` | Task store and background workers: queue, lanes, delegation register, acceptance, delivery |
-| `supervisor.py`, `agent_control.py` | Process supervision, drain restarts, the test gate, status |
-| `dashboard.py`, `dashboard/` | Local web page that reads the records; it never commands an agent |
-| `<agent>/telegram.py` | One agent: its configuration, tools and persona on top of the shared `AgentApp` |
-| `examples/minimal/` | A `SKILL.md` and `memory.md` to start the first agent from |
-| `tests/`, `cato/tests/` | The offline test suites; a release runs both |
-| `docs/` | The white paper, its figures, and the design notes |
+| `core/` | The runtime: engine (turn loop), `agent_app` (tools and handlers), reply envelope, roster, logging |
+| `records/` | The task store (`background_runtime`), lifecycle table, decisions, requirements and proof, outbox, receipts |
+| `channels/` | Telegram with the owner gate; the dashboard's message channel |
+| `models/` | Provider routing, the Claude and ChatGPT subscription routes, usage accounting |
+| `tools/` | Web search, page reading, SEC filings, the desktop, spreadsheets, video, the knowledge archive |
+| `memory/` | The memory file, conversation recall, the weekly exam, consolidation, image memory |
+| `learning/` | Lessons, trials, benchmark cases, corrections, the regression benchmark, interaction evaluation |
+| `delegation/` | Briefs as contracts, the research and work clients, the audited local delegate command |
+| `ops/` | Supervisor, release gate, retention, the operations snapshot, scorecards, the control commands |
+| `dashboard/` | The local web server, its static page and the Android wrapper; it never commands an agent |
+| `agents/` | `build()` and the four role modules: coordinator, librarian, engineer, private |
+| `templates/` | What `tabularium init` writes: `SKILL.md`, `memory.md`, `agent.toml`, `routing.json`, `.env`, `POLICY.md` |
+| `cli.py`, `paths.py`, `config.py` | The `tabularium` command, the home folder, the `.env` loader |
+
+Outside the package: `cato/`, `callimachus/`, `vitruvius/`, `tacitus/` are the reference cast's folders (skills and
+routing; no memory or records), so the repository root is itself a valid home for development. `tests/` is the
+offline suite that a release runs, `docs/` the white paper, its figures and the design notes, `tools/` the scripts
+that built this layout.
+
+A home folder holds, per agent, `<slot>/SKILL.md`, `memory.md`, `agent.toml`, `skills/`, `routing.json` and the
+agent's records under `task_state/`; and for the installation `.env`, `POLICY.md`, `logs/` and the dashboard's state
+under `dashboard/`.
 
 ## Status
 
-Version 0.3. It runs daily, and it is not yet a drop-in product:
+Version 0.4 (in progress). It runs daily, and it is not yet a drop-in product:
 
-- Windows only. The batch files, the Task Scheduler supervisor, Outlook access and the desktop tool assume Windows;
-  the engine, Telegram and SQLite do not. Cross-platform support is the next piece of work after packaging.
+- Windows first. The supervisor's process adoption, Outlook access and the desktop tool assume Windows; the engine,
+  Telegram, SQLite and the command-line entry point do not. Cross-platform support is the next piece of work.
 - The agents' prompts address the owner by a placeholder name. Making the owner's name a setting is open work.
+- The slots are the four of the roster. A fifth agent is a line in the roster and a role module; naming agents
+  freely in `agent.toml` is open work.
 - Subscription model routes (Claude Code, the ChatGPT desktop app) depend on those clients being installed and
   signed in; the paid APIs are the fallback.
 - The four entry points are the working examples of the roster; their skills, memory and the owner's data are not

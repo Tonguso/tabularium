@@ -6,7 +6,7 @@ the rules for contributions here.
 - **Fix the design, not the symptom.** A bug is a decision that allowed it. Name the decision, find every path that
   shares it, prefer deleting a path to guarding it, and prove the class is gone with a test that failed before.
 - **A failing test first.** Every change to the runtime comes with a test that reproduces the failure on the old
-  code. The two suites (`tests/`, `cato/tests/`) must pass before a restart; the restart command refuses otherwise.
+  code. The suite (`tests/`) must pass before a restart; the restart command refuses otherwise.
 - **Records over guesses.** Do not add a rule in a prompt where a record and a check in code would do. Do not add a
   check that trusts an actor's account of its own work.
 - **Concept budget.** A change that adds a new named thing (a table, a state, a file kind, a term that can reach the

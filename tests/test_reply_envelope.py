@@ -9,8 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import Mock
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "tests"))
-from agent_core import reply_envelope as env
+from tabularium.core import reply_envelope as env
 from agent_harness import load_agent
 
 NOTES = "Alex says restarting PyCharm didn't help. Why the difference? Let me think about teardown order..."

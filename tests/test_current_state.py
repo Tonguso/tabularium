@@ -12,13 +12,12 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "tests"))
 from agent_harness import load_agent
 
 
 class SteerReachesTheLiveSession(unittest.TestCase):
     def test_instruction_arriving_mid_session_is_in_the_next_tool_result(self):
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
         with tempfile.TemporaryDirectory() as folder:
             update = {"role": "user", "content": "[Background scope update #102]\nAlso build a US carriers basket."}
@@ -108,15 +107,15 @@ class ARouteChangeRerunsTheBenchmarkOnce(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_one_launch_per_route_and_none_without_a_gap(self):
-        from agent_core import regression
+        from tabularium.learning import regression
         with patch.object(regression, "primary_route", return_value="gpt-6-luna"), \
-             patch.object(regression, "route_gap", return_value=None), patch("engine.subprocess.Popen") as popen:
+             patch.object(regression, "route_gap", return_value=None), patch("tabularium.core.engine.subprocess.Popen") as popen:
             self.assertFalse(self.runtime.run_benchmark_rerun())
             popen.assert_not_called()
         with patch.object(regression, "primary_route", return_value="gpt-6-luna"), \
-             patch.object(regression, "route_gap", return_value="- BENCHMARK? ..."), patch("engine.subprocess.Popen") as popen:
+             patch.object(regression, "route_gap", return_value="- BENCHMARK? ..."), patch("tabularium.core.engine.subprocess.Popen") as popen:
             self.assertTrue(self.runtime.run_benchmark_rerun())
-            self.assertEqual(popen.call_args.args[0][2:4], ["eval", "cato"])
+            self.assertEqual(popen.call_args.args[0][1:5], ["-m", "tabularium", "eval", "cato"])
             self.assertFalse(self.runtime.run_benchmark_rerun())                 # the same route is not launched twice
             popen.assert_called_once()
 
@@ -125,9 +124,9 @@ class AnAnswerlessSessionGetsOneMoreSession(unittest.TestCase):
     def test_a_session_that_ends_without_a_reply_is_sent_back_once_then_stops(self):
         # 2026-10-31 04:02, Cato task 421: the subscription session ended with an empty result and no structured
         # output; the worker crashed with ReplyMissing and Alex's phone got "Worker error: ReplyMissing".
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
-        from agent_core.reply_envelope import ReplyMissing
+        from tabularium.core.reply_envelope import ReplyMissing
         with tempfile.TemporaryDirectory() as folder:
             agent = NS(AGENT_DIR=Path(folder), RUNTIME_DIR=Path(folder), SYSTEM_PROMPT="persona", MAX_TOOL_ITERATIONS=4,
                        _abort_requested={}, _background_boundary=lambda *a: [], get_tools=lambda _: [],
@@ -204,7 +203,7 @@ class ExamRunsLikeARealTurn(unittest.TestCase):
                 seen["archive"] = rt._execute_tool_unguarded("search_conversations", {"query": "Tokyo"}, chat)
                 return "Tokyo"
             rt.run_turn = fake_turn
-            from agent_core import memory_exam
+            from tabularium.memory import memory_exam
             answer, used = memory_exam.ask_agent(rt, 1, "Where does Alex travel next week?")
             self.assertEqual(seen["tools"], {"read_memory"})
             self.assertIn("not available", seen["archive"])            # refused by the dispatcher, not by a prompt

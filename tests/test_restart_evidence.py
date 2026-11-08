@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import agent_control
-import supervisor
-from agent_core.roster import AGENTS
-from agent_runtime import atomic_json
+from tabularium.ops import agent_control
+from tabularium.ops import supervisor
+from tabularium.core.roster import AGENTS
+from tabularium.core.agent_runtime import atomic_json
 
 
 class RestartEvidence(unittest.TestCase):
@@ -151,7 +151,7 @@ class LiveEvidence(unittest.TestCase):
 
     def test_supervisor_owns_durable_targeted_drains(self):
         from concurrent.futures import Future
-        from agent_core import release
+        from tabularium.ops import release
         target={'commit':'test','digest':'test'}
         p=patch.object(release,'identity',return_value=target);p.start()
         q=patch.object(release,'uncommitted',return_value=[]);q.start()
@@ -185,7 +185,7 @@ class LiveEvidence(unittest.TestCase):
             self.state['children']['cato'] = dict(self.record, pid=child.pid, created=created, crashes=[self.now-1])
             self.save()
             row = {'ProcessId': child.pid, 'ParentProcessId': os.getpid(), 'Name': 'python.exe',
-                   'CommandLine': 'D:\\Agents\\cato\\telegram.py'}
+                   'CommandLine': 'python.exe -m tabularium run cato'}
             query = patch('subprocess.run', return_value=type('Result', (), {'stdout': json.dumps([row])})())
             state = patch.object(supervisor, 'STATE', self.root/'logs/supervisor_state.json')
             query.start(); state.start()
@@ -211,8 +211,8 @@ class DrainFlow(unittest.TestCase):
         code = '''
 import os, sys, threading
 from pathlib import Path
-from agent_runtime import DurableInbox
-from engine import AgentRuntime
+from tabularium.core.agent_runtime import DurableInbox
+from tabularium.core.engine import AgentRuntime
 root = Path(sys.argv[1])
 a = AgentRuntime()
 a.AGENT_DIR = root

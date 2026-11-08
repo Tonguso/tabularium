@@ -9,12 +9,13 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from agent_harness import make_agent, put
-from agent_core import lifecycle, task_decisions
-from agent_core.lifecycle import InvalidTransition
-from agent_core.outcome import Refused
-from agent_core.reply_envelope import Reply
-from background_runtime import TaskStore
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.records import lifecycle
+from tabularium.records import task_decisions
+from tabularium.records.lifecycle import InvalidTransition
+from tabularium.core.outcome import Refused
+from tabularium.core.reply_envelope import Reply
+from tabularium.records.background_runtime import TaskStore
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 CHAT = OWNER_CHAT_ID
 
 
@@ -69,7 +70,7 @@ class Transitions(unittest.TestCase):
         decision = self.store.ask(CHAT, self.task, "Which font size?")
         self.store.add_delegation(self.task, "vit", "req-1", "Tiro fixes", "owner_decision")
         self.store.move(self.task, "park", lifecycle.WAITING)
-        from agent_core.task_decisions import answer_record
+        from tabularium.records.task_decisions import answer_record
         answer_record(self.store, CHAT, decision["id"], "14 point", '{"relay": "test"}')
         self.assertEqual(self.store.get(self.task)["status"], lifecycle.WAITING)
         self.assertEqual(self.store.decisions(CHAT, self.task), [])
@@ -124,7 +125,7 @@ class Agent(unittest.TestCase):
                 return b"removed", b""
         def popen(argv, **kw):
             ran.append(argv[-1]); return Proc()
-        with patch("agent_core.agent_app.subprocess.Popen", side_effect=popen):
+        with patch("tabularium.core.agent_app.subprocess.Popen", side_effect=popen):
             self.assertEqual(second._settle_by_reply(message("yes", reply_to=asked[0])), (True, ""))
             self.assertEqual(second._settle_by_reply(message("yes", reply_to=asked[0])), (False, ""))   # settled
         self.assertEqual(ran, ["Remove-Item -Recurse D:\\Baskets\\old"])

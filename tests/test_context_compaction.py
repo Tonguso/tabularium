@@ -2,10 +2,7 @@
 import json, sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from agent_core import context_window as cw
-
-
+from tabularium.core import context_window as cw
 def turn(i, tool, size, protected=False):
     """One assistant tool_use plus its user tool_result, `size` characters long."""
     return [{"role": "assistant", "content": [{"type": "tool_use", "id": f"t{i}", "name": tool, "input": {"q": i}}]},

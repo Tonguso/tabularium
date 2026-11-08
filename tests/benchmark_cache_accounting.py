@@ -5,9 +5,9 @@ from pathlib import Path
 import tempfile,json,subprocess,importlib.util
 from types import SimpleNamespace
 from openai import OpenAI
-from agent_core.openai_chatgpt import ChatGPTPlan
-from agent_core.shared_handlers import SharedHandlers
-from agent_core.reply_envelope import reply
+from tabularium.models.openai_chatgpt import ChatGPTPlan
+from tabularium.core.shared_handlers import SharedHandlers
+from tabularium.core.reply_envelope import reply
 root=Path(__file__).resolve().parents[1]
 scratch=tempfile.TemporaryDirectory()
 old=Path(scratch.name)/'old_shared.py'

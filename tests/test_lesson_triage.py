@@ -3,9 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_core import learning
-
-
+from tabularium.learning import learning
 class Triage(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

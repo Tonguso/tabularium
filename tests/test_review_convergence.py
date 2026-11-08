@@ -13,9 +13,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from tests.agent_harness import make_agent, put
 from tests.test_delegation_agreement import bind_delegate
-from agent_core import verification, regression, specialist_review
-
-
+from tabularium.records import verification
+from tabularium.learning import regression
+from tabularium.learning import specialist_review
 class ReviewConvergence(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -31,14 +31,14 @@ class ReviewConvergence(unittest.TestCase):
         self.store.record_submission('request', self.task, 'vit', 'engineering', 1000, self.items, brief=dict(question='Synthetic brief'))
         self.store.add_delegation(self.task, 'vit', 'request', 'engineering', 'worker_judgment')
         self.store.mark_delegation(self.task, 'request', 'returned')
-        import delegation_contract
+        from tabularium.delegation import delegation_contract
         p = patch.object(delegation_contract, 'BRIEFS', self.root / 'briefs')
         p.start()
         self.addCleanup(p.stop)
         self.remote_calls = []
 
     def runner(self, argv):                       # the bridge: a rework resumes the delegate, nothing else is checked here
-        self.remote_calls.append(argv[3])
+        self.remote_calls.append(argv[4])          # argv: python -m module agent action ...
         return SimpleNamespace(returncode=0, stdout=json.dumps(dict(status='queued')), stderr='')
 
     def fetch(self):
@@ -98,7 +98,7 @@ class ReviewConvergence(unittest.TestCase):
         self.redeliver('DONE: a different result')
         self.accept({1: 'met', 2: 'met'})
         self.assertEqual(json.loads(self.store.scorecard('request')['rework_log'])[-1]['outcome'], {'1': 'changed'})
-        from agent_core import scorecard
+        from tabularium.ops import scorecard
         week = scorecard.agent_week(self.root.parent, 'cato', time.time() - 60, time.time() + 60)['delegations']
         self.assertEqual((week['rework_changed'], week['rework_unchanged']), (1, 2))
 

@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from agent_core import messaging
-from agent_runtime import DurableInbox
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.channels import messaging
+from tabularium.core.agent_runtime import DurableInbox
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 
 
 class DashboardMedia(unittest.TestCase):
@@ -56,7 +56,7 @@ class DashboardMedia(unittest.TestCase):
     def test_media_uses_real_agent_image_and_voice_paths_for_every_agent(self):
         from tests.agent_harness import make_agent, AGENTS
         from PIL import Image
-        from agent_core.reply_envelope import Reply
+        from tabularium.core.reply_envelope import Reply
         image = Image.new('RGB', (30, 30), 'red')
         buf = io.BytesIO()
         image.save(buf, 'PNG')
@@ -97,9 +97,9 @@ class DashboardMedia(unittest.TestCase):
 
     def test_real_video_frames_reach_each_agents_model_without_telegram(self):
         from tests.agent_harness import make_agent, AGENTS
-        from cato import video_intake
+        from tabularium.tools import video_intake
         import threading
-        from agent_core.reply_envelope import Reply
+        from tabularium.core.reply_envelope import Reply
         source = self.root/'clip.mp4'
         ffmpeg, _ = video_intake.ffmpeg_paths()
         subprocess.run([ffmpeg, '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
@@ -137,10 +137,10 @@ class DashboardMedia(unittest.TestCase):
         import threading
         from http.server import ThreadingHTTPServer
         # Import-time task managers must never open the real agent databases in this test.
-        constructor = patch('background_runtime.TaskStore', return_value=Mock())
+        constructor = patch('tabularium.records.background_runtime.TaskStore', return_value=Mock())
         constructor.start()
         try:
-            dashboard = importlib.import_module('dashboard')
+            dashboard = importlib.import_module('tabularium.dashboard.server')
         finally:
             constructor.stop()
         patches = [patch.object(dashboard, 'ROOT', self.root), patch.object(dashboard.messaging, 'ready', return_value=True)]

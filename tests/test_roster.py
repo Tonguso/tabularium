@@ -1,15 +1,14 @@
 """Roles are declared once and passed explicitly; agent lists are not hand-kept (2026-10-15).
 
 Why: TaskStore used to infer delegation, budget and worker rights from its folder name, and the agent list was typed in
-eight files; the operations view listed Cato and Tacitus only, so Cal and Vit never appeared in it. Now agent_core.roster
+eight files; the operations view listed Cato and Tacitus only, so Cal and Vit never appeared in it. Now tabularium.core.roster
 is the one table and every other file imports it."""
 import ast, unittest
 from pathlib import Path
-from agent_core.roster import AGENTS, ROLES, Role
-import background_runtime as rt
+from tabularium.core.roster import AGENTS, ROLES, Role
+from tabularium.records import background_runtime as rt
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_FILES = [ROOT / n for n in ("engine.py", "background_runtime.py", "supervisor.py", "agent_control.py", "dashboard.py",
-                                    "retention.py", "subscription_usage.py", "subscription_connections.py")] + sorted((ROOT / "agent_core").glob("*.py"))
+RUNTIME_FILES = sorted(p for p in (ROOT / "src" / "tabularium").rglob("*.py") if p.parts[-2] not in ("agents", "templates"))
 
 
 class Roster(unittest.TestCase):

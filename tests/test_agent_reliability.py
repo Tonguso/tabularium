@@ -12,9 +12,8 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from agent_runtime import DurableInbox, atomic_json, recover_tool_history
-from owner_telegram import OwnerBot, is_owner, OWNER_CHAT_ID
+from tabularium.core.agent_runtime import DurableInbox, atomic_json, recover_tool_history
+from tabularium.channels.owner_telegram import OwnerBot, is_owner, OWNER_CHAT_ID
 from telebot.types import Message
 
 
@@ -144,7 +143,7 @@ class Reliability(unittest.TestCase):
     def test_atomic_write_preserves_previous_on_failure(self):
         path = self.root / 'state.json'
         atomic_json(path, {'old': True})
-        with patch('agent_runtime.os.replace', side_effect=OSError('simulated disk error')):
+        with patch('tabularium.core.agent_runtime.os.replace', side_effect=OSError('simulated disk error')):
             with self.assertRaises(OSError):
                 atomic_json(path, {'new': True})
         self.assertEqual(json.loads(path.read_text()), {'old': True})

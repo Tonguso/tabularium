@@ -5,9 +5,11 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from agent_core import memory_consolidation as mc, memory_context, trials
+from tabularium.memory import memory_consolidation as mc
 
+from tabularium.memory import memory_context
 
+from tabularium.learning import trials
 class Consolidation(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

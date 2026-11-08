@@ -10,10 +10,8 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / 'tests')]
 from agent_harness import load_agent
-import subscription_runtime
-
+from tabularium.models import subscription_runtime
 @unittest.skipUnless(os.name == 'nt', 'Windows console behavior')
 class HiddenConsoles(unittest.TestCase):
     def test_shell_tool_requests_no_console(self):
@@ -22,7 +20,7 @@ class HiddenConsoles(unittest.TestCase):
             runtime = load_agent('cato', root)['runtime']
             runtime.BACKGROUND_TASK_ID = ''
             runtime.auto_modes[1] = True
-            with patch('agent_core.agent_app.subprocess.Popen') as launch:
+            with patch('tabularium.core.agent_app.subprocess.Popen') as launch:
                 launch.return_value.communicate.return_value = (b'hello', b'')
                 launch.return_value.returncode = 0
                 self.assertEqual(json.loads(runtime.tool_execute_command('Write-Output hello', 1))['stdout'], 'hello')

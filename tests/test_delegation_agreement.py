@@ -8,9 +8,10 @@ import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 from tests.agent_harness import make_agent, put
-from background_runtime import TaskStore
-from agent_core import verification, task_decisions
-from agent_core.roster import ROLES
+from tabularium.records.background_runtime import TaskStore
+from tabularium.records import verification
+from tabularium.records import task_decisions
+from tabularium.core.roster import ROLES
 
 
 def bind_delegate(store, task, request, items, agent='vit'):
@@ -43,7 +44,7 @@ class DelegationAgreement(unittest.TestCase):
         self.store.record_submission('request', self.task, 'vit', 'research', 1000, self.items)
         self.store.add_delegation(self.task, 'vit', 'request', 'research', 'worker_judgment')
         self.store.mark_delegation(self.task, 'request', 'returned')
-        import delegation_contract
+        from tabularium.delegation import delegation_contract
         p = patch.object(delegation_contract, 'BRIEFS', self.root/'briefs')
         p.start()
         self.addCleanup(p.stop)
@@ -136,7 +137,7 @@ class DelegationAgreement(unittest.TestCase):
         self.assertNotIn('"accepted": true', self.accept(how='made-up'))
 
     def test_completed_owner_cannot_ignore_a_negative_review(self):
-        from agent_core.reply_envelope import Reply
+        from tabularium.core.reply_envelope import Reply
         self.fetch()
         self.accept('not_met')
         self.assertEqual(self.store.finish(self.task, Reply('All done', task_outcome='completed')), 'needs_attention')
@@ -146,7 +147,7 @@ class DelegationAgreement(unittest.TestCase):
 
     def test_legacy_owner_proof_migrates_without_running_the_check_again(self):
         import hashlib
-        from agent_runtime import atomic_json
+        from tabularium.core.agent_runtime import atomic_json
         artifact = self.root/'legacy.txt'
         artifact.write_text('correct', encoding='utf-8')
         item = dict(self.items[0], verification=dict(kind='contains', paths=[str(artifact)], text='correct'))
@@ -172,22 +173,17 @@ class DelegationAgreement(unittest.TestCase):
 
     def test_real_clients_share_answers_rescope_and_rework_for_both_delegates(self):
         for short, name, filename in [('vit','vitruvius','work_client.py'),('cal','callimachus','research_client.py')]:
-            spec = importlib.util.spec_from_file_location('synthetic_client_'+short, Path(__file__).resolve().parents[1]/name/filename)
+            spec = importlib.util.spec_from_file_location('synthetic_client_'+short, Path(__file__).resolve().parents[1]/'src'/'tabularium'/'delegation'/filename)
             client = importlib.util.module_from_spec(spec)
-            if short == 'cal':
-                from callimachus import knowledge
-                loader_patch = patch.dict('sys.modules', knowledge=knowledge)
-                loader_patch.start()
-                self.addCleanup(loader_patch.stop)
             spec.loader.exec_module(client)
             client.ROOT = self.root.parent/name
             client.OWNER_CHAT_ID = 1
             request_id = 'roundtrip-'+short
             def runner(argv):
                 request = json.loads(Path(argv[-1]).read_text()) if '--request-file' in argv else None
-                response = client.call(argv[3], request=request, request_id=None if request else argv[-1])
+                response = client.call(argv[4], request=request, request_id=None if request else argv[-1])   # argv: python -m module agent action ...
                 return SimpleNamespace(returncode=0,stdout=json.dumps(response),stderr='')
-            import delegation_contract
+            from tabularium.delegation import delegation_contract
             patcher = patch.object(delegation_contract,'CARDS',self.root/'cards')
             patcher.start()
             try:

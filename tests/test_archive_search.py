@@ -1,8 +1,8 @@
 """search_archived finds passages in archived tool output and hands back offsets for read_file (2026-10-18)."""
 import contextlib, io, tempfile, unittest
 from pathlib import Path
-from agent_core import archive_search
-from agent_core.outcome import Failed
+from tabularium.memory import archive_search
+from tabularium.core.outcome import Failed
 from agent_harness import make_agent
 
 

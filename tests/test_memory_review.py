@@ -2,9 +2,7 @@
 import json, sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from agent_core import memory_review as mr
-
+from tabularium.memory import memory_review as mr
 MEMORY = """# Memory
 
 ## Alex — Who He Is

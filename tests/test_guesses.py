@@ -2,12 +2,9 @@
 import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "cato")]
-import background_runtime as rt
-from agent_core.roster import ROLES
-import delegation_contract as dc
-
-
+from tabularium.records import background_runtime as rt
+from tabularium.core.roster import ROLES
+from tabularium.delegation import delegation_contract as dc
 class FirstCheckpoint(unittest.TestCase):
     def store(self, tmp, agent):
         folder = Path(tmp) / agent; folder.mkdir()

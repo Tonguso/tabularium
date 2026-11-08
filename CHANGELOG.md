@@ -3,6 +3,22 @@
 All notable changes to Tabularium are recorded here. The format follows Keep a Changelog; versions follow semantic
 versioning.
 
+## [Unreleased]
+
+### Changed
+- The code is one installable package, `tabularium`, grouped by what the modules do (core, records, channels,
+  models, tools, memory, learning, delegation, ops, dashboard, agents). Every module keeps its name; only its place
+  changed. Code and state are separate: an installation's agents, `.env`, `POLICY.md`, logs and dashboard state live
+  in a home folder (`TABULARIUM_HOME`, `--home`, or the current directory).
+- One command for every process: `tabularium init | run | dashboard | supervisor | status | restart | start | eval |
+  lessons | exam | review`. Background workers start as `tabularium worker`. The batch launchers are gone.
+- An agent is a folder of data. The four entry-point scripts became role modules under `tabularium.agents`
+  (coordinator, librarian, engineer, private), the roster names which runs each slot, and an optional `agent.toml`
+  in the agent's folder overrides any field of the role's configuration.
+- Configuration is a `.env` file in the home folder, read by the command; API keys are read when an agent is built,
+  not when a module is imported.
+- One test suite (`tests/`); the coordinator's suite merged into it. The release gate runs it.
+
 ## [0.3.0] - 2026-11-08
 
 ### Added

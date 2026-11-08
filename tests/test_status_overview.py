@@ -7,9 +7,7 @@ Status now returns one short row per task; the hand-off side is in test_turn_not
 import json, sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "tests"))
-import background_runtime as rt
-
+from tabularium.records import background_runtime as rt
 STALE = "[Background work: #143 needs_attention: Rewrite this week's US & Europe weekly recap; task_evidence(id) for details]"
 
 

@@ -4,10 +4,10 @@ from pathlib import Path
 import tempfile
 import unittest
 from tests.agent_harness import make_agent
-from agent_core import verification
-from agent_core.roster import AGENTS
-from agent_core.reply_envelope import Reply
-from background_runtime import TaskStore
+from tabularium.records import verification
+from tabularium.core.roster import AGENTS
+from tabularium.core.reply_envelope import Reply
+from tabularium.records.background_runtime import TaskStore
 
 class RequirementsTests(unittest.TestCase):
     def setUp(self):
@@ -104,7 +104,7 @@ class RequirementsTests(unittest.TestCase):
 
     def test_fixed_benchmark_uses_its_existing_contract_without_a_second_checklist(self):
         agent = self.setup_agent('cato')
-        from agent_core import regression
+        from tabularium.learning import regression
         store = agent._background
         case = regression.load_cases(store.agent_dir)[0]
         (store.directory(1) / 'context.json').write_text(json.dumps({'eval': {
@@ -129,7 +129,7 @@ class RequirementsTests(unittest.TestCase):
     def test_status_and_budget_views_use_the_durable_contract(self):
         agent = self.setup_agent('cato')
         self.checkpoint(agent, [self.item('towers'), self.item('carriers')])
-        import task_cost
+        from tabularium.records import task_cost
         self.assertEqual(len(task_cost.contract(agent._background.directory(1))['completion_items']), 2)
 
     def test_initial_contract_is_saved_before_worker_launch(self):

@@ -5,9 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from agent_harness import make_agent
-from agent_core import verification
-
-
+from tabularium.records import verification
 class RunBeforeReady(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -30,7 +28,7 @@ class RunBeforeReady(unittest.TestCase):
         self.store.mark_delegation(self.task, 'req-test', 'returned')
         self.delivery_id = self.store.save_delegate_result(self.task, 'req-test', 'DONE: delivered result')
         self.returned = self.store.delegation_returned_at('req-test', self.task)
-        import delegation_contract
+        from tabularium.delegation import delegation_contract
         patcher = patch.object(delegation_contract, 'BRIEFS', self.root / 'briefs')
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -70,7 +68,7 @@ class RunBeforeReady(unittest.TestCase):
     def test_complete_flow_survives_reloading_and_records_passed(self):
         self.assertEqual(self.run_check(1)['status'], 'passed')
         self.assertEqual(self.run_check(2)['status'], 'passed')
-        from background_runtime import TaskStore
+        from tabularium.records.background_runtime import TaskStore
         self.agent._background = TaskStore(self.root)
         result = json.loads(self.accept())
         self.assertEqual(result['critical_unmet'], [])

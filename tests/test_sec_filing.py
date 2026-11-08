@@ -4,8 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 import pandas as pd
-from agent_core import sec_edgar
-from agent_core.outcome import Failed
+from tabularium.tools import sec_edgar
+from tabularium.core.outcome import Failed
 from agent_harness import make_agent
 
 

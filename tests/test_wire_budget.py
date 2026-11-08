@@ -15,13 +15,11 @@ from PIL import Image
 import claude_agent_sdk as sdk
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 from agent_harness import make_agent, put
-from agent_core import wire_budget as wire
-from agent_core.outcome import Failed
-from agent_core.roster import ROLES
-from background_runtime import TaskStore
-import subscription_runtime as bridge
-
-
+from tabularium.core import wire_budget as wire
+from tabularium.core.outcome import Failed
+from tabularium.core.roster import ROLES
+from tabularium.records.background_runtime import TaskStore
+from tabularium.models import subscription_runtime as bridge
 def noisy_png():
     image = Image.frombytes("L", (1500, 1500), random.Random(42).randbytes(1500 * 1500))
     buffer = io.BytesIO()
@@ -184,7 +182,7 @@ class WireBudget(unittest.TestCase):
         self.assertEqual(self.agent.outbox().pending(), [])
 
     def test_uncompressible_image_fails_explicitly(self):
-        replacement = patch("agent_core.shared_handlers.IMAGE_ENCODED_CAP", 1)
+        replacement = patch("tabularium.core.shared_handlers.IMAGE_ENCODED_CAP", 1)
         replacement.start()
         try:
             path = self.root / "tiny.png"
@@ -243,7 +241,7 @@ class CrashDelivery(unittest.TestCase):
         stub = (STUB + "\n_routing = NS(enabled=lambda root: True)\n").replace('os.environ["CATO_BACKGROUND_TASK"]', 'os.environ["VITRUVIUS_BACKGROUND_TASK"]')
         stub = stub.replace('raise RunawayStop("5 consecutive tool calls failed or were refused; the last was review_output")',
                             'raise RuntimeError("test worker exception")')
-        (root / "telegram.py").write_text(stub, encoding="utf-8")
+        (root / "agent.py").write_text(stub, encoding="utf-8")
         store = TaskStore(root, ROLES["vitruvius"])
         task = store.start(123, "Inspect screenshot")
         context = store.directory(task["id"]) / "context.json"

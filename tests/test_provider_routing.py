@@ -5,10 +5,7 @@ import tempfile
 from types import SimpleNamespace as NS
 import unittest
 from unittest.mock import Mock, patch
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import provider_routing as routing
-
-
+from tabularium.models import provider_routing as routing
 class Routing(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -31,7 +28,7 @@ class Routing(unittest.TestCase):
             self.assertIn('receipt 123',messages[-1]['content'])
             return 'done'
         self.agent.run_turn_openai.side_effect=first
-        with patch('subscription_runtime.run_claude',side_effect=routing.Unavailable('quota',3600,quota=True)) as claude:
+        with patch('tabularium.models.subscription_runtime.run_claude',side_effect=routing.Unavailable('quota',3600,quota=True)) as claude:
             self.assertEqual(routing.run(self.agent,history,1),'done')
         self.assertEqual(claude.call_count,1)
         self.assertEqual(len(history),2)
@@ -42,7 +39,7 @@ class Routing(unittest.TestCase):
 
     def test_unknown_outcome_never_falls_back(self):
         self.agent.run_turn_openai.side_effect=RuntimeError('tool outcome unknown')
-        with patch('subscription_runtime.run_claude') as claude:
+        with patch('tabularium.models.subscription_runtime.run_claude') as claude:
             with self.assertRaisesRegex(RuntimeError,'unknown'):
                 routing.run(self.agent,[],1)
             claude.assert_not_called()
@@ -50,7 +47,7 @@ class Routing(unittest.TestCase):
 
     def test_cooldown_skips_and_expiry_restores_preferred(self):
         self.agent.run_turn_openai.side_effect=routing.Unavailable('quota',60)
-        with patch('subscription_runtime.run_claude',return_value='Claude'):
+        with patch('tabularium.models.subscription_runtime.run_claude',return_value='Claude'):
             self.assertEqual(routing.run(self.agent,[],1),'Claude')
             self.agent.run_turn_openai.reset_mock(side_effect=True)
             self.assertEqual(routing.run(self.agent,[],1),'Claude')
@@ -74,7 +71,7 @@ class Routing(unittest.TestCase):
 
 class ClaudeBridge(unittest.TestCase):
     def test_only_owned_tools_and_durable_receipts(self):
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
         with tempfile.TemporaryDirectory() as folder:
             messages=[{'role':'user','content':'Do the task'}]
@@ -104,7 +101,7 @@ class ClaudeBridge(unittest.TestCase):
             self.assertEqual(agent.save_conversation.call_count,2)  # receipts persisted; final draft waits for verification
 
     def test_api_login_is_not_accepted_as_subscription(self):
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         agent=NS()
         with patch.object(bridge,'find_cli',return_value='fake.exe'),patch.object(bridge,'auth_status',return_value={'loggedIn':True,'authMethod':'api_key'}):
             with self.assertRaises(routing.Unavailable):

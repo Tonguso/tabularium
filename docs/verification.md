@@ -6,7 +6,7 @@ the owner authorized replacing that gate on 2026-10-23.
 
 ## One owner of proof
 
-`agent_core/verification.py` owns check execution and the interpretation of its records.
+`tabularium/records/verification.py` owns check execution and the interpretation of its records.
 All four agents use `verify_requirement`. `TaskStore.accept_delegation` enforces the same rule,
 including callers that bypass Cato's tool handler. No extra reviewer model or supervisor is involved.
 

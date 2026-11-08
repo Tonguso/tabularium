@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 import tempfile
 import unittest
 from pathlib import Path
-from agent_core.roster import AGENTS
+from tabularium.core.roster import AGENTS
 from agent_harness import make_agent
 
 
@@ -16,7 +16,7 @@ class CompletionFeedback(unittest.TestCase):
         self.root = Path(self.tmp.name)
 
     def test_provider_repair(self):
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
         for name in AGENTS:
             for route in ('openai', 'anthropic', 'claude'):
@@ -89,7 +89,7 @@ class CompletionFeedback(unittest.TestCase):
                 self.assertEqual([m['content'] for m in messages if m['role']=='assistant' and isinstance(m['content'],str)],
                                  ['Saved and checked.'])
     def scripted(self, agent, steps):
-        from agent_core import turn_loop
+        from tabularium.core import turn_loop
         wires = []
         class Provider:
             def exchange(self, messages):
@@ -109,7 +109,7 @@ class CompletionFeedback(unittest.TestCase):
         return result, wires, messages
 
     def prepared(self, suffix='test'):
-        from agent_core import verification
+        from tabularium.records import verification
         root = self.root/suffix
         root.mkdir()
         agent = make_agent('cato',root,background=True)
@@ -133,8 +133,8 @@ class CompletionFeedback(unittest.TestCase):
         self.assertEqual(len(messages),2)
 
     def test_ordinary_success_waits_and_explicit_blockers_add_no_model_calls(self):
-        from agent_core.reply_envelope import Reply
-        from agent_core.task_decisions import finish
+        from tabularium.core.reply_envelope import Reply
+        from tabularium.records.task_decisions import finish
         for mode in ('success','blocked','waiting','question','decision','delegate','trial','cancelled'):
             agent, artifact, receipt = self.prepared(mode)
             store = agent._background
@@ -173,7 +173,8 @@ class CompletionFeedback(unittest.TestCase):
         self.assertNotIn('Runtime feedback',json.dumps(messages))
 
     def test_failed_check_repair_keeps_other_proof_and_rechecks_at_commit(self):
-        from agent_core import turn_loop,verification
+        from tabularium.core import turn_loop
+        from tabularium.records import verification
         agent,artifact,receipt=self.prepared()
         before=receipt.read_bytes()
         other=artifact.parent/'other.txt'
@@ -196,7 +197,7 @@ class CompletionFeedback(unittest.TestCase):
         self.assertEqual(agent._background.finish(1,result),'needs_attention')
 
     def test_changing_failures_cannot_create_an_unbounded_correction_loop(self):
-        from agent_core import turn_loop
+        from tabularium.core import turn_loop
         agent,artifact,receipt=self.prepared()
         artifact.write_text('wrong',encoding='utf-8')
         done=dict(reply='Done',task_outcome='completed')
@@ -209,7 +210,7 @@ class CompletionFeedback(unittest.TestCase):
         self.assertEqual(len(wires),3)
         self.assertEqual(agent._background.finish(1,result),'needs_attention')
     def test_session_limit_does_not_reset_failed_completion_budget(self):
-        from agent_core import turn_loop
+        from tabularium.core import turn_loop
         agent,artifact,receipt=self.prepared()
         artifact.write_text('wrong',encoding='utf-8')
         agent.MAX_TOOL_ITERATIONS=2

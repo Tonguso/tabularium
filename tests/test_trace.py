@@ -7,9 +7,7 @@ from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
-from agent_core import trace
-
-
+from tabularium.core import trace
 class Trace(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

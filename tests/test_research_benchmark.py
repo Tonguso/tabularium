@@ -4,8 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from agent_core import regression
-
+from tabularium.learning import regression
 GOOD = {
     'research-scope-v1': dict(towers=['ALP', 'BRK'], carriers=['CRN', 'DEL'], excluded=['ELM'],
                             source_ids={'ALP':'s1','BRK':'s2','CRN':'s3','DEL':'s4'}),
@@ -111,9 +110,9 @@ class ResearchBenchmark(unittest.TestCase):
             self.assertTrue(all(rows[field]['status']=='failed' for field in overrides), (key, rows))
 
     def test_independent_review_runs_after_generation_not_inside_worker(self):
-        import background_runtime as rt
+        from tabularium.records import background_runtime as rt
         from agent_harness import put
-        from agent_core.reply_envelope import Reply
+        from tabularium.core.reply_envelope import Reply
         case = self.case('research-decision-v1')
         store = rt.TaskStore(self.root)
         calls = []
@@ -138,9 +137,9 @@ class ResearchBenchmark(unittest.TestCase):
         self.assertTrue(result['cases'][0]['attempts'][0]['passed'])
 
     def test_unfinished_benchmark_generation_does_not_become_recorded_success(self):
-        import background_runtime as rt
+        from tabularium.records import background_runtime as rt
         from agent_harness import put
-        from agent_core.reply_envelope import Reply
+        from tabularium.core.reply_envelope import Reply
         store=rt.TaskStore(self.root)
         ident=regression.start_rerun(store,1,self.case('research-decision-v1'),1)
         put(store,ident,'running')

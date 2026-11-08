@@ -7,10 +7,10 @@
 import json, subprocess, tempfile, unittest
 from pathlib import Path
 
-from agent_core import memory_consolidation as mc, release
-import agent_control
+from tabularium.memory import memory_consolidation as mc
 
-
+from tabularium.ops import release
+from tabularium.ops import agent_control
 class MemoryLostUpdate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -73,8 +73,8 @@ class Release(unittest.TestCase):
         self.assertFalse((self.root/'dashboard/restart_status.json').exists())
 
     def test_a_worker_attempt_records_its_release(self):
-        from background_runtime import TaskStore
-        from agent_core import lifecycle
+        from tabularium.records.background_runtime import TaskStore
+        from tabularium.records import lifecycle
         store = TaskStore(self.root / "cato")
         ident = store.start(1, "work")["id"]
         store.claim_next()

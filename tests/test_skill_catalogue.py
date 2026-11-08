@@ -3,10 +3,7 @@ files made the parser return nothing, so the two most-used skills were listed wi
 import sys, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "cato")]
-import engine
-
-
+from tabularium.core import engine
 class SkillCatalogue(unittest.TestCase):
     def test_every_skill_has_a_description(self):
         for agent in ("cato", "tacitus", "callimachus", "vitruvius"):

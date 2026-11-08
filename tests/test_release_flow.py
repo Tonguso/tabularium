@@ -3,11 +3,12 @@ import os, sys, tempfile, unittest
 from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import patch
-import agent_control, supervisor
-from agent_core import release
-from agent_core.roster import AGENTS
-from agent_core.worker_lease import WorkerLease
-from agent_runtime import atomic_json
+from tabularium.ops import agent_control
+from tabularium.ops import supervisor
+from tabularium.ops import release
+from tabularium.core.roster import AGENTS
+from tabularium.records.worker_lease import WorkerLease
+from tabularium.core.agent_runtime import atomic_json
 
 class ReleaseFlow(unittest.TestCase):
     def setUp(self):
@@ -115,7 +116,7 @@ class TestedSource(unittest.TestCase):
         for p in patches:p.start()
         try:
             release.test_version(Path(temp.name),target)
-            self.assertEqual([Path(c[0]).name for c in calls],['python.exe','python.exe'])
+            self.assertEqual([Path(c[0]).name for c in calls],['python.exe'])
         finally:
             for p in reversed(patches):p.stop()
 
@@ -159,8 +160,8 @@ class TestedSource(unittest.TestCase):
 
 class BusyBoundaries(unittest.TestCase):
     def test_foreground_drain_waits_for_background_ownership(self):
-        from engine import AgentRuntime
-        from agent_runtime import DurableInbox
+        from tabularium.core.engine import AgentRuntime
+        from tabularium.core.agent_runtime import DurableInbox
         from types import SimpleNamespace
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);root=Path(temp.name)
         agent=AgentRuntime();agent._background=SimpleNamespace(processes={},agent_dir=root)
@@ -173,7 +174,7 @@ class BusyBoundaries(unittest.TestCase):
     def test_dashboard_finishes_inflight_request_before_acknowledging(self):
         import threading, urllib.request
         from http.server import BaseHTTPRequestHandler
-        import dashboard
+        from tabularium.dashboard import server as dashboard
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);root=Path(temp.name)
         entered=threading.Event();finish=threading.Event();closing=threading.Event()
         class Handler(BaseHTTPRequestHandler):

@@ -1,6 +1,6 @@
 [project]
 name = "tabularium"
-version = "0.3.0"
+version = "0.4.0.dev0"
 description = "An owner-judged agent framework: the records decide, not anyone's word."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -39,6 +39,9 @@ browser = ["playwright>=1.45"]
 desktop = ["pyautogui>=0.9", "pywin32>=306"]
 dev = ["pytest>=8.0"]
 
+[project.scripts]
+tabularium = "tabularium.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/Tonguso/tabularium"
 Documentation = "https://github.com/Tonguso/tabularium/blob/main/docs/WHITEPAPER.md"
@@ -48,14 +51,12 @@ Issues = "https://github.com/Tonguso/tabularium/issues"
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["agent_core"]
-py-modules = [
-    "agent_control", "agent_logging", "agent_runtime", "background_runtime", "dashboard", "dashboard_audit",
-    "dashboard_history", "engine", "owner_telegram", "provider_routing", "retention", "search_routing",
-    "spreadsheet_upload", "subscription_connections", "subscription_runtime", "subscription_usage", "supervisor",
-    "task_cost",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tabularium = ["templates/*", "tools/search_order.json", "learning/benchmark_cases.json",
+              "dashboard/static/*", "dashboard/static/assets/*", "dashboard/android/**"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "cato/tests"]
+testpaths = ["tests"]

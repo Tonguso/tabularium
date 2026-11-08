@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from background_runtime import TaskStore
+from tabularium.records.background_runtime import TaskStore
 
 
 class DecisionSeven(unittest.TestCase):

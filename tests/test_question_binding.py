@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from tests.agent_harness import make_agent, put
-from agent_core import task_decisions as td
-from agent_core.reply_envelope import Reply, reply
-from agent_core.roster import AGENTS
+from tabularium.records import task_decisions as td
+from tabularium.core.reply_envelope import Reply, reply
+from tabularium.core.roster import AGENTS
 
 
 class QuestionBinding(unittest.TestCase):

@@ -12,10 +12,10 @@ import requests
 from telebot.apihelper import ApiTelegramException
 
 from agent_harness import make_agent
-from agent_core import outbox as outbox_mod
-from agent_core.outbox import Outbox
-import agent_logging
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.records import outbox as outbox_mod
+from tabularium.records.outbox import Outbox
+from tabularium.core import agent_logging
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 CHAT = OWNER_CHAT_ID
 
 

@@ -3,10 +3,7 @@ printing thread in all six processes)."""
 import io, sys, tempfile, threading, time, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-import agent_logging
-
-
+from tabularium.core import agent_logging
 class BlockingHandle(io.StringIO):
     def write(self, s):
         threading.Event().wait()          # never returns: the disk is gone

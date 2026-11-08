@@ -9,7 +9,7 @@ from unittest.mock import Mock
 from PIL import Image
 
 from agent_harness import make_agent
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 
 
 class SendPhoto(unittest.TestCase):

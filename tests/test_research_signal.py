@@ -3,9 +3,9 @@ import json, tempfile, unittest
 from pathlib import Path
 
 from agent_harness import make_agent, put
-from agent_core import research_signal, regression, trials
-
-
+from tabularium.learning import research_signal
+from tabularium.learning import regression
+from tabularium.learning import trials
 class Signal(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -6,10 +6,7 @@ message, so Cato kept bringing it up."""
 import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "cato")]
-import background_runtime as rt
-
-
+from tabularium.records import background_runtime as rt
 class CancelAnyState(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.store = rt.TaskStore(Path(self.tmp.name))

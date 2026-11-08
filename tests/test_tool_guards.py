@@ -11,12 +11,9 @@
 import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tests"))
 from agent_harness import make_agent
-from agent_core.outcome import Refused, Failed
-import background_runtime
-
-
+from tabularium.core.outcome import Refused, Failed
+from tabularium.records import background_runtime
 class Guards(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

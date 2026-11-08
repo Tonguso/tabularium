@@ -1,4 +1,4 @@
-"""The desktop tool (agent_core.desktop): taken per task on Alex's yes, released by his next message, the clock, a
+"""The desktop tool (tabularium.tools.desktop): taken per task on Alex's yes, released by his next message, the clock, a
 credential window or his hand on the mouse; coordinates mapped from the screenshot the model saw."""
 import base64
 import io
@@ -11,10 +11,12 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from agent_core import desktop, task_decisions as td
-from agent_core.outcome import Refused
+from tabularium.tools import desktop
+
+from tabularium.records import task_decisions as td
+from tabularium.core.outcome import Refused
 from agent_harness import make_agent
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 
 
 class FakeDriver:

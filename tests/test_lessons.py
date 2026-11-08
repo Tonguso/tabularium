@@ -3,9 +3,8 @@ it works. Alex approves the exact edit; the runtime applies exactly that edit; a
 import sqlite3, sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "cato")]
-from agent_core import learning
-from agent_core.project_store import ProjectStore
+from tabularium.learning import learning
+from tabularium.records.project_store import ProjectStore
 
 SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\n## Membership\n- Read the archives for each name.\n'
 
@@ -173,7 +172,7 @@ class Lessons(unittest.TestCase):
     def test_repeats_are_flagged(self):
         self.assertEqual(learning.similar(self.root, 1, "freeze membership before the workbook build"), self.key)
         self.assertEqual(learning.similar(self.root, 1, "Yahoo's TOPIX ETF has bad prints in March"), "")
-        import background_runtime                       # the note a repeat triggers points at the one flow, changes nothing itself
+        from tabularium.records import background_runtime   # the note a repeat triggers points at the one flow, changes nothing itself
         self.assertIn("lesson action=propose", background_runtime.REPEAT_NOTE)
         self.assertIn("stays a candidate", background_runtime.REPEAT_NOTE)
 

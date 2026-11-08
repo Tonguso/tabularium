@@ -2,10 +2,7 @@
 import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "cato")]
-import background_runtime as rt
-
-
+from tabularium.records import background_runtime as rt
 class StartNow(unittest.TestCase):
     def test_without_a_monitor_it_only_queues(self):
         with tempfile.TemporaryDirectory() as tmp:

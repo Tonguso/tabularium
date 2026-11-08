@@ -7,8 +7,8 @@ turn. The same evening a correction diagnosis held the single worker slot for ha
 import tempfile, time, unittest
 
 from agent_harness import put
-from background_runtime import TaskStore, meta
-from agent_core.reply_envelope import Reply, unbacked
+from tabularium.records.background_runtime import TaskStore, meta
+from tabularium.core.reply_envelope import Reply, unbacked
 CHAT = 1
 
 

@@ -8,11 +8,11 @@ from datetime import datetime
 import unittest
 from unittest.mock import patch
 
-from background_runtime import TaskStore
-from agent_core.roster import ROLES
-from agent_core.reply_envelope import Reply
-from agent_core.task_decisions import answer_record, verify_reply
-from agent_core.worker_lease import WorkerLease
+from tabularium.records.background_runtime import TaskStore
+from tabularium.core.roster import ROLES
+from tabularium.core.reply_envelope import Reply
+from tabularium.records.task_decisions import answer_record, verify_reply
+from tabularium.records.worker_lease import WorkerLease
 from tests.agent_harness import make_agent, put
 
 
@@ -232,7 +232,7 @@ class WorkerProcessDecisionTest(unittest.TestCase):
         store = None
         try:
             root = Path(tmp.name)
-            (root / "telegram.py").write_text(WORKER_STUB, encoding="utf-8")
+            (root / "agent.py").write_text(WORKER_STUB, encoding="utf-8")
             store = TaskStore(root)
             task = store.start(1, "Choose a setting then produce the report", "")
             notices = []
@@ -270,9 +270,9 @@ WORKER_STUB = '''
 from pathlib import Path
 from types import SimpleNamespace as NS
 import json, os
-from background_runtime import TaskStore
-from agent_core.reply_envelope import Reply
-from agent_core import task_decisions
+from tabularium.records.background_runtime import TaskStore
+from tabularium.core.reply_envelope import Reply
+from tabularium.records import task_decisions
 task_decisions.audit=lambda agent,chat,draft,evidence: draft
 AGENT_DIR=Path(__file__).resolve().parent
 ident=int(os.environ["CATO_BACKGROUND_TASK"])
@@ -308,7 +308,7 @@ def run_turn(messages,chat):
         store.checkpoint(chat, ident, "Recorded answer", "", [], completion_items=[{
             "item": "Use decision B", "source": updates[0]["id"], "check": "Read saved decision", "verification": {
                 "kind": "contains", "paths": [str(artifact)], "text": "Report with B delivered"}}])
-        from agent_core import verification
+        from tabularium.records import verification
         checker=NS(_background=store, BACKGROUND_TASK_ID=str(ident), config=NS(background_refusals=False),
                    get_tools=lambda provider: [{"name": "read_file"}],
                    _execute_tool_unguarded=lambda name, args, chat: Path(args["path"]).read_text())

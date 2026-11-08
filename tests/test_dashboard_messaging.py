@@ -6,8 +6,8 @@ import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from agent_runtime import DurableInbox
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.core.agent_runtime import DurableInbox
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 
 
 class DashboardMessaging(unittest.TestCase):
@@ -39,8 +39,8 @@ class DashboardMessaging(unittest.TestCase):
         self.assertEqual([m.text for _, m in followups], ['Include the appendix'])
 
     def test_outbox_dashboard_reply_never_calls_telegram_and_retains_plain_text(self):
-        from agent_core.outbox import Outbox
-        from agent_core.messaging import conversation
+        from tabularium.records.outbox import Outbox
+        from tabularium.channels.messaging import conversation
         bot = Mock(side_effect=AssertionError('Telegram must not be called'))
         outbox = Outbox(self.root, bot)
         outbox.put(OWNER_CHAT_ID, ['Dashboard reply'], decision=12, channel='dashboard', original='**Dashboard reply**')
@@ -52,8 +52,8 @@ class DashboardMessaging(unittest.TestCase):
         bot.assert_not_called()
 
     def test_chunked_telegram_reply_is_one_dashboard_message_without_copied_originals(self):
-        from agent_core.outbox import Outbox
-        from agent_core.messaging import conversation
+        from tabularium.records.outbox import Outbox
+        from tabularium.channels.messaging import conversation
         outbox = Outbox(self.root, lambda:Mock())
         original='Long reply across many chunks'
         outbox.put(OWNER_CHAT_ID, ['chunk']*110, original=original)
@@ -68,9 +68,9 @@ class DashboardMessaging(unittest.TestCase):
 
     def test_all_agents_handle_dashboard_without_typing_or_voice_network_calls(self):
         from tests.agent_harness import make_agent
-        from agent_core.messaging import decode
-        from agent_core.reply_envelope import Reply
-        from agent_core.roster import AGENTS
+        from tabularium.channels.messaging import decode
+        from tabularium.core.reply_envelope import Reply
+        from tabularium.core.roster import AGENTS
         for name in AGENTS:
             root = self.root / name
             root.mkdir()
@@ -95,8 +95,8 @@ class DashboardMessaging(unittest.TestCase):
 
     def test_explicit_action_answer_runs_once_unrelated_yes_never_approves(self):
         from tests.agent_harness import make_agent
-        from agent_core.messaging import decode
-        from agent_core import task_decisions as td
+        from tabularium.channels.messaging import decode
+        from tabularium.records import task_decisions as td
         a = make_agent('cato', self.root)
         a.send_message = Mock()
         a.execute_tool = Mock(return_value='done')
@@ -112,8 +112,8 @@ class DashboardMessaging(unittest.TestCase):
     def test_a_skill_edit_verdict_from_the_card_is_settled_before_any_turn(self):
         """2026-11-08: the Apply and Drop buttons are his answer; the runtime records it, no agent turn is needed."""
         from tests.agent_harness import make_agent
-        from agent_core.messaging import decode
-        from agent_core import learning
+        from tabularium.channels.messaging import decode
+        from tabularium.learning import learning
         a = make_agent('cato', self.root)
         a.send_message = Mock()
         skill = a.AGENT_DIR / 'skills' / 'basket' / 'SKILL.md'
@@ -132,8 +132,8 @@ class DashboardMessaging(unittest.TestCase):
         self.assertIn('retired. This lesson changed a rule in place', a.send_message.call_args[0][1])   # his drop of an applied edit
 
     def test_new_channel_does_not_block_behind_failed_telegram_delivery(self):
-        from agent_core.outbox import Outbox
-        from agent_core.messaging import conversation
+        from tabularium.records.outbox import Outbox
+        from tabularium.channels.messaging import conversation
         import requests
         bot = Mock()
         bot.send_message.side_effect = requests.ConnectionError('offline')
@@ -145,7 +145,7 @@ class DashboardMessaging(unittest.TestCase):
 
     def test_source_routing_survives_background_delivery_without_current_turn(self):
         from tests.agent_harness import make_agent
-        from agent_core.messaging import conversation
+        from tabularium.channels.messaging import conversation
         a = make_agent('cato', self.root)
         a._inbox = self.inbox
         a.RUNTIME_DIR = self.root
@@ -156,17 +156,17 @@ class DashboardMessaging(unittest.TestCase):
         a.bot.send_message.assert_not_called()
 
     def test_readiness_rejects_stale_pid_reuse_but_accepts_live_tool_deadline(self):
-        from agent_core.messaging import ready
+        from tabularium.channels.messaging import ready
         health={'pid':7,'messaging':1,'last_progress':time.time()-300,'deadline':time.time()+300}
         (self.root/'task_state/health.json').write_text(json.dumps(health))
-        patcher=patch('supervisor.process_created',return_value=time.time()-1000)
+        patcher=patch('tabularium.ops.supervisor.process_created',return_value=time.time()-1000)
         patcher.start()
         try:
             self.assertTrue(ready(self.root))
         finally:
             patcher.stop()
 
-        patcher=patch('supervisor.process_created',return_value=time.time())
+        patcher=patch('tabularium.ops.supervisor.process_created',return_value=time.time())
         patcher.start()
         try:
             self.assertFalse(ready(self.root))
@@ -175,8 +175,8 @@ class DashboardMessaging(unittest.TestCase):
 
     def test_worker_consumes_dashboard_message_through_registered_handler(self):
         import threading
-        from agent_core.messaging import conversation
-        from agent_core.outbox import Outbox
+        from tabularium.channels.messaging import conversation
+        from tabularium.records.outbox import Outbox
         handled = threading.Event()
         outbox = Outbox(self.root, Mock(side_effect=AssertionError('No Telegram')))
         def handle_message(message):
@@ -196,7 +196,7 @@ class DashboardMessaging(unittest.TestCase):
         self.assertEqual(rows[0]['status'],'done')
 
     def test_http_authentication_and_idempotent_send(self):
-        import dashboard
+        from tabularium.dashboard import server as dashboard
         import http.client
         import threading
         from http.server import ThreadingHTTPServer

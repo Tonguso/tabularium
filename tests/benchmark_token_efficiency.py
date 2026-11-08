@@ -11,10 +11,10 @@ import tempfile
 import time
 import tiktoken
 from agent_harness import make_agent
-from agent_core import context_window as current
-from agent_core import turn_loop
-from agent_core.command_output import command_result
-from agent_core.openai_chatgpt import ChatGPTPlan
+from tabularium.core import context_window as current
+from tabularium.core import turn_loop
+from tabularium.core.command_output import command_result
+from tabularium.models.openai_chatgpt import ChatGPTPlan
 
 
 def load(name, path):
@@ -83,7 +83,7 @@ def main():
         allowed = {"execute_command", "read_file", "search_archived"}
         agent.BASE_TOOLS_ANTHROPIC = [t for t in all_tools if t["name"] in allowed]
         # Normal schemas/converter, restricted to three fixture tools; no external action can execute.
-        from agent_core.agent_app import openai_tool
+        from tabularium.core.agent_app import openai_tool
         agent.BASE_TOOLS_OPENAI = [openai_tool(t) for t in agent.BASE_TOOLS_ANTHROPIC]
         agent.get_tools = lambda provider: agent.BASE_TOOLS_ANTHROPIC if provider == "anthropic" else agent.BASE_TOOLS_OPENAI
         original_execute = agent._execute_tool_unguarded

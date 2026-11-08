@@ -6,11 +6,8 @@ import sys, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tests"))
 from agent_harness import make_agent
-import provider_routing
-
-
+from tabularium.models import provider_routing
 class Stream:
     def __init__(self, events=(), fail=None):
         self.events, self.fail = list(events), fail

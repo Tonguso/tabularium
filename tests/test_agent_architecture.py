@@ -5,11 +5,9 @@ import tempfile
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
-sys.path[:0]=[str(ROOT),str(ROOT/'cato')]
-from agent_core.memory_context import WorkingMemory,current_context,read_view
-from agent_core.memory_store import reconcile
-import engine
-
+from tabularium.memory.memory_context import WorkingMemory,current_context,read_view
+from tabularium.memory.memory_store import reconcile
+from tabularium.core import engine
 class Architecture(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)

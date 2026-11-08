@@ -4,9 +4,9 @@ from pathlib import Path
 import tempfile
 import unittest
 from tests.agent_harness import make_agent
-from background_runtime import TaskStore
-from agent_core.task_decisions import answer_record
-from agent_core.roster import AGENTS
+from tabularium.records.background_runtime import TaskStore
+from tabularium.records.task_decisions import answer_record
+from tabularium.core.roster import AGENTS
 
 
 class ContextLoadingTests(unittest.TestCase):
@@ -54,7 +54,7 @@ class ContextLoadingTests(unittest.TestCase):
     def test_worker_memory_keeps_preferences_but_not_other_projects(self):
         agent = make_agent('cato', self.root, background=True)
         (self.root / 'memory.md').write_text('# Memory\n## Core\nUse integer pence.\n', encoding='utf-8')
-        from agent_core.memory_context import WorkingMemory
+        from tabularium.memory.memory_context import WorkingMemory
         WorkingMemory(self.root).thread('OTHER PROJECT', 'UNRELATED NEXT STEP')
         self.assertIn('Use integer pence', agent._load_core_memory())
         self.assertNotIn('UNRELATED NEXT STEP', agent._load_core_memory())

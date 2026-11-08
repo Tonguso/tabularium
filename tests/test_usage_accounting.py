@@ -2,9 +2,8 @@ import json, sqlite3
 from pathlib import Path
 import tempfile
 import unittest
-from agent_runtime import DurableInbox
-import task_cost
-
+from tabularium.core.agent_runtime import DurableInbox
+from tabularium.records import task_cost
 class UsageAccounting(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -84,9 +83,9 @@ class SDKAccounting(unittest.TestCase):
     def test_final_usage_replaces_provisional_text_estimate_for_every_agent(self):
         from unittest.mock import patch
         import claude_agent_sdk as sdk
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         from agent_harness import make_agent
-        from agent_core.roster import ROLES
+        from tabularium.core.roster import ROLES
         tmp = tempfile.TemporaryDirectory()
         try:
             for name, interrupted in [(n, stopped) for n in ROLES for stopped in (False,True)]:
@@ -134,7 +133,7 @@ class SDKAccounting(unittest.TestCase):
         from unittest.mock import patch
         import asyncio
         import claude_agent_sdk as sdk
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         from tests.agent_harness import make_agent
         temp=tempfile.TemporaryDirectory()
         try:
@@ -198,7 +197,7 @@ class SDKAccounting(unittest.TestCase):
 from pathlib import Path
 from unittest.mock import patch
 from tests.agent_harness import make_agent
-import subscription_runtime as bridge
+from tabularium.models import subscription_runtime as bridge
 import claude_agent_sdk as sdk
 agent=make_agent('cato',Path(sys.argv[1]),background=True)
 async def query(prompt,options):

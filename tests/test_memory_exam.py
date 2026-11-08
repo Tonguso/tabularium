@@ -5,9 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace as NS
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from agent_core import memory_exam as me
-from agent_core.conversation_recall import ConversationRecall
+from tabularium.memory import memory_exam as me
+from tabularium.memory.conversation_recall import ConversationRecall
 
 
 def seed(recall, rows):

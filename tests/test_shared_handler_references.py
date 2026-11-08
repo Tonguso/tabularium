@@ -11,10 +11,7 @@ test_namespace_integrity)."""
 import ast, builtins, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-FILES = [ROOT / "engine.py", ROOT / "background_runtime.py", ROOT / "subscription_runtime.py", ROOT / "supervisor.py",
-         ROOT / "agent_control.py", ROOT / "dashboard.py", ROOT / "task_cost.py", ROOT / "retention.py", ROOT / "agent_logging.py",
-         *sorted((ROOT / "agent_core").glob("*.py")),
-         *(ROOT / agent / "telegram.py" for agent in ("cato", "tacitus", "callimachus", "vitruvius"))]
+FILES = sorted((ROOT / "src" / "tabularium").rglob("*.py"))
 BUILTINS = set(dir(builtins)) | {"__file__", "__name__", "__doc__", "__spec__", "__builtins__"}
 
 

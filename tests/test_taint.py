@@ -5,8 +5,9 @@ runs only when he says yes (tests/test_task_lifecycle.py covers late and post-re
 import contextlib, io, tempfile, time, unittest
 from pathlib import Path
 from types import SimpleNamespace
-from agent_core import taint, task_decisions
-from agent_core.outcome import Refused
+from tabularium.core import taint
+from tabularium.records import task_decisions
+from tabularium.core.outcome import Refused
 from agent_harness import make_agent
 
 

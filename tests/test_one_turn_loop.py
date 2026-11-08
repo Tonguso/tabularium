@@ -3,18 +3,17 @@
 Why: run_turn_openai and run_turn_anthropic each carried the whole turn: boundary, abort, context, truncation, tool
 execution, budget warning, step limit, envelope, saving. Every fix this week was made twice (the reply envelope, the
 cut-off note, the step limit); the reasoning leak took three fixes because there were three places to leak from.
-Now agent_core.turn_loop.run owns the turn and asks a provider for one exchange at a time."""
+Now tabularium.core.turn_loop.run owns the turn and asks a provider for one exchange at a time."""
 import sys, tempfile, unittest
 from copy import deepcopy
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "tests"))
 from agent_harness import make_agent
-from agent_core import turn_loop
-from agent_core.turn_loop import Exchange
+from tabularium.core import turn_loop
+from tabularium.core.turn_loop import Exchange
 
 ONCE = ("your response was CUT OFF", "tool rounds used in this session", "Cut off: my output hit")
-FILES = [ROOT / "engine.py", ROOT / "subscription_runtime.py", *sorted((ROOT / "agent_core").glob("*.py"))]
+FILES = sorted(p for p in (ROOT / "src" / "tabularium").rglob("*.py") if p.parts[-2] != "agents")
 
 
 class Scripted:

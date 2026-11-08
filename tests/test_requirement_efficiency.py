@@ -4,9 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 from tests.agent_harness import make_agent
-from agent_core import verification, regression
-from agent_core.roster import AGENTS
-from agent_core.reply_envelope import Reply
+from tabularium.records import verification
+from tabularium.learning import regression
+from tabularium.core.roster import AGENTS
+from tabularium.core.reply_envelope import Reply
 
 class EfficiencyTests(unittest.TestCase):
     def setUp(self):
@@ -61,9 +62,9 @@ class EfficiencyTests(unittest.TestCase):
 
     def test_real_resumed_worker_does_not_copy_checkpoint_into_saved_history(self):
         from tests.test_worker import STUB
-        from background_runtime import TaskStore
+        from tabularium.records.background_runtime import TaskStore
         root = self.root / 'worker'; root.mkdir()
-        (root / 'telegram.py').write_text(STUB, encoding='utf-8')
+        (root / 'agent.py').write_text(STUB, encoding='utf-8')
         store = TaskStore(root)
         ident = store.start(1, 'Synthetic resume')['id']
         folder = store.directory(ident)

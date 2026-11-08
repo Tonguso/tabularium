@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import Mock
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "tests"))
 from agent_harness import load_agent
 
 
@@ -67,7 +66,7 @@ class ImageFiles(unittest.TestCase):
 
     def test_a_file_over_telegrams_20_mb_cap_is_named_to_owner_not_an_internal_error(self):
         """2026-10-26: a 20.4 MB screenshot sent as a file failed twice as "Task #2163 stopped with an error"."""
-        from agent_core.shared_handlers import FileTooBig
+        from tabularium.core.shared_handlers import FileTooBig
         self.payload = b""
         doc = self.document("Screenshot_2026_10_26.jpg", "image/jpeg")
         doc.document.file_size = 21_400_000
@@ -78,7 +77,7 @@ class ImageFiles(unittest.TestCase):
         self.assertIn("at most 20 MB", str(caught.exception))
         self.assertEqual(self.seen, [])
         # the inbox turns it into one sentence to Alex and a done job, never "stopped with an error"
-        import agent_runtime
+        from tabularium.core import agent_runtime
         src = Path(agent_runtime.__file__).read_text(encoding="utf-8")
         self.assertIn("except FileTooBig as exc:", src)
         # Telegram's own refusal, when the size was not announced, is the same sentence

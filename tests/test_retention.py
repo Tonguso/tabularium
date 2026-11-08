@@ -3,10 +3,7 @@ recent files are untouched."""
 import os, sqlite3, sys, tempfile, time, unittest, zipfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-import retention
-
-
+from tabularium.ops import retention
 def touch(path, age_days, now, content=b"x" * 100):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)

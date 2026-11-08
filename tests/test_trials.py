@@ -9,10 +9,12 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 from agent_harness import put, make_agent, AGENTS
-from agent_core import learning, trials, regression, session_lifecycle
-from agent_core.outcome import Refused
-import background_runtime as rt
-
+from tabularium.learning import learning
+from tabularium.learning import trials
+from tabularium.learning import regression
+from tabularium.core import session_lifecycle
+from tabularium.core.outcome import Refused
+from tabularium.records import background_runtime as rt
 SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\nRead archives.\n'
 
 def cases():
@@ -191,7 +193,7 @@ class Trials(unittest.TestCase):
             self.assertEqual(runtime._attach_current_context(window, 1), window)
 
     def test_real_workers_produce_artifacts_and_one_settled_report(self):
-        (self.root / 'telegram.py').write_text(STUB, encoding='utf-8')
+        (self.root / 'agent.py').write_text(STUB, encoding='utf-8')
         self.spec['repetitions'] = 1
         self.start()
         notices = []
@@ -264,7 +266,7 @@ class Trials(unittest.TestCase):
 STUB = '''from pathlib import Path
 from types import SimpleNamespace as NS
 import json, os
-from background_runtime import TaskStore
+from tabularium.records.background_runtime import TaskStore
 AGENT_DIR = Path(__file__).resolve().parent
 store = TaskStore(AGENT_DIR)
 ident = int(os.environ["CATO_BACKGROUND_TASK"])

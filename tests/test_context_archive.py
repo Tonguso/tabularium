@@ -4,8 +4,7 @@ grew past 160k tokens a turn."""
 import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-import agent_core.context_window as cw
+import tabularium.core.context_window as cw
 
 
 def history(n, size):

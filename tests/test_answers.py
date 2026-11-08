@@ -9,10 +9,10 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from agent_harness import make_agent
-from agent_core import reply_envelope
-from agent_core.reply_envelope import Reply
-from agent_core.turn_loop import run, Exchange
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.core import reply_envelope
+from tabularium.core.reply_envelope import Reply
+from tabularium.core.turn_loop import run, Exchange
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 CHAT = OWNER_CHAT_ID
 TURN = [(11946, "Cal是不是应该去查一下公开资料"), (11947, "或者说，成熟的做法通常是怎样的"),
         (11948, "Vit的app更新了吗")]
@@ -92,7 +92,7 @@ class Answers(unittest.TestCase):
         out = run(self.agent, messages, CHAT, provider)
         self.assertEqual((str(out), provider.calls), ("reply 2", 2))
         self.assertIn("asks a different question", seen[1])
-        from agent_core.task_decisions import verify_reply
+        from tabularium.records.task_decisions import verify_reply
         result = verify_reply(self.agent, messages, CHAT, out)          # still wrong after the bounce: a new question, no crash
         self.assertNotEqual(result.decision_id, pending)
         questions = {d["question"]: d["id"] for d in store.decisions(CHAT, 0)}
@@ -129,9 +129,9 @@ class Answers(unittest.TestCase):
     def test_all_providers_request_missing_ids_without_saving_runtime_feedback(self):
         from unittest.mock import patch, MagicMock
         from types import SimpleNamespace as NS
-        from agent_core.roster import AGENTS
+        from tabularium.core.roster import AGENTS
         import sqlite3
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
         for name in AGENTS:
             for route in ('openai','anthropic','claude'):

@@ -1,4 +1,4 @@
-"""Offline: each agent's telegram.py loads in a fresh interpreter on top of engine.py (fake credentials, temp
+"""Offline: each agent builds in a fresh interpreter from its role module (fake credentials, temp
 agent dir, no polling) and the shared functions are bound to the agent's namespace. start_all runs this
 before stopping anything, so an agent that cannot import never replaces a running one.
 2026-10-07: the first merged engine imported a Cato-only module and three agents died at startup."""
@@ -23,22 +23,16 @@ if (agent_dir / style).exists():
     (tmp / style).parent.mkdir(parents=True, exist_ok=True)
     (tmp / style).write_bytes((agent_dir / style).read_bytes())
 (tmp / "task_state" / "background" / "1").mkdir(parents=True)
-src = (agent_dir / "telegram.py").read_text(encoding="utf-8")
-marker = "AGENT_DIR   = Path(__file__).resolve().parent"
-assert marker in src, "AGENT_DIR line changed"
-src = src.replace(marker, "AGENT_DIR   = Path(" + repr(str(tmp)) + ")")
 for k in [k for k in os.environ if "TELEGRAM_BOT_TOKEN" in k]:
     del os.environ[k]
 os.environ.update(ANTHROPIC_API_KEY="test", SEARCH_PROVIDER="anthropic", OPENAI_API_KEY="test")
 os.environ[f"{a.upper()}_BACKGROUND_TASK"] = "1"
 os.environ["TELEGRAM_BOT_TOKEN" if a == "cato" else f"{a.upper()}_TELEGRAM_BOT_TOKEN"] = "1234%d:test" % len(a)
-sys.path[:0] = [str(agent_dir), str(ROOT)]
-scope = {"__file__": str(agent_dir / "telegram.py"), "__name__": f"isolated_{a}"}
-exec(compile(src, str(agent_dir / "telegram.py"), "exec"), scope)
+from tabularium.agents import build
+runtime = build(tmp, a)
 
 from types import SimpleNamespace as NS
 from unittest.mock import Mock
-runtime=scope['runtime']
 assert runtime.SYSTEM_PROMPT.count("## Everyday communication core")==1
 assert runtime.SYSTEM_PROMPT.count("# Agent operating policy")==1
 assert runtime.run_turn.__self__ is runtime

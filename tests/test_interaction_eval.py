@@ -4,9 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from agent_core import regression
-
-
+from tabularium.learning import regression
 class InteractiveEvaluation(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -14,7 +12,7 @@ class InteractiveEvaluation(unittest.TestCase):
         self.root = Path(self.tmp.name)
 
     def test_workflows_are_explicitly_selected_and_not_lesson_trial_inputs(self):
-        from agent_core import interaction_eval as ie
+        from tabularium.learning import interaction_eval as ie
         ordinary = regression.load_cases(self.root)
         cases = ie.cases('cato')
         self.assertEqual(len(cases), 4)
@@ -24,7 +22,7 @@ class InteractiveEvaluation(unittest.TestCase):
             self.assertTrue(any(r['check']['path'] == 'observations.json' for r in case['requirements']))
 
     def test_missing_event_cannot_pass_even_with_correct_deliverable(self):
-        from agent_core import interaction_eval as ie
+        from tabularium.learning import interaction_eval as ie
         case = ie.cases('cato')[0]
         (self.root/'result.json').write_text(json.dumps({'towers': 4, 'carriers': 3}), encoding='utf-8')
         result = regression.grade(None, case, 'All done', self.root)
@@ -32,7 +30,7 @@ class InteractiveEvaluation(unittest.TestCase):
         self.assertLess(result['quality'], 1)
 
     def test_crashed_executor_cannot_pass_on_leftover_files(self):
-        from agent_core import interaction_eval as ie
+        from tabularium.learning import interaction_eval as ie
         case = ie.cases('cato')[0]
         out = self.root/'attempt'/'trial_output'
         out.mkdir(parents=True)
@@ -73,8 +71,9 @@ class RuntimeScenarios(unittest.TestCase):
 
     def test_real_state_boundaries_for_every_role(self):
         from unittest.mock import patch
-        from agent_core import interaction_eval as ie, reply_envelope
-        import provider_routing
+        from tabularium.learning import interaction_eval as ie
+        from tabularium.core import reply_envelope
+        from tabularium.models import provider_routing
         for name in ('cato','callimachus','vitruvius','tacitus'):
             for case in ie.cases(name):
                 root=ie.prepare(self.base/(name+case['id']),name,{'kind':'anthropic_subscription','model':'claude-test'})
@@ -135,8 +134,9 @@ class RuntimeScenarios(unittest.TestCase):
 
     def test_plausible_artifacts_do_not_hide_broken_interactions(self):
         from unittest.mock import patch
-        from agent_core import interaction_eval as ie, reply_envelope
-        import provider_routing
+        from tabularium.learning import interaction_eval as ie
+        from tabularium.core import reply_envelope
+        from tabularium.models import provider_routing
         for case in ie.cases('cato'):
             root=ie.prepare(self.base/case['id'],'cato',{'kind':'anthropic_subscription','model':'claude-test'})
             def model(agent,messages,chat):
@@ -186,8 +186,9 @@ class RuntimeScenarios(unittest.TestCase):
 
     def test_isolated_tools_cannot_read_or_write_outside_outputs(self):
         from unittest.mock import patch
-        from agent_core import interaction_eval as ie, reply_envelope
-        import provider_routing
+        from tabularium.learning import interaction_eval as ie
+        from tabularium.core import reply_envelope
+        from tabularium.models import provider_routing
         secret=self.base/'private.txt'
         secret.write_text('Synthetic private sentinel',encoding='utf-8')
         target=self.base/'outside.txt'
@@ -210,8 +211,9 @@ class RuntimeScenarios(unittest.TestCase):
 
     def test_followup_after_last_sdk_tool_becomes_next_turn(self):
         from unittest.mock import patch
-        from agent_core import interaction_eval as ie, reply_envelope
-        import provider_routing
+        from tabularium.learning import interaction_eval as ie
+        from tabularium.core import reply_envelope
+        from tabularium.models import provider_routing
         root=ie.prepare(self.base/'late','cato',{'kind':'anthropic_subscription','model':'claude-test'})
         calls=[]
         def model(agent,messages,chat):
@@ -238,8 +240,9 @@ class RuntimeScenarios(unittest.TestCase):
 
     def test_delegate_parking_resumes_from_existing_delivery_and_proof(self):
         from unittest.mock import patch
-        from agent_core import interaction_eval as ie, reply_envelope
-        import provider_routing
+        from tabularium.learning import interaction_eval as ie
+        from tabularium.core import reply_envelope
+        from tabularium.models import provider_routing
         root=ie.prepare(self.base/'park','cato',{'kind':'anthropic_subscription','model':'claude-test'})
         calls=[]
         def model(agent,messages,chat):

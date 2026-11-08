@@ -6,11 +6,7 @@ import sys
 import threading
 import unittest
 from unittest.mock import AsyncMock, patch
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import subscription_usage as usage
-
-
+from tabularium.models import subscription_usage as usage
 class SubscriptionUsage(unittest.TestCase):
     def test_only_manual_refresh_starts_worker_and_deduplicates(self):
         with patch.object(usage, 'read_cache', return_value={'checked': 0}), \

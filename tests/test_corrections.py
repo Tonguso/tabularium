@@ -13,11 +13,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent_harness import make_agent, put
-from agent_core import corrections, reply_envelope
-from agent_core.reply_envelope import Reply
+from tabularium.learning import corrections
+from tabularium.core import reply_envelope
+from tabularium.core.reply_envelope import Reply
 from test_follow_ups import telegram
 import sqlite3
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 CHAT = OWNER_CHAT_ID
 T0 = 1_800_000_000.0
 
@@ -120,7 +121,7 @@ class Diagnosis(unittest.TestCase):
         self.assertIn("还是不对", " ".join(c["text"] for c in agent._background.pending_controls(first)))
 
     def test_an_eval_or_trial_rerun_cannot_ask_owner_either(self):
-        from agent_core import regression
+        from tabularium.learning import regression
         agent = agent_for("cato", self.tmp.name)
         store = agent._background
         ident = regression.start_rerun(store, CHAT, regression.load_cases(agent.AGENT_DIR)[0], 1)   # a benchmark case
@@ -164,8 +165,8 @@ class Diagnosis(unittest.TestCase):
                 db.close()
             agent._inbox.local.turn_messages = [(12, messages[-1]['content'])]
             reply = Reply("那是内部任务编号，不该混进给你的回复。", correction=flag)
-            with patch("agent_core.session_lifecycle.continue_turn", return_value=reply), \
-                 patch("agent_core.task_decisions.verify_reply", side_effect=lambda a, m, c, r: r):
+            with patch("tabularium.core.session_lifecycle.continue_turn", return_value=reply), \
+                 patch("tabularium.records.task_decisions.verify_reply", side_effect=lambda a, m, c, r: r):
                 out = agent.run_turn(messages, CHAT)
             self.assertEqual(str(out), "那是内部任务编号，不该混进给你的回复。")
             self.assertEqual(len(corrections._pending(agent).get(str(CHAT), [])), expected, flag)

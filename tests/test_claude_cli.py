@@ -9,10 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import Mock, patch
 
-import subscription_runtime as bridge
-import provider_routing as routing
-
-
+from tabularium.models import subscription_runtime as bridge
+from tabularium.models import provider_routing as routing
 class DesktopAppCli(unittest.TestCase):
     def test_find_cli_uses_the_desktop_apps_claude_code(self):
         with tempfile.TemporaryDirectory() as tmp:

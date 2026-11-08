@@ -9,7 +9,7 @@ Objective requirements inspect the delivered JSON field, text file or workbook c
 path and SHA-256 of the bytes actually checked. Wrong data fails; unreadable/missing data is unverified.
 A confident reply is not a substitute. Subjective rubric judgments remain explicitly labelled.
 
-Default cases live in agent_core/benchmark_cases.json, with version, independent expected values and
+Default cases live in src/tabularium/learning/benchmark_cases.json, with version, independent expected values and
 oracle provenance. The original two synthetic cases cover four invoice checks and four source/correction checks; four research cases extend them (see below).
 They apply to all four roles. Codex checked their arithmetic/source facts; they are not claimed to be
 the owner-approved answers or a comprehensive measure of research, coding or private conversation quality.
@@ -21,7 +21,7 @@ no shell, web, sends, memory edits or delegation. These restrictions apply to th
 synthetic cases, not ordinary agents. Lesson trials use the stricter scope described below. The normal agent context may still affect a run;
 this benchmark is not a test of memory isolation or of every production tool.
 
-Run `python agent_control.py eval <agent> --k 1` for a first baseline, then repeated runs (--k 3) when
+Run `tabularium eval <agent> --k 1` for a first baseline, then repeated runs (--k 3) when
 measuring reliability. Names: cato, callimachus, vitruvius, tacitus. Results retain each requirement,
 artifact evidence, release, routes, generation usage and grading usage. Unknown usage is labelled
 unknown; recorded subtotals are not claimed to be complete. Effective-token weights are the existing
@@ -79,7 +79,7 @@ relative to these tiny tasks; reducing that context would be a separate change r
 ## Lesson-change screening (2026-10-25)
 
 `lesson trial` now accepts `development_cases` and `heldout_cases` (disjoint IDs from
-agent_core/benchmark_cases.json), `repetitions` (default 2, range 1–5), and `max_steps`
+src/tabularium/learning/benchmark_cases.json), `repetitions` (default 2, range 1–5), and `max_steps`
 (default 12, range 1–60). The old `task_id` replay and opinion-based comparison are retired.
 Eight runs are scheduled for two cases at the defaults: two skills × two cases × two repeats.
 This costs more generation than a two-run anecdote; it is explicit, not scheduled on every task.
@@ -172,7 +172,7 @@ a subjective case from ever reaching the judge. Ordinary completion checks are u
 
 ## Interactive workflow evaluation (2026-10-26)
 
-`python agent_control.py eval cato --interactions --k 2` uses the same regression
+`tabularium eval cato --interactions --k 2` uses the same regression
 report, independent artifact grader and actual-usage accounting as the static benchmark.
 It adds controlled events while the real model is working. It does not install a new
 service, run a model judge, change live task completion, or run on every conversation.

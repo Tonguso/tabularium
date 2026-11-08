@@ -1,8 +1,7 @@
 """Regression: a judge cannot silently omit a required item."""
 import json
 import unittest
-from agent_core import regression
-
+from tabularium.learning import regression
 class Coverage(unittest.TestCase):
     def test_a_partial_grade_is_not_a_pass(self):
         case = dict(request='Do A and B', plan=['A','B'], reference='A and B are required')

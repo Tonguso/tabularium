@@ -4,11 +4,11 @@ import unittest
 from pathlib import Path
 
 from tests.agent_harness import make_agent, put
-from agent_core.roster import ROLES
-from agent_core.turn_loop import run, Exchange
-from agent_core.session_lifecycle import continue_turn
-from agent_core.task_decisions import answer_record
-from agent_core.worker_lease import WorkerLease
+from tabularium.core.roster import ROLES
+from tabularium.core.turn_loop import run, Exchange
+from tabularium.core.session_lifecycle import continue_turn
+from tabularium.records.task_decisions import answer_record
+from tabularium.records.worker_lease import WorkerLease
 
 
 class WaitingHandoff(unittest.TestCase):
@@ -72,7 +72,7 @@ class WaitingHandoff(unittest.TestCase):
 
     def test_answer_during_handoff_queues_once_without_overlapping_owner(self):
         import os, sqlite3, time
-        from agent_runtime import atomic_json
+        from tabularium.core.agent_runtime import atomic_json
         agent = make_agent('cato', self.root, background=True)
         store = agent._background
         messages = [{'role':'user','content':'Do the work'}]
@@ -121,7 +121,7 @@ class SubscriptionWaiting(unittest.TestCase):
     def test_sdk_closes_live_session_after_saved_tool_and_resumes_without_replay(self):
         import asyncio
         from unittest.mock import patch
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
         for name in ROLES:
             folder = self.root/name
@@ -182,11 +182,11 @@ class ProcessHandoff(unittest.TestCase):
 
     def test_real_worker_releases_slot_runs_next_job_and_resumes_saved_actions(self):
         from test_worker import STUB
-        from background_runtime import TaskStore
+        from tabularium.records.background_runtime import TaskStore
         stub = STUB[:STUB.index('def run_turn(')] + '''
-from engine import AgentRuntime
-from agent_core.session_lifecycle import continue_turn
-from agent_core.reply_envelope import Reply
+from tabularium.core.engine import AgentRuntime
+from tabularium.core.session_lifecycle import continue_turn
+from tabularium.core.reply_envelope import Reply
 runtime = AgentRuntime()
 runtime.SYSTEM_PROMPT = SYSTEM_PROMPT
 runtime.BACKGROUND_TASK_ID = str(ident)
@@ -215,7 +215,7 @@ def run_turn(messages, chat):
         return Reply('fixture completed',complete=False)
     return continue_turn(runtime,messages,chat,session)
 '''
-        (self.root/'telegram.py').write_text(stub,encoding='utf-8')
+        (self.root/'agent.py').write_text(stub,encoding='utf-8')
         store = TaskStore(self.root)
         first = store.start(1,'First task')['id']
         second = store.start(1,'Next task')['id']

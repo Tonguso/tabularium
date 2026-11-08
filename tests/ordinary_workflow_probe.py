@@ -5,10 +5,11 @@ Two stages use ordinary completion, not the trusted benchmark oracle. No outward
 import json, sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from agent_core import regression, verification
-from agent_core.roster import ROLES
-from background_runtime import TaskStore
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.learning import regression
+from tabularium.records import verification
+from tabularium.core.roster import ROLES
+from tabularium.records.background_runtime import TaskStore
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 
 ROOT = Path(__file__).resolve().parents[1]
 

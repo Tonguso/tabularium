@@ -12,9 +12,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from agent_harness import put
-from agent_core import learning, lesson_cases, regression, trials
-import background_runtime as rt
-
+from tabularium.learning import learning
+from tabularium.learning import lesson_cases
+from tabularium.learning import regression
+from tabularium.learning import trials
+from tabularium.records import background_runtime as rt
 SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\nRead archives.\n'
 
 

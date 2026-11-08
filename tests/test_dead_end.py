@@ -8,9 +8,9 @@ import contextlib, io, json, tempfile, unittest
 from pathlib import Path
 
 from agent_harness import make_agent
-from agent_core import reply_envelope
-from agent_core.turn_loop import run, Exchange
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.core import reply_envelope
+from tabularium.core.turn_loop import run, Exchange
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 CHAT = OWNER_CHAT_ID
 
 

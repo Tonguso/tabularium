@@ -5,11 +5,10 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from agent_core import regression, trials
+from tabularium.learning import regression
+from tabularium.learning import trials
 from agent_harness import put, make_agent, AGENTS
-import background_runtime as rt
-
-
+from tabularium.records import background_runtime as rt
 def subjective():
     return dict(id='rubric',version=1,request='Do A and B',oracle=dict(basis='Independent rubric',reviewed_by='test'),
                 requirements=[dict(id=n,check=dict(kind='judgment',rubric='Must do '+n)) for n in ('A','B')])

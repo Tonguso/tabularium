@@ -3,10 +3,7 @@ the others stay a catalogue. Tacitus's standing method is the first such skill."
 import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "cato"))
-import engine
-
-
+from tabularium.core import engine
 def block_for(skills_dir, always):
     runtime = engine.AgentRuntime()
     runtime.SKILLS_DIR = Path(skills_dir)
@@ -44,7 +41,7 @@ class AlwaysSkills(unittest.TestCase):
         self.assertIn("other description", runtime.tool_skill(""))
 
     def test_tacitus_declares_the_personal_method(self):
-        src = (ROOT / "tacitus" / "telegram.py").read_text(encoding="utf-8")
+        src = (ROOT / "src" / "tabularium" / "agents" / "private.py").read_text(encoding="utf-8")
         self.assertIn('always_skills=("standing-method",)', src)
         self.assertTrue((ROOT / "tacitus" / "skills" / "standing-method" / "SKILL.md").exists())
 

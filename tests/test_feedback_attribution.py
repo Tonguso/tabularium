@@ -7,7 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch, MagicMock
 from agent_harness import make_agent
-from agent_core import corrections, reply_envelope
+from tabularium.learning import corrections
+from tabularium.core import reply_envelope
 from test_follow_ups import telegram, CHAT
 
 
@@ -83,7 +84,7 @@ class Attribution(unittest.TestCase):
             db.close()
 
     def test_provider_retries_and_live_followups_for_all_agents(self):
-        import subscription_runtime as bridge
+        from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
         for name in ('cato', 'callimachus', 'vitruvius', 'tacitus'):
             for route in ('openai', 'anthropic', 'claude'):
@@ -185,7 +186,7 @@ class Attribution(unittest.TestCase):
         self.assertEqual(combined.text, 'First correction\nAnd fix the other error')
 
     def test_session_continuation_keeps_real_sources(self):
-        from agent_core.session_lifecycle import SessionLimit
+        from tabularium.core.session_lifecycle import SessionLimit
         self.incoming(12, 'Correct the result', 'Original answer')
         calls = []
         messages = [{'role': 'user', 'content': 'Correct the result'}]
@@ -218,7 +219,7 @@ class Attribution(unittest.TestCase):
         self.assertEqual(corrections._pending(self.agent), {})
 
     def test_legacy_feedback_stays_unverified_and_does_not_count_as_a_burst(self):
-        from agent_runtime import atomic_json
+        from tabularium.core.agent_runtime import atomic_json
         atomic_json(corrections._pending_path(self.agent), {str(CHAT):[
             {'words':'[System: old warning]', 'before':'old answer', 'at':100},
             {'words':'unknown old record', 'before':'another answer', 'at':110}]})

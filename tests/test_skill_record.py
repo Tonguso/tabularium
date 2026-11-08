@@ -10,9 +10,9 @@ from contextlib import closing
 from pathlib import Path
 
 from agent_harness import make_agent, put
-from agent_core import skill_record
-from background_runtime import TaskStore
-from owner_telegram import OWNER_CHAT_ID
+from tabularium.records import skill_record
+from tabularium.records.background_runtime import TaskStore
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID
 CHAT = OWNER_CHAT_ID
 DAY = 86400
 
@@ -34,7 +34,7 @@ class SkillRecord(unittest.TestCase):
         self.recent = self.task("Badge logo in SVG", now - 1 * DAY, ["Badge.svg"])
         self.meta = self.task("[Correction diagnosis] Alex corrected you", now - 0.5 * DAY, [])
         self.recall = self.root / "task_state" / "conversation_recall.sqlite3"
-        from agent_core.conversation_recall import ConversationRecall
+        from tabularium.memory.conversation_recall import ConversationRecall
         ConversationRecall(self.root)                                     # the real archive schema
         with closing(sqlite3.connect(self.recall)) as db, db:
             said = time.strftime("%Y-%m-%dT%H:%M", time.localtime(now - 18 * DAY + 3600))

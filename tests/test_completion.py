@@ -4,8 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 from tests.agent_harness import make_agent, put
-from agent_core.roster import AGENTS
-from agent_core.reply_envelope import Reply
+from tabularium.core.roster import AGENTS
+from tabularium.core.reply_envelope import Reply
 
 
 class CompletionTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class CompletionTests(unittest.TestCase):
         verified: Requirement 1 Direct comparator table ...: unverified."). Requirements no machine can check are the
         owner's to judge by reading; they never block finishing and never reach the message. A declared check still
         has to pass, and only a failed or unrun declared check is named, in plain words."""
-        from agent_core import verification
+        from tabularium.records import verification
         for name in AGENTS:
             root = self.root / ("judge-" + name); root.mkdir(exist_ok=True)
             agent = make_agent(name, root, background=True)
@@ -121,7 +121,7 @@ class CompletionTests(unittest.TestCase):
     def test_eval_generation_is_recorded_but_missing_artifact_is_not_success(self):
         agent, _ = self.agent()
         store = agent._background
-        from agent_core import regression
+        from tabularium.learning import regression
         case = regression.load_cases(self.root)[0]
         context = {'eval': {'case': case['id'], 'benchmark': regression.fingerprint([case])}, 'notify_telegram': False}
         (store.directory(1) / 'context.json').write_text(json.dumps(context), encoding='utf-8')

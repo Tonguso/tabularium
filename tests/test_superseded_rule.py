@@ -4,7 +4,7 @@ Why: five sites in three modules each carried their own regex for the "## Supers
 memory_store.current_facts and superseded_section are now the only definition."""
 import re, unittest
 from pathlib import Path
-from agent_core.memory_store import current_facts, superseded_section
+from tabularium.memory.memory_store import current_facts, superseded_section
 ROOT = Path(__file__).resolve().parents[1]
 
 TEXT = "# Memory\n\n## Facts\n- a\n\n## Superseded facts (historical, not current)\n- old a\n\n## Later\n- b\n"
@@ -18,7 +18,7 @@ class SupersededRule(unittest.TestCase):
         self.assertEqual(current_facts("## Superseded facts\n- x\n"), "")          # the short heading spelling too
 
     def test_no_other_module_defines_the_rule(self):
-        hits = [p.name for p in (ROOT / "agent_core").glob("*.py") if p.name != "memory_store.py"
+        hits = [p.name for p in (ROOT / "src" / "tabularium").rglob("*.py") if p.name != "memory_store.py"
                 and re.search(r"Superseded facts.*\\n", p.read_text(encoding="utf-8-sig"))]
         self.assertEqual(hits, [])
 

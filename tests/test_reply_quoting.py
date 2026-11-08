@@ -6,7 +6,7 @@ import contextlib, io, json, tempfile, time, unittest
 from pathlib import Path
 from unittest.mock import Mock
 from agent_harness import make_agent
-from owner_telegram import OWNER_CHAT_ID, OWNER_USER_ID
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID, OWNER_USER_ID
 CHAT = OWNER_CHAT_ID
 
 

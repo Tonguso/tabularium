@@ -5,9 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 from agent_harness import make_agent, AGENTS
-from agent_core import verification
-
-
+from tabularium.records import verification
 class RequirementChecks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -85,7 +83,7 @@ class RequirementChecks(unittest.TestCase):
 
     def test_refused_and_interrupted_reruns_invalidate_old_pass(self):
         from unittest.mock import patch
-        from agent_core.outcome import Refused
+        from tabularium.core.outcome import Refused
         agent, _ = self.setup_agent('cato')
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'passed')
         patcher = patch.object(agent, '_execute_tool_unguarded', return_value=Refused('Not permitted'))
@@ -115,7 +113,7 @@ class RequirementChecks(unittest.TestCase):
         import threading
         from concurrent.futures import ThreadPoolExecutor
         from unittest.mock import patch
-        from agent_core.outcome import Refused
+        from tabularium.core.outcome import Refused
         agent, _ = self.setup_agent('cato')
         entered, release = threading.Event(), threading.Event()
         run = agent._execute_tool_unguarded

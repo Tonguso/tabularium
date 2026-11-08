@@ -1,10 +1,7 @@
 """Claude subscription route: replayed history must show tool names as the SDK exposes them (2026-10-09)."""
 import sys, unittest
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import subscription_runtime as sr
-
-
+from tabularium.models import subscription_runtime as sr
 class SdkToolNames(unittest.TestCase):
     def test_bare_names_get_prefix_and_rest_untouched(self):
         history = [
