@@ -98,7 +98,10 @@ def adopt_existing(children):
     """A supervisor that starts while agents already run (a supervisor restart, or the first run after the old
     launchers) takes them over instead of starting duplicates that would lose the single-instance port."""
     import subprocess as sp
-    query = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'D:\\\\Agents' } | "
+    # Every process of this installation either runs the package (`-m tabularium ...`) or names the home folder
+    # (the flat layout's launchers); the regex is built from the home, not a fixed path.
+    pattern = "-m tabularium|" + str(ROOT).replace("\\", "\\\\")
+    query = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '" + pattern + "' } | "
              "Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress")
     try:
         out = sp.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", query], capture_output=True,
