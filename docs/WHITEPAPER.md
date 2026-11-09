@@ -1,6 +1,6 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.3, 8 November 2026
+Version 0.4 (draft), 9 November 2026
 
 ## Abstract
 
@@ -442,12 +442,18 @@ Tabularium is run like software, which is uncommon for agent systems.
 | Incident reviews | What went wrong, what each actor could see, which design choice allowed it | After each failure the owner noticed |
 | Release record | Which commit each task ran on | Every task |
 
-Restarts drain current work, run both test suites, and refuse uncommitted code. The code has three authors, a human
+Restarts drain current work, run the test suite, and refuse uncommitted code. The code has three authors, a human
 owner and two coding agents, each recording every change in one operations log and never reverting another's change
 until the owner confirms. The two coding agents work concurrently on purpose: each has caught real mistakes of the
 other. A concept budget (a change that adds a named thing removes one) keeps the vocabulary in check. A rule of
 one release a day held for two weeks and was dropped once the gate (tests, commit, announced graceful drain, live
 verification) had proved sufficient on its own; six releases went out on one day without incident.
+
+The code is one installable package; an installation is a home folder holding one folder per agent (named by its
+role: coordinator, librarian, engineer, private), the settings, the logs and the dashboard's state. The release a
+task ran on is the identity of the checkout that holds the package, never of the home, so a home that is only data
+can start, and two installations on one machine never adopt each other's processes: every process names its home
+on its command line. Agents learn in the home; the code changes only through the gate.
 
 ## 11. The owner's role
 
