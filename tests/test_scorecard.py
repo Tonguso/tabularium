@@ -47,13 +47,13 @@ class Scorecard(unittest.TestCase):
 
     def test_counts_this_week_and_last_from_records_only(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp); seed(root, "cato")
-            for other in ("tacitus", "callimachus", "vitruvius"):
+            root = Path(tmp); seed(root, "coordinator")
+            for other in ("private", "librarian", "engineer"):
                 (root / other / "task_state").mkdir(parents=True)
             (root / "docs" / "incidents").mkdir(parents=True)
             (root / "docs" / "incidents" / "2026-10-15-x.md").write_text("# x\n| Affected | Cato; Vit's client |\n", encoding="utf-8")
             report = scorecard.weekly(root, now=NOW)
-            this, last = (w["agents"]["cato"] for w in report["weeks"])
+            this, last = (w["agents"]["coordinator"] for w in report["weeks"])
             self.assertEqual((this["turns"], this["turns_failed"], last["turns"]), (2, 1, 1))
             self.assertEqual((this["bounces"], last["bounces"]), ({"unbacked_promise": 1}, {"runaway": 1}))
             self.assertEqual((this["tasks_finished"], this["tasks_stopped"], this["task_minutes_median"]), (1, 1, 20.0))
@@ -61,15 +61,15 @@ class Scorecard(unittest.TestCase):
                                                "rework_changed": 0, "rework_unchanged": 0})
             self.assertEqual((this["memory_exam"], this["lessons_candidate"], this["lessons_taken"], this["incidents"]),
                              ({"correct": 2, "partial": 0, "wrong": 1}, 1, 1, 1))
-            self.assertEqual(report["weeks"][0]["agents"]["vitruvius"]["incidents"], 1)      # "Vit" in the Affected row
-            self.assertEqual(report["weeks"][0]["agents"]["tacitus"]["turns"], 0)             # no records, no reads
+            self.assertEqual(report["weeks"][0]["agents"]["engineer"]["incidents"], 1)      # "Vit" in the Affected row
+            self.assertEqual(report["weeks"][0]["agents"]["private"]["turns"], 0)             # no records, no reads
             self.assertIn("lessons cand/taken + inc", scorecard.table(report))
 
     def test_the_runtime_records_a_bounce_when_it_happens(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
+            root = Path(tmp) / "coordinator"; root.mkdir()
             with contextlib.redirect_stdout(io.StringIO()):
-                agent = make_agent("cato", root)
+                agent = make_agent("coordinator", root)
             agent.BACKGROUND_TASK_ID = ""
             script = [Exchange(text='{"reply": "我会研究。", "work": "started"}'), Exchange(text='{"reply": "要开始吗？", "work": "awaiting_go"}')]
             provider = type("P", (), {"exchange": lambda self, m: script.pop(0)})()

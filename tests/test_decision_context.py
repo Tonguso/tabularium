@@ -16,7 +16,7 @@ class DecisionContext(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def agent(self, name='cato'):
+    def agent(self, name='coordinator'):
         root = self.root / name
         root.mkdir(exist_ok=True)
         agent = make_agent(name, root)
@@ -120,11 +120,11 @@ class DecisionContext(unittest.TestCase):
         self.assertEqual(ran, [])
 
     def test_preparation_cannot_widen_agent_scope_or_overwrite_an_action(self):
-        agent = self.agent('tacitus')
+        agent = self.agent('private')
         out = td.execute(agent, 1, dict(action='prepare', decision_id=0,
             tool='execute_command', inputs={'command': 'whoami'}))
         self.assertIsInstance(out, Failed)
-        agent = self.agent('cato')
+        agent = self.agent('coordinator')
         decision = self.question(agent)
         td.execute(agent, 1, dict(action='prepare', decision_id=decision['id'],
             tool='send_email', inputs={'to': 'test@example.test', 'subject': 's', 'body': 'b'}))
@@ -134,7 +134,7 @@ class DecisionContext(unittest.TestCase):
         self.assertNotIn('different@', td.pending(agent._background, 1)[0]['action'])
 
     def test_recent_instruction_and_approval_survive_tool_volume_for_every_agent(self):
-        for name in ('cato', 'callimachus', 'vitruvius', 'tacitus'):
+        for name in ('coordinator', 'librarian', 'engineer', 'private'):
             agent = self.agent(name)
             history = [{'role': 'user', 'content': 'seed'}, {'role': 'assistant', 'content': 'Ready'}]
             history += [{'role': 'user', 'content': 'Delete the redraw.'},

@@ -139,7 +139,7 @@ class SDKAccounting(unittest.TestCase):
         try:
             for mode in ('duplicate','zeroed','missing','waiting'):
                 root=Path(temp.name)/mode;root.mkdir()
-                agent=make_agent('cato',root,background=True)
+                agent=make_agent('coordinator',root,background=True)
                 agent._background.checkpoint(1,1,'','',[],guesses=[],completion_items=[{'item':'Fixture','check':'Read reply'}])
                 captured={}
                 def server(name,version,tools):
@@ -191,7 +191,7 @@ class SDKAccounting(unittest.TestCase):
         import subprocess,sys
         temp=tempfile.TemporaryDirectory()
         try:
-            root=Path(temp.name)/'cato';root.mkdir()
+            root=Path(temp.name)/'coordinator';root.mkdir()
             script=Path(temp.name)/'crash.py'
             script.write_text("""import os,sys
 from pathlib import Path
@@ -199,7 +199,7 @@ from unittest.mock import patch
 from tests.agent_harness import make_agent
 from tabularium.models import subscription_runtime as bridge
 import claude_agent_sdk as sdk
-agent=make_agent('cato',Path(sys.argv[1]),background=True)
+agent=make_agent('coordinator',Path(sys.argv[1]),background=True)
 async def query(prompt,options):
     yield sdk.AssistantMessage(content=[],model='test',message_id='one',usage=dict(input_tokens=10,cache_read_input_tokens=100,cache_creation_input_tokens=20,output_tokens=999))
     os._exit(7)

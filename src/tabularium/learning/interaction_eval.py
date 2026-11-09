@@ -55,7 +55,7 @@ CASES = [
 
 def cases(name):
     # Only Cato has the delegate tool. The common three cases exercise every role.
-    return [c for c in CASES if name == 'cato' or c['id'] != 'interaction-delegation']
+    return [c for c in CASES if name == 'coordinator' or c['id'] != 'interaction-delegation']
 
 
 def read(path, default=None):
@@ -115,7 +115,7 @@ def _delegate_fixture(agent, output, phase):
     from tabularium.records.background_runtime import TaskStore
     from tabularium.core.roster import ROLES
     from tabularium.records import verification
-    remote = TaskStore(agent.AGENT_DIR.parent/'vitruvius', ROLES['vitruvius'])
+    remote = TaskStore(agent.AGENT_DIR.parent/'engineer', ROLES['engineer'])
     store=agent._background
     if phase=='first':
         artifact = output/'evidence.txt'
@@ -230,7 +230,7 @@ def worker(root, case_id, phase):
         else:
             from tabularium.records.background_runtime import TaskStore
             from tabularium.core.roster import ROLES
-            remote=TaskStore(root.parent/'vitruvius',ROLES['vitruvius'])
+            remote=TaskStore(root.parent/'engineer',ROLES['engineer'])
             store.status_checker=lambda a,r:'completed' if remote.get(1)['status']=='finished' else 'running'
             store.poll_waiting()
         activate(store)
@@ -299,7 +299,7 @@ def worker(root, case_id, phase):
             observed.update(restarted=observed.get('first_pid')!=os.getpid(),answered=not store.decisions(CHAT,1) and not store.pending_controls(1))
     elif feedback:
         records=corrections._pending(agent).get(str(CHAT),[])
-        expected=[] if root.name=='tacitus' else [102]  # this role intentionally disables correction learning
+        expected=[] if root.name=='private' else [102]  # this role intentionally disables correction learning
         observed.update(event_delivered=triggered and 102 in [i for i,t in agent._inbox.turn_messages()],
                         correct_sources=[r.get('message_id') for r in records]==expected,
                         warning_saved='previous action requires review' in json.dumps(messages).lower())
@@ -320,8 +320,8 @@ def executor(name, route, destination):
         folder=Path(destination)/('interaction-'+uuid.uuid4().hex)
         root=prepare(folder,name,route)
         env=child_env(folder, PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8',   # the run's own home: its policy is the template's
-                 TELEGRAM_BOT_TOKEN='1:evaluation',CALLIMACHUS_TELEGRAM_BOT_TOKEN='2:evaluation',
-                 VITRUVIUS_TELEGRAM_BOT_TOKEN='3:evaluation',TACITUS_TELEGRAM_BOT_TOKEN='4:evaluation')
+                 TELEGRAM_BOT_TOKEN='1:evaluation',LIBRARIAN_TELEGRAM_BOT_TOKEN='2:evaluation',
+                 ENGINEER_TELEGRAM_BOT_TOKEN='3:evaluation',PRIVATE_TELEGRAM_BOT_TOKEN='4:evaluation')
         env[name.upper()+'_BACKGROUND_TASK']='1'
         env.setdefault('ANTHROPIC_API_KEY','evaluation-unused')
         status='crashed'

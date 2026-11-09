@@ -7,15 +7,15 @@ from tabularium.ops import supervisor
 from tabularium.ops import agent_control
 class Decide(unittest.TestCase):
     def test_start_when_not_running(self):
-        c = supervisor.Child("cato")
+        c = supervisor.Child("coordinator")
         self.assertEqual(supervisor.decide(c, 1000.0), "start")
 
     def test_paused_does_nothing(self):
-        c = supervisor.Child("cato")
+        c = supervisor.Child("coordinator")
         self.assertIsNone(supervisor.decide(c, 1000.0, paused=True))
 
     def test_crash_loop_waits_then_starts_again(self):
-        c = supervisor.Child("cato")
+        c = supervisor.Child("coordinator")
         c.exits = [900.0, 950.0, 990.0]
         self.assertEqual(supervisor.decide(c, 1000.0), "wait")
         self.assertEqual(supervisor.decide(c, 990.0 + supervisor.CRASH_BACKOFF + 1), "start")
@@ -24,7 +24,7 @@ class Decide(unittest.TestCase):
         class Proc:
             pid = 77
             def poll(self): return None
-        c = supervisor.Child("cato"); c.proc = Proc(); c.python_pid = 500; c.instance = "current"
+        c = supervisor.Child("coordinator"); c.proc = Proc(); c.python_pid = 500; c.instance = "current"
         live = {"phase": "model", "deadline": 2000.0, "pid": 500, "instance": "current", "last_progress": 0}
         self.assertIsNone(supervisor.decide(c, 2100.0, live))                                  # within grace
         self.assertEqual(supervisor.decide(c, 2000.0 + supervisor.STALL_GRACE + 1, live), "kill")
@@ -40,11 +40,11 @@ class Restart(unittest.TestCase):
         from tabularium.ops import release
         p=patch.object(release,'identity',return_value={'commit':'one','digest':'one'});p.start()
         q=patch.object(release,'uncommitted',return_value=[]);q.start()
-        try:done=agent_control.request_restart(['cato','vitruvius'],root=root)
+        try:done=agent_control.request_restart(['coordinator','engineer'],root=root)
         finally:q.stop();p.stop()
         self.assertIn('dashboard',done)
         self.assertTrue((root/'dashboard/restart_status.json').exists())
-        self.assertFalse((root/'cato/task_state/drain').exists())
+        self.assertFalse((root/'coordinator/task_state/drain').exists())
 
     def test_unknown_agent_refused(self):
         self.assertRaises(ValueError,agent_control.request_restart,['nobody'])
@@ -78,7 +78,7 @@ class Liveness(unittest.TestCase):
         class Proc:
             pid = 77
             def poll(self): return None
-        c = supervisor.Child("cato"); c.proc = Proc(); c.python_pid = 500; c.instance = "current"
+        c = supervisor.Child("coordinator"); c.proc = Proc(); c.python_pid = 500; c.instance = "current"
         quiet = {"phase": "idle", "pid": 500, "instance": "current", "last_progress": 1000.0}
         self.assertIsNone(supervisor.decide(c, 1000.0 + supervisor.HEALTH_STALE - 1, quiet))
         self.assertEqual(supervisor.decide(c, 1000.0 + supervisor.HEALTH_STALE + 1, quiet), "kill")
@@ -88,7 +88,7 @@ class Liveness(unittest.TestCase):
         import subprocess, sys as _sys
         p = subprocess.Popen([_sys.executable, "-c", "import time; time.sleep(30)"])
         try:
-            c = supervisor.Child("vitruvius"); c.adopted = p.pid
+            c = supervisor.Child("engineer"); c.adopted = p.pid
             self.assertTrue(c.tracked() and c.running())
             self.assertEqual(c.pid(), p.pid)
         finally:

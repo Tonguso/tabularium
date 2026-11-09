@@ -2,7 +2,7 @@
 Cato -- Telegram Interface
 
 Run:
-    tabularium run cato
+    tabularium run coordinator
 
 The message path lives in tabularium/core/agent_app.py (one class for all four agents, 2026-10-11). This file holds what is
 Cato's alone: his configuration, the delegate tool, lesson approval and video intake.
@@ -51,14 +51,14 @@ DELEGATE_TOOL = {"name": "delegate", "description": "Send focused work to Cal (r
 
 
 CONFIG = Config(
-    name="cato", role=ROLES["cato"], display="Cato",
+    name="coordinator", role=ROLES["coordinator"], display="Cato",
     token_env="TELEGRAM_BOT_TOKEN", token_missing="TELEGRAM_BOT_TOKEN not set.",
     provider_env="MODEL_PROVIDER", provider_default="anthropic",
-    instance_port=8212,        # cato=8212, tacitus=8213, callimachus=8215, vitruvius=8216, watchdog=8211
+    instance_port=8212,        # coordinator=8212, private=8213, librarian=8215, engineer=8216, watchdog=8211
     cdp_port=9222,
     openai_commands=("openai",),
     xlsx_uploads=True, document_types=".xlsx, .docx, .txt, or .pdf",
-    voice_env="CATO_ELEVENLABS_VOICE_ID",
+    voice_env="COORDINATOR_ELEVENLABS_VOICE_ID",
     background_refusals=True,          # workers: no polling other agents' task_state, no delivery before delegations are read
     tools_after=(("read_research_reports", DELEGATE_TOOL),),
     telegram_prompt="""
@@ -231,13 +231,13 @@ class CatoApp(AgentApp):
             if bad:
                 return _rt.DECISION_QUOTE_RULE + " Offending brief lines: " + bad
             if not isinstance(budget_tokens, int) or isinstance(budget_tokens, bool) or budget_tokens <= 0:
-                return "submit needs budget_tokens (effective tokens, by task type from cato/reports/task_cost_history_*.md)."
+                return "submit needs budget_tokens (effective tokens, by task type from coordinator/reports/task_cost_history_*.md)."
             card = _contract.load_card(agent)
             error = _contract.path_refusal(agent, card, output_path, brief, json.dumps(completion_items, ensure_ascii=False))
             if error:
                 return error
             import uuid
-            request_id = request_id or f"cato-{agent}-{target or 'fg'}-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
+            request_id = request_id or f"coordinator-{agent}-{target or 'fg'}-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
             numbered = "\n".join(f"{n}. {'[critical] ' if it['critical'] else ''}{it['item']} (check: {it['check']})" for n, it in enumerate(completion_items, 1))
             output = completion_condition + "\nCompletion items, critical first:\n" + numbered
             request = {"request_id": request_id, "title": " ".join((title or purpose).split())[:90],
@@ -439,6 +439,6 @@ class CatoApp(AgentApp):
         self._run_image_turn(chat_id, images, reply_note + text, message.date)
 
 def build(agent_dir, overrides=None):
-    """The cato agent for this folder (see tabularium.agents.build)."""
+    """The coordinator agent for this folder (see tabularium.agents.build)."""
     from tabularium.agents import configure
     return CatoApp(configure(CONFIG, overrides or {}), agent_dir)

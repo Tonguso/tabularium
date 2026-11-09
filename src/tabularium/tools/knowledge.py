@@ -9,7 +9,7 @@ import re
 import sqlite3
 import uuid
 
-ROOT = _home()/'callimachus'
+ROOT = _home()/'librarian'
 ARCHIVE = ROOT / 'archive'
 
 def now():

@@ -52,8 +52,8 @@ class Envelope(unittest.TestCase):
 class Routes(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
-        self.runtime = load_agent("cato", root)["runtime"]
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
+        self.runtime = load_agent("coordinator", root)["runtime"]
         self.runtime.BACKGROUND_TASK_ID = ""
 
     def tearDown(self):

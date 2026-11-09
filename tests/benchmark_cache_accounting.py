@@ -13,7 +13,7 @@ scratch=tempfile.TemporaryDirectory()
 old=Path(scratch.name)/'old_shared.py'
 old.write_bytes(subprocess.check_output(['git','show','9198d70:agent_core/shared_handlers.py'],cwd=root))
 spec=importlib.util.spec_from_file_location('old_shared',old); baseline=importlib.util.module_from_spec(spec);spec.loader.exec_module(baseline)
-agent=SimpleNamespace(_inbox=SimpleNamespace(record_event=lambda *a,**k:None),_cache_key=lambda:'cal-accounting-comparison-20261024',OPENAI_REASONING_EFFORT='medium',config=SimpleNamespace(name='callimachus',display='Cal'))
+agent=SimpleNamespace(_inbox=SimpleNamespace(record_event=lambda *a,**k:None),_cache_key=lambda:'cal-accounting-comparison-20261024',OPENAI_REASONING_EFFORT='medium',config=SimpleNamespace(name='librarian',display='Cal'))
 client=OpenAI(api_key=ChatGPTPlan('Callimachus').access_token(),max_retries=0,timeout=90)
 content='\n'.join(f'Record {i}: synthetic balance {i*7} GBP.' for i in range(300))
 content+='\nReport the balance for record 299, the currency, and whether deployment is allowed when a required test failed. No tools.'
@@ -26,4 +26,4 @@ try:
         print(label,json.dumps(result[label]),flush=True)
 finally:
     client.close();scratch.cleanup()
-    (root/'cato/reports/cache-accounting-comparison.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
+    (root/'coordinator/reports/cache-accounting-comparison.json').write_text(json.dumps(result,indent=2),encoding='utf-8')

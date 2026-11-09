@@ -130,7 +130,7 @@ class Evaluation(unittest.TestCase):
         cases=regression.collect(self.root,store)
         self.assertFalse(cases[0]['trusted'])
         self.assertRaises(ValueError,regression.validate_case,cases[0])
-        self.assertRaises(ValueError,regression.collect,self.root/'tacitus',store)
+        self.assertRaises(ValueError,regression.collect,self.root/'private',store)
 
     def test_run_measures_quality_usage_and_compares_only_same_benchmark(self):
         store=rt.TaskStore(self.root)

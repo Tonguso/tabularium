@@ -35,7 +35,7 @@ ALLOWED_HOSTS = {f'127.0.0.1:{PORT}', TAILNET_HOST}
 ALLOWED_ORIGINS = {URL, 'https://' + TAILNET_HOST}
 CLAUDE_LOGIN_LOCK = threading.Lock()
 TASK_STORES = {name: TaskStore(ROOT/name, ROLES[name]) for name in AGENTS}
-TASKS = TASK_STORES['cato']
+TASKS = TASK_STORES['coordinator']
 
 def task_store(name):
     if name not in TASK_STORES: raise ValueError('This agent has no background-task manager')
@@ -79,7 +79,7 @@ def usage(name):
 
 
 def state():
-    data=snapshot(ROOT/'cato',TASKS,OWNER_CHAT_ID)
+    data=snapshot(ROOT/'coordinator',TASKS,OWNER_CHAT_ID)
     for name in AGENTS:
         folder=ROOT/name/'task_state'
         transport=read_json(folder/'transport.json')
@@ -194,7 +194,7 @@ def state():
     data['csrf']=TOKEN
     data['search_order']=search_routing.read_order()
     data['claude_login']=read_json(ROOT/'dashboard/claude_login.json')
-    data['quota']=read_json(ROOT/'cato/task_state/search_quota.json')
+    data['quota']=read_json(ROOT/'coordinator/task_state/search_quota.json')
     data['usage_note']='Recorded responses today (local time). Missing measurements are flagged. Subscription allowance, voice charges and dollar costs are not inferred.'
     data['recovery']='Model changes apply between foreground turns. Background workers keep their current model. Resume only after reviewing prior actions to avoid repeating side effects.'
     return data
@@ -224,10 +224,10 @@ class Handler(BaseHTTPRequestHandler):
             static['/agents.apk']=('android/build/agents.apk','application/vnd.android.package-archive')
             for name in AGENTS:
                 static['/assets/'+name+'.jpg']=('assets/'+name+'.svg','image/svg+xml')
-            if not (STATIC/'static/assets/callimachus.jpg').exists():
-                static['/assets/callimachus.jpg']=('assets/callimachus.svg','image/svg+xml')
-            if not (STATIC/'static/assets/vitruvius.jpg').exists():
-                static['/assets/vitruvius.jpg']=('assets/vitruvius.svg','image/svg+xml')
+            if not (STATIC/'static/assets/librarian.jpg').exists():
+                static['/assets/librarian.jpg']=('assets/librarian.svg','image/svg+xml')
+            if not (STATIC/'static/assets/engineer.jpg').exists():
+                static['/assets/engineer.jpg']=('assets/engineer.svg','image/svg+xml')
             static['/assets/tabularium.svg']=('assets/tabularium.svg','image/svg+xml')
             static['/assets/tabularium.svg']=('assets/tabularium.svg','image/svg+xml')
             static['/assets/tabularium.svg']=('assets/tabularium.svg','image/svg+xml')
@@ -248,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path=='/api/state':self.send(state())
             elif url.path=='/api/scorecard':self.send(weekly(ROOT))
             elif url.path in ('/api/history','/api/history/export'):
-                data=history(args.get('agent',['cato'])[0],OWNER_CHAT_ID,args.get('from',[''])[0],args.get('to',[''])[0],args.get('q',[''])[0])
+                data=history(args.get('agent',['coordinator'])[0],OWNER_CHAT_ID,args.get('from',[''])[0],args.get('to',[''])[0],args.get('q',[''])[0])
                 if url.path.endswith('/export'):
                     fmt=args.get('format',['md'])[0]
                     body,kind=export(data,fmt)
@@ -273,13 +273,13 @@ class Handler(BaseHTTPRequestHandler):
                 if name not in AGENTS:raise ValueError('Unknown agent')
                 self.send({'text':tail(name)})
             elif url.path=='/api/trace':
-                store=task_store(args.get('agent',['cato'])[0])
+                store=task_store(args.get('agent',['coordinator'])[0])
                 task=store.get(int(args.get('task',['0'])[0]))
                 if task['chat']!=OWNER_CHAT_ID:raise ValueError('Wrong owner')
                 evs=trace.events(store,task['id'])
                 self.send({'task':task['id'],'label':store.label(task),'status':task['status'],'summary':trace.summary(evs),'events':evs})
             elif url.path=='/api/result':
-                store=task_store(args.get('agent',['cato'])[0])
+                store=task_store(args.get('agent',['coordinator'])[0])
                 task=store.get(int(args.get('task',['0'])[0]))
                 if task['chat']!=OWNER_CHAT_ID:raise ValueError('Wrong owner')
                 path=store.directory(task['id'])/'result.txt'
@@ -355,7 +355,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path=='/api/task':
                 action=value.get('action')
                 if action not in ('cancel','resume'):raise ValueError('Unsupported task action')
-                name=value.get('agent','cato')
+                name=value.get('agent','coordinator')
                 store=task_store(name)
                 health=read_json(ROOT/name/'task_state/health.json')
                 if time.time()-health.get('last_progress',0)>150:raise ValueError(name.title()+' is offline; start the agent before changing tasks.')

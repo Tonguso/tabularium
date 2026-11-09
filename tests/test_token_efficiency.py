@@ -20,7 +20,7 @@ class Efficiency(unittest.TestCase):
         self.root = Path(self.tmp.name)
 
     def test_native_items_survive_real_turn_loop_exactly(self):
-        agent = make_agent("callimachus", self.root)
+        agent = make_agent("librarian", self.root)
         agent.OPENAI_API_KEY = "test"
         token = agent._routing.ACTIVE.set({"kind": "openai_api", "model": "gpt-test"})
         self.addCleanup(agent._routing.ACTIVE.reset, token)
@@ -90,7 +90,7 @@ class Efficiency(unittest.TestCase):
         self.assertEqual(archives[0].read_text(encoding="utf-8"), text)
 
     def test_worker_can_retrieve_its_log_and_legacy_agent_archive(self):
-        agent = make_agent("callimachus", self.root, background=True)
+        agent = make_agent("librarian", self.root, background=True)
         for directory in [agent.RUNTIME_DIR / "context_archive" / "results", agent.AGENT_DIR / "context_archive" / "results"]:
             result = json.loads(command_result("noise\n" * 1000 + "unique_failure expected 73\n", "", 1, directory))
             found = agent._execute_tool_unguarded("search_archived", {"query":"unique_failure", "path":result["archive"]}, 1)

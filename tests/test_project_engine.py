@@ -53,7 +53,7 @@ class ProjectEngine(unittest.TestCase):
         with tasks.db() as db:
             db.execute("UPDATE tasks SET updated=0")
     def test_crashed_worker_with_clean_records_is_rerun_at_most_twice(self):
-        tasks=TaskStore(self.root); t=tasks.start(1,"Read research"); notices=[]
+        tasks=TaskStore(self.root, display="Cato"); t=tasks.start(1,"Read research"); notices=[]
         for n in (1,2):
             self.crash(tasks,t["id"]); tasks.retry_interrupted()
             self.assertEqual(tasks.get(t["id"])["status"],"queued",n)

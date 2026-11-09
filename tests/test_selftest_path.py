@@ -14,8 +14,8 @@ from agent_harness import load_agent
 class SelftestPath(unittest.TestCase):
     def test_selftest_composes_like_the_handler(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
-            runtime = load_agent("cato", root)["runtime"]
+            root = Path(tmp) / "coordinator"; root.mkdir()
+            runtime = load_agent("coordinator", root)["runtime"]
             seen = []
 
             def fake_run_turn(messages, chat_id):
@@ -39,8 +39,8 @@ class SelftestPath(unittest.TestCase):
 
     def test_selftest_reports_a_handler_composition_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
-            runtime = load_agent("cato", root)["runtime"]
+            root = Path(tmp) / "coordinator"; root.mkdir()
+            runtime = load_agent("coordinator", root)["runtime"]
             def broken(message, nudge=True):
                 raise NameError("name '_language_hint' is not defined")
             runtime.compose_turn = broken

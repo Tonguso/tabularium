@@ -11,8 +11,8 @@ from tabularium.records.project_store import ProjectStore
 class Remember(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name) / "cato"; self.root.mkdir()
-        self.agent = make_agent("cato", self.root)
+        self.root = Path(self.tmp.name) / "coordinator"; self.root.mkdir()
+        self.agent = make_agent("coordinator", self.root)
         self.agent.MEMORY_FILE.write_text("# M\n\n## Notes\n- old wording here\n", encoding="utf-8")
         self.agent._recall.record(1, [{"role": "user", "content": "[2026-10-14 Tuesday 10:00] Keep the basket to six names."}],
                                   str(self.root / "conversation_1.json"))

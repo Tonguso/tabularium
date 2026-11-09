@@ -182,9 +182,9 @@ class RememberRecordsTheEditOrNothing(unittest.TestCase):
         import contextlib, io
         from agent_harness import make_agent
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
+            root = Path(tmp) / "coordinator"; root.mkdir()
             with contextlib.redirect_stdout(io.StringIO()):
-                agent = make_agent("cato", root)
+                agent = make_agent("coordinator", root)
             (root / "SKILL.md").write_text("# Cato\n", encoding="utf-8")
             out = agent.execute_tool("remember", {"kind": "lesson", "content": "I asked who the buyer was"}, 1)
             self.assertIn("Without the edit nothing is recorded", str(out))

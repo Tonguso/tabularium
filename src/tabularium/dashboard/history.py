@@ -21,7 +21,7 @@ def text_only(content):
 
 
 def history(agent,chat,date_from='',date_to='',search=''):
-    if agent not in ('cato','tacitus','callimachus'):raise ValueError('Unknown agent')
+    if agent not in ('coordinator','private','librarian'):raise ValueError('Unknown agent')
     for value in (date_from,date_to):
         if value:datetime.strptime(value,'%Y-%m-%d')
     if date_from and date_to and date_from>date_to:raise ValueError('Start date must be before end date')

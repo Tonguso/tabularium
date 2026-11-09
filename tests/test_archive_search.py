@@ -29,9 +29,9 @@ class ArchiveSearch(unittest.TestCase):
 
     def test_every_agent_has_it_after_read_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
+            root = Path(tmp) / "coordinator"; root.mkdir()
             with contextlib.redirect_stdout(io.StringIO()):
-                a = make_agent("cato", root)
+                a = make_agent("coordinator", root)
             names = [t["name"] for t in a.get_tools("anthropic")]
             self.assertEqual(names[names.index("read_file") + 1], "search_archived")
             self.assertIn("No archived tool output yet", a.execute_tool("search_archived", {"query": "anything"}, 1))

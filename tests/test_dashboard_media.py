@@ -156,18 +156,18 @@ class DashboardMedia(unittest.TestCase):
         self.addCleanup(connection.close)
         headers = {'Host':f'127.0.0.1:{dashboard.PORT}', 'Origin':dashboard.URL,
                    'Content-Type':'application/octet-stream'}
-        connection.request('POST', '/api/attachments?agent=cato&name=voice.wav', b'RIFF demo', headers)
+        connection.request('POST', '/api/attachments?agent=coordinator&name=voice.wav', b'RIFF demo', headers)
         response = connection.getresponse()
         self.assertEqual(response.status, 403)
         response.read()
         headers['X-CSRF-Token'] = dashboard.TOKEN
-        connection.request('POST', '/api/attachments?agent=cato&name=voice.wav', b'RIFF demo', headers)
+        connection.request('POST', '/api/attachments?agent=coordinator&name=voice.wav', b'RIFF demo', headers)
         response = connection.getresponse()
         self.assertEqual(response.status, 200)
         ref = json.loads(response.read())
-        self.assertEqual(messaging.attachment_path(self.root/'cato', ref).read_bytes(), b'RIFF demo')
+        self.assertEqual(messaging.attachment_path(self.root/'coordinator', ref).read_bytes(), b'RIFF demo')
         patches[-1].target.ready.return_value = False
-        connection.request('POST', '/api/attachments?agent=cato&name=voice.wav', b'RIFF demo', headers)
+        connection.request('POST', '/api/attachments?agent=coordinator&name=voice.wav', b'RIFF demo', headers)
         response = connection.getresponse()
         self.assertEqual(response.status, 400)
         response.read()

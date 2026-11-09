@@ -17,9 +17,9 @@ class Handoff(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
         with contextlib.redirect_stdout(io.StringIO()):
-            self.agent = make_agent("cato", root)
+            self.agent = make_agent("coordinator", root)
         self.agent.BACKGROUND_TASK_ID = ""
         self.store = self.agent._background
         self.store.worker_limit = lambda: 1

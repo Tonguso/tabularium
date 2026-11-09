@@ -26,6 +26,9 @@ versioning.
   agent folder; pywin32 is needed only to store a ChatGPT connection; the scorecard's command line reads the home.
 - For reproduction: `CITATION.cff`, `requirements.lock` (the frozen environment of the reported runs) and a README
   section on running the benchmark and what makes two runs comparable.
+- The roster's slots are the role names: `coordinator`, `librarian`, `engineer`, `private` (folders, environment
+  variable prefixes and avatar files follow). The personas in the prompts keep their names; a slot is structure, a
+  persona is example data. Incident matching and owner notices use the persona's display name, not the slot.
 
 ## [0.3.0] - 2026-11-08
 

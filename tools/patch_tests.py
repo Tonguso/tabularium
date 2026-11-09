@@ -22,19 +22,19 @@ def patch(name, *pairs, regex=()):
 ROLE_FILES = '*(ROOT / "src" / "tabularium" / "agents" / f"{m}.py" for m in ("coordinator", "private", "librarian", "engineer"))'
 
 patch("test_always_skills.py",
-      ('src = (ROOT / "tacitus" / "telegram.py").read_text(encoding="utf-8")',
+      ('src = (ROOT / "private" / "telegram.py").read_text(encoding="utf-8")',
        'src = (ROOT / "src" / "tabularium" / "agents" / "private.py").read_text(encoding="utf-8")'))
 patch("test_budget_enforcement.py",
       ('src = (ROOT.parent / "background_runtime.py").read_text(encoding="utf-8")',
        'src = (ROOT / "src" / "tabularium" / "records" / "background_runtime.py").read_text(encoding="utf-8")'),
-      ('for client in (ROOT.parent / "callimachus" / "research_client.py", ROOT.parent / "vitruvius" / "work_client.py"):',
+      ('for client in (ROOT.parent / "librarian" / "research_client.py", ROOT.parent / "engineer" / "work_client.py"):',
        'for client in (ROOT / "src" / "tabularium" / "delegation" / "research_client.py", ROOT / "src" / "tabularium" / "delegation" / "work_client.py"):'))
 patch("test_one_turn_loop.py",
       ('FILES = [ROOT / "engine.py", ROOT / "subscription_runtime.py", *sorted((ROOT / "agent_core").glob("*.py"))]',
        'FILES = sorted(p for p in (ROOT / "src" / "tabularium").rglob("*.py") if p.parts[-2] != "agents")'))
 patch("test_outcomes.py",
       ('FILES = [ROOT / "engine.py", ROOT / "background_runtime.py", *sorted((ROOT / "agent_core").glob("*.py")),\n'
-       '         *(ROOT / a / "telegram.py" for a in ("cato", "tacitus", "callimachus", "vitruvius"))]',
+       '         *(ROOT / a / "telegram.py" for a in ("coordinator", "private", "librarian", "engineer"))]',
        'FILES = sorted((ROOT / "src" / "tabularium").rglob("*.py"))'))
 patch("test_roster.py",
       ('RUNTIME_FILES = [ROOT / n for n in ("engine.py", "background_runtime.py", "supervisor.py", "agent_control.py", "dashboard.py",\n'
@@ -52,7 +52,7 @@ patch("test_shared_handler_references.py",
       ('FILES = [ROOT / "engine.py", ROOT / "background_runtime.py", ROOT / "subscription_runtime.py", ROOT / "supervisor.py",\n'
        '         ROOT / "agent_control.py", ROOT / "dashboard.py", ROOT / "task_cost.py", ROOT / "retention.py", ROOT / "agent_logging.py",\n'
        '         *sorted((ROOT / "agent_core").glob("*.py")),\n'
-       '         *(ROOT / agent / "telegram.py" for agent in ("cato", "tacitus", "callimachus", "vitruvius"))]',
+       '         *(ROOT / agent / "telegram.py" for agent in ("coordinator", "private", "librarian", "engineer"))]',
        'FILES = sorted((ROOT / "src" / "tabularium").rglob("*.py"))'))
 patch("test_superseded_rule.py",
       ('hits = [p.name for p in (ROOT / "agent_core").glob("*.py") if p.name != "memory_store.py"',
@@ -60,21 +60,21 @@ patch("test_superseded_rule.py",
 patch("test_stall.py",
       ('(ROOT / "subscription_runtime.py").read_text', '(ROOT / "src" / "tabularium" / "models" / "subscription_runtime.py").read_text'))
 patch("test_work_method.py",
-      ('for rel in ("engine.py", "cato/telegram.py"):', 'for rel in ("src/tabularium/core/engine.py", "src/tabularium/agents/coordinator.py"):'),
-      ('r = subprocess.run([sys.executable, str(ROOT / "cato" / "scripts" / "textdiff.py"), str(a), str(b), "--srt"],',
+      ('for rel in ("engine.py", "coordinator/telegram.py"):', 'for rel in ("src/tabularium/core/engine.py", "src/tabularium/agents/coordinator.py"):'),
+      ('r = subprocess.run([sys.executable, str(ROOT / "coordinator" / "scripts" / "textdiff.py"), str(a), str(b), "--srt"],',
        'r = subprocess.run([sys.executable, "-m", "tabularium.tools.textdiff", str(a), str(b), "--srt"],'))
 patch("test_session_ownership.py",
       ("        runtime = str(Path(__file__).resolve().parents[1] / 'background_runtime.py')   # not D:/Agents: the public export runs elsewhere (2026-10-24)\n"
        "        proc = subprocess.run([sys.executable,'-B',runtime,'--worker',str(ident),",
        "        proc = subprocess.run([sys.executable,'-B','-m','tabularium','worker',str(ident),"))
 patch("test_restart_evidence.py",
-      ("'CommandLine': 'D:\\\\Agents\\\\cato\\\\telegram.py'}", "'CommandLine': 'python.exe -m tabularium run cato'}"))
+      ("'CommandLine': 'D:\\\\Agents\\\\coordinator\\\\telegram.py'}", "'CommandLine': 'python.exe -m tabularium run coordinator'}"))
 patch("test_release_flow.py",
       ("self.assertEqual([Path(c[0]).name for c in calls],['python.exe','python.exe'])", "self.assertEqual([Path(c[0]).name for c in calls],['python.exe'])"))
 patch("test_current_state.py",
-      ('self.assertEqual(popen.call_args.args[0][2:4], ["eval", "cato"])', 'self.assertEqual(popen.call_args.args[0][1:5], ["-m", "tabularium", "eval", "cato"])'))
+      ('self.assertEqual(popen.call_args.args[0][2:4], ["eval", "coordinator"])', 'self.assertEqual(popen.call_args.args[0][1:5], ["-m", "tabularium", "eval", "coordinator"])'))
 patch("test_dashboard_media.py",
-      ("        from cato import video_intake\n", "        from tabularium.tools import video_intake\n"))
+      ("        from coordinator import video_intake\n", "        from tabularium.tools import video_intake\n"))
 patch("test_smoke_agents.py",
       ('"""Offline: each agent\'s telegram.py loads in a fresh interpreter on top of engine.py (fake credentials, temp\n',
        '"""Offline: each agent builds in a fresh interpreter from its role module (fake credentials, temp\n'),

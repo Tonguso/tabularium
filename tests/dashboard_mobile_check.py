@@ -34,7 +34,7 @@ class MobileDashboard(unittest.TestCase):
                                       'decisions': [{'id': 9, 'question': 'Dashboard question'}]})
             elif path == '/api/state':
                 request.fulfill(json={'csrf': 'synthetic', 'agents': {name: {'status': 'ready'} for name in
-                    ['cato', 'callimachus', 'vitruvius', 'tacitus']}, 'tasks': [], 'updated': 1})
+                    ['coordinator', 'librarian', 'engineer', 'private']}, 'tasks': [], 'updated': 1})
             elif path.startswith('/api/'):
                 request.fulfill(json={})
             else:
@@ -94,9 +94,9 @@ class MobileDashboard(unittest.TestCase):
         expect(page.locator('#message-file-name')).to_have_text('')
         self.assertEqual(len(posts), 4, 'Rejected upload must not queue a message')
         page.locator('#message-text').fill('Unsent Cato draft')
-        page.locator('#message-agent').select_option('vitruvius')
+        page.locator('#message-agent').select_option('engineer')
         expect(page.locator('#message-text')).to_have_value('')
-        page.locator('#message-agent').select_option('cato')
+        page.locator('#message-agent').select_option('coordinator')
         expect(page.locator('#message-text')).to_have_value('Unsent Cato draft')
         for height in (780, 430):
             page.set_viewport_size({'width': 393, 'height': height})

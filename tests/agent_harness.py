@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = ("cato", "tacitus", "callimachus", "vitruvius")
+AGENTS = ("coordinator", "private", "librarian", "engineer")
 STYLE = Path("skills/talk-like-a-human-being/runtime-core.md")
 
 
@@ -30,8 +30,8 @@ def load_agent(agent, root):
     with store.db() as db:
         db.execute("INSERT OR IGNORE INTO tasks(id,chat,request,status,created,updated) VALUES (1,1,'self-test','running',0,0)")
     env = {"ANTHROPIC_API_KEY": "test", "OPENAI_API_KEY": "test", "SEARCH_PROVIDER": "anthropic",
-           f"{agent.upper()}_BACKGROUND_TASK": "1", "TELEGRAM_BOT_TOKEN": "1:a", "TACITUS_TELEGRAM_BOT_TOKEN": "2:b",
-           "CALLIMACHUS_TELEGRAM_BOT_TOKEN": "3:c", "VITRUVIUS_TELEGRAM_BOT_TOKEN": "4:d"}
+           f"{agent.upper()}_BACKGROUND_TASK": "1", "TELEGRAM_BOT_TOKEN": "1:a", "PRIVATE_TELEGRAM_BOT_TOKEN": "2:b",
+           "LIBRARIAN_TELEGRAM_BOT_TOKEN": "3:c", "ENGINEER_TELEGRAM_BOT_TOKEN": "4:d"}
     from tabularium.agents import build
     with patch.dict(os.environ, env):
         runtime = build(root, agent)

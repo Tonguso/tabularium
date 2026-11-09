@@ -25,7 +25,7 @@ class SkillRecord(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / "cato"
+        self.root = Path(self.tmp.name) / "coordinator"
         self.root.mkdir()
         self.store = TaskStore(self.root)
         now = time.time()
@@ -83,7 +83,7 @@ class SkillRecord(unittest.TestCase):
 
     def test_the_skill_tool_appends_the_record_and_notes_the_load(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            agent = make_agent("cato", self.root)
+            agent = make_agent("coordinator", self.root)
         agent.BACKGROUND_TASK_ID = ""
         agent._background = self.store
         skill_record.backfill(self.root)

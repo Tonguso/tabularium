@@ -105,7 +105,7 @@ def delegate(store, task, request):
         db.close()
     if not card or int(card[0]) != int(task):
         raise ValueError("The request does not belong to this task.")
-    name = {"vit": "vitruvius", "cal": "callimachus"}.get(card[1])
+    name = {"vit": "engineer", "cal": "librarian"}.get(card[1])
     if not name:
         raise ValueError("Unknown delegate.")
     folder = store.agent_dir.parent / name

@@ -53,8 +53,8 @@ class AMatterOutsideTheWindowArrivesWithTheMessage(unittest.TestCase):
     newest turn 32 minutes before the window began, and Cato asked him who the buyer was."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name) / "cato"; self.root.mkdir()
-        self.runtime = load_agent("cato", self.root)["runtime"]
+        self.root = Path(self.tmp.name) / "coordinator"; self.root.mkdir()
+        self.runtime = load_agent("coordinator", self.root)["runtime"]
         self.runtime.BACKGROUND_TASK_ID = ""
         (self.root / "memory.md").write_text(
             "# Memory\n\n## Alex's Affairs (standing matters)\n\n- **Flat purchase, Galleria House 1204** "
@@ -99,9 +99,9 @@ class ARouteChangeRerunsTheBenchmarkOnce(unittest.TestCase):
     due and nothing ran it."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name) / "cato"; self.root.mkdir()
+        self.root = Path(self.tmp.name) / "coordinator"; self.root.mkdir()
         (self.root.parent / "logs").mkdir()
-        self.runtime = load_agent("cato", self.root)["runtime"]
+        self.runtime = load_agent("coordinator", self.root)["runtime"]
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -115,7 +115,7 @@ class ARouteChangeRerunsTheBenchmarkOnce(unittest.TestCase):
         with patch.object(regression, "primary_route", return_value="gpt-6-luna"), \
              patch.object(regression, "route_gap", return_value="- BENCHMARK? ..."), patch("tabularium.core.engine.subprocess.Popen") as popen:
             self.assertTrue(self.runtime.run_benchmark_rerun())
-            self.assertEqual(popen.call_args.args[0][1:5], ["-m", "tabularium", "eval", "cato"])
+            self.assertEqual(popen.call_args.args[0][1:5], ["-m", "tabularium", "eval", "coordinator"])
             self.assertFalse(self.runtime.run_benchmark_rerun())                 # the same route is not launched twice
             popen.assert_called_once()
 
@@ -160,8 +160,8 @@ class AnAnswerlessSessionGetsOneMoreSession(unittest.TestCase):
 class MemoryIsAlwaysCurrent(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name) / "cato"; self.root.mkdir()
-        self.runtime = load_agent("cato", self.root)["runtime"]
+        self.root = Path(self.tmp.name) / "coordinator"; self.root.mkdir()
+        self.runtime = load_agent("coordinator", self.root)["runtime"]
         self.runtime.BACKGROUND_TASK_ID = ""
 
     def tearDown(self):
@@ -191,8 +191,8 @@ class MemoryIsAlwaysCurrent(unittest.TestCase):
 class ExamRunsLikeARealTurn(unittest.TestCase):
     def test_only_scoped_tools_exist_and_memory_is_present(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
-            rt = load_agent("cato", root)["runtime"]          # the harness writes its own memory.md; replace it after
+            root = Path(tmp) / "coordinator"; root.mkdir()
+            rt = load_agent("coordinator", root)["runtime"]          # the harness writes its own memory.md; replace it after
             (root / "memory.md").write_text("# Memory\n\n## Alex\n- Travels to Tokyo next week.\n", encoding="utf-8")
             rt.BACKGROUND_TASK_ID = ""
             seen = {}

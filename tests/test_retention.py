@@ -20,30 +20,30 @@ class Retention(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_trials_old_deleted_recent_kept(self):
-        touch(self.root / "cato" / "scratch" / "tools_trial" / "docling" / "model.bin", 10, self.now)
-        touch(self.root / "cato" / "scratch" / "tools_trial" / "fresh" / "a.py", 1, self.now)   # newest file decides
-        touch(self.root / "cato" / "scratch" / "notes.txt", 100, self.now)                      # not a trial dir
+        touch(self.root / "coordinator" / "scratch" / "tools_trial" / "docling" / "model.bin", 10, self.now)
+        touch(self.root / "coordinator" / "scratch" / "tools_trial" / "fresh" / "a.py", 1, self.now)   # newest file decides
+        touch(self.root / "coordinator" / "scratch" / "notes.txt", 100, self.now)                      # not a trial dir
         actions = retention.sweep_trials(self.root, self.now)
         self.assertEqual(actions, [])                                                            # whole tools_trial is 1 day old
-        os.utime(self.root / "cato" / "scratch" / "tools_trial" / "fresh" / "a.py", (self.now - 9 * 86400,) * 2)
+        os.utime(self.root / "coordinator" / "scratch" / "tools_trial" / "fresh" / "a.py", (self.now - 9 * 86400,) * 2)
         actions = retention.sweep_trials(self.root, self.now)
         self.assertEqual(len(actions), 1)
-        self.assertFalse((self.root / "cato" / "scratch" / "tools_trial").exists())
-        self.assertTrue((self.root / "cato" / "scratch" / "notes.txt").exists())
+        self.assertFalse((self.root / "coordinator" / "scratch" / "tools_trial").exists())
+        self.assertTrue((self.root / "coordinator" / "scratch" / "notes.txt").exists())
 
     def test_smoke_folders_anywhere_under_scratch_are_trials(self):
-        deep = self.root / "cato" / "scratch" / "agent_refactor" / "tmp"
-        touch(deep / "smoke_cato_ab12" / "SKILL.md", 9, self.now)                                 # old: deleted
-        touch(deep / "smoke_tacitus_cd34" / "SKILL.md", 2, self.now)                               # recent: kept
+        deep = self.root / "coordinator" / "scratch" / "agent_refactor" / "tmp"
+        touch(deep / "smoke_coordinator_ab12" / "SKILL.md", 9, self.now)                                 # old: deleted
+        touch(deep / "smoke_private_cd34" / "SKILL.md", 2, self.now)                               # recent: kept
         touch(deep / "report.md", 30, self.now)                                                  # not a smoke dir
         actions = retention.sweep_trials(self.root, self.now)
         self.assertEqual(len(actions), 1, actions)
-        self.assertFalse((deep / "smoke_cato_ab12").exists())
-        self.assertTrue((deep / "smoke_tacitus_cd34").exists())
+        self.assertFalse((deep / "smoke_coordinator_ab12").exists())
+        self.assertTrue((deep / "smoke_private_cd34").exists())
         self.assertTrue((deep / "report.md").exists())
 
     def test_finished_tasks_zipped_live_tasks_kept(self):
-        base = self.root / "cato" / "task_state" / "background"
+        base = self.root / "coordinator" / "task_state" / "background"
         base.mkdir(parents=True)
         con = sqlite3.connect(base / "jobs.sqlite3")
         con.execute("CREATE TABLE tasks(id INTEGER PRIMARY KEY, status TEXT)")
@@ -57,7 +57,7 @@ class Retention(unittest.TestCase):
         self.assertEqual(sorted(zipfile.ZipFile(base / "archive" / "1.zip").namelist()), ["result.txt", "task_state/inbox.sqlite3"])
 
     def test_context_archive_zipped_by_month(self):
-        chat = self.root / "callimachus" / "context_archive" / "123"
+        chat = self.root / "librarian" / "context_archive" / "123"
         touch(chat / "old1.json", 35, self.now); touch(chat / "old2.json", 36, self.now)   # same month
         touch(chat / "new.json", 3, self.now)
         actions = retention.sweep_context_archives(self.root, self.now)

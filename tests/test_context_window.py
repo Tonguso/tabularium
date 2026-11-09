@@ -16,7 +16,7 @@ from tabularium.core.context_window import prepare_context, archive_preview, wir
 
 def scripted_agent(root):
     """A real foreground Cato whose outside world is quiet: no tools offered, no inbox, no saving, no memory."""
-    a = make_agent("cato", root)
+    a = make_agent("coordinator", root)
     a.get_tools = lambda provider: []
     a.get_anthropic_model = lambda chat: "test-model"
     a.SYSTEM_PROMPT = "test instructions"

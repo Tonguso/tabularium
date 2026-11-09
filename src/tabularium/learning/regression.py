@@ -102,7 +102,7 @@ def _read(path, default=""):
 def collect(agent_root, store, limit=20, existing=()):  # noqa: C901 - one pass over finished tasks
     """Cases from the newest finished tasks that have a checkpoint and a result, skipping trial and eval reruns."""
     known = {c.get("source_task") for c in existing}
-    if Path(agent_root).name == "tacitus":
+    if Path(agent_root).name == "private":
         raise ValueError("Do not collect Tacitus's private history. Use synthetic benchmark cases.")
     db = sqlite3.connect(store.database)
     db.row_factory = sqlite3.Row

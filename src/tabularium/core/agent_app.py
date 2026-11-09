@@ -1,6 +1,6 @@
 """One message path for every agent (2026-10-11, after the NameError regression of the same day).
 
-Until today each of cato/tacitus/callimachus/vitruvius/telegram.py was a 1,400-1,800 line copy of the same module, glued
+Until today each of coordinator/private/librarian/engineer/telegram.py was a 1,400-1,800 line copy of the same module, glued
 to the shared runtime by writing `runtime.` in front of names. Two bare names survived the handler dedup and every
 message to every agent failed for sixteen minutes; the tests passed because they never ran the message handler.
 
@@ -49,7 +49,7 @@ from tabularium.core import taint
 @dataclass
 class Config:
     """Everything that differs between the four agents. Text fields are verbatim from the old files."""
-    name: str                                   # directory and log name: 'cato'
+    name: str                                   # directory and log name: 'coordinator'
     role: Role                                  # from tabularium.core.roster: delegation, budget and worker rights
     display: str                                # 'Cato'
     token_env: str                              # 'TELEGRAM_BOT_TOKEN' or '<NAME>_TELEGRAM_BOT_TOKEN'
@@ -231,7 +231,7 @@ class AgentApp(engine.AgentRuntime):
         self._chatgpt_plan = ChatGPTPlan(cfg.display)
         self._images = ImageMemory(self.AGENT_DIR)
         self._recall = ConversationRecall(self.AGENT_DIR)
-        self._background = TaskStore(self.AGENT_DIR, cfg.role)
+        self._background = TaskStore(self.AGENT_DIR, cfg.role, cfg.display)
         self._background.answering = lambda: self._inbox.answering()
         self._tool_scope = None   # None: every tool; a set: only those (tool_scope)
         self._email_receipts = EmailReceipts(self.AGENT_DIR / "task_state" / "email_receipts", cfg.display)

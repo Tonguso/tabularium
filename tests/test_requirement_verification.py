@@ -36,7 +36,7 @@ class RequirementChecks(unittest.TestCase):
             self.assertIn('Not checked on the delivered file:', verification.summary(agent._background, 1))
 
     def test_command_assertions_pass_and_fail_with_real_process(self):
-        agent, artifact = self.setup_agent('cato')
+        agent, artifact = self.setup_agent('coordinator')
         spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, "-c", "import sys; from pathlib import Path; assert Path(sys.argv[1]).read_text() == 'expected value'", "{artifact}"])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Compare text', critical=True, verification=spec)])
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'passed')
@@ -44,22 +44,22 @@ class RequirementChecks(unittest.TestCase):
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'failed')
         self.assertEqual(verification.status(agent._background, 1, '', 1), 'failed')
 
-    def test_tacitus_does_not_gain_shell_access(self):
-        agent, artifact = self.setup_agent('tacitus')
+    def test_private_does_not_gain_shell_access(self):
+        agent, artifact = self.setup_agent('private')
         spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, '-c', 'pass', '{artifact}'])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Read', critical=True, verification=spec)])
         self.assertIn('cannot use', self.run_check(agent))
         self.assertEqual(verification.status(agent._background, 1, '', 1), 'unverified')
 
     def test_changed_requirement_invalidates_receipt(self):
-        agent, artifact = self.setup_agent('vitruvius')
+        agent, artifact = self.setup_agent('engineer')
         self.run_check(agent)
         spec = dict(kind='contains', paths=[str(artifact)], text='something different')
         agent._background.checkpoint(1, 1, '', '', [], guesses=[], completion_items=[dict(id=1, item='Expected content', check='Different text', critical=True, verification=spec)])
         self.assertEqual(verification.status(agent._background, 1, '', 1), 'unverified')
 
     def test_dependency_change_invalidates_receipt(self):
-        agent, artifact = self.setup_agent('cato')
+        agent, artifact = self.setup_agent('coordinator')
         dependency = self.root / 'test-version.txt'
         dependency.write_text('v1', encoding='utf-8')
         spec = dict(kind='contains', paths=[str(artifact), str(dependency)], text='expected value')
@@ -69,14 +69,14 @@ class RequirementChecks(unittest.TestCase):
         self.assertEqual(verification.status(agent._background, 1, '', 1), 'unverified')
 
     def test_cross_chat_and_worker_checks_refused(self):
-        agent, _ = self.setup_agent('cato')
+        agent, _ = self.setup_agent('coordinator')
         self.assertIn('another chat', verification.execute(agent, 99, 1, 1))
         other = agent._background.start(1, 'other task')['id']
         self.assertIn('another chat or worker', verification.execute(agent, 1, other, 1))
 
     def test_native_command_failure_is_not_hidden_by_powershell(self):
         import sys
-        agent, artifact = self.setup_agent('cato')
+        agent, artifact = self.setup_agent('coordinator')
         spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, "-c", "import sys; print('test completed'); sys.exit(3)", "{artifact}"])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Run assertions', critical=True, verification=spec)])
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'failed')
@@ -84,7 +84,7 @@ class RequirementChecks(unittest.TestCase):
     def test_refused_and_interrupted_reruns_invalidate_old_pass(self):
         from unittest.mock import patch
         from tabularium.core.outcome import Refused
-        agent, _ = self.setup_agent('cato')
+        agent, _ = self.setup_agent('coordinator')
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'passed')
         patcher = patch.object(agent, '_execute_tool_unguarded', return_value=Refused('Not permitted'))
         patcher.start()
@@ -104,7 +104,7 @@ class RequirementChecks(unittest.TestCase):
         self.assertEqual(verification.status(agent._background, 1, '', 1), 'unverified')
 
     def test_change_during_the_check_is_not_a_pass(self):
-        agent, artifact = self.setup_agent('cato')
+        agent, artifact = self.setup_agent('coordinator')
         spec = dict(kind='command', paths=[str(artifact)], argv=[str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable, "-c", "import sys; from pathlib import Path; Path(sys.argv[1]).write_text('changed')", "{artifact}"])
         agent._background.checkpoint(1, 1, '', '', [], completion_items=[dict(id=1, item='Expected content', check='Test exact bytes', critical=True, verification=spec)])
         self.assertEqual(json.loads(self.run_check(agent))['status'], 'unverified')
@@ -114,7 +114,7 @@ class RequirementChecks(unittest.TestCase):
         from concurrent.futures import ThreadPoolExecutor
         from unittest.mock import patch
         from tabularium.core.outcome import Refused
-        agent, _ = self.setup_agent('cato')
+        agent, _ = self.setup_agent('coordinator')
         entered, release = threading.Event(), threading.Event()
         run = agent._execute_tool_unguarded
         calls = []

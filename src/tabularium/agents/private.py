@@ -2,7 +2,7 @@
 Tacitus -- Telegram Interface
 
 Run:
-    tabularium run tacitus
+    tabularium run private
 
 The message path lives in tabularium/core/agent_app.py (one class for all agents). This file holds what is Tacitus's
 alone: a role-scoped tool set, a voice, and a private companion's prompt. Tacitus is the example of the roster's
@@ -16,14 +16,14 @@ from pathlib import Path
 from tabularium.core.agent_app import AgentApp, Config
 from tabularium.core.roster import ROLES
 
-TACITUS_ALLOWED_TOOLS = frozenset({'verify_requirement', 'task_decision', 'record_fact', 'task_checkpoint', 'read_memory', 'background_task', 'edit_file', 'view_image', 'reconcile_memory', 'skill', 'web_search', 'list_images', 'search_conversations', 'read_conversation_excerpt', 'delete_memory_section', 'write_file', 'append_memory', 'speak', 'task_evidence', 'send_document', 'read_file', 'consult_advisor', 'web_fetch', 'remember'})
+PRIVATE_ALLOWED_TOOLS = frozenset({'verify_requirement', 'task_decision', 'record_fact', 'task_checkpoint', 'read_memory', 'background_task', 'edit_file', 'view_image', 'reconcile_memory', 'skill', 'web_search', 'list_images', 'search_conversations', 'read_conversation_excerpt', 'delete_memory_section', 'write_file', 'append_memory', 'speak', 'task_evidence', 'send_document', 'read_file', 'consult_advisor', 'web_fetch', 'remember'})
 
 CONFIG = Config(
-    name="tacitus", role=ROLES["tacitus"], display="Tacitus",
-    token_env="TACITUS_TELEGRAM_BOT_TOKEN", token_missing="TACITUS_TELEGRAM_BOT_TOKEN not set.",
-    shared_token_envs=("TELEGRAM_BOT_TOKEN", "CALLIMACHUS_TELEGRAM_BOT_TOKEN", "VITRUVIUS_TELEGRAM_BOT_TOKEN"),
+    name="private", role=ROLES["private"], display="Tacitus",
+    token_env="PRIVATE_TELEGRAM_BOT_TOKEN", token_missing="PRIVATE_TELEGRAM_BOT_TOKEN not set.",
+    shared_token_envs=("TELEGRAM_BOT_TOKEN", "LIBRARIAN_TELEGRAM_BOT_TOKEN", "ENGINEER_TELEGRAM_BOT_TOKEN"),
     token_refusal="Tacitus requires his own Telegram token.", token_refusal_style="raise",
-    provider_env="TACITUS_MODEL_PROVIDER", provider_default="anthropic",
+    provider_env="PRIVATE_MODEL_PROVIDER", provider_default="anthropic",
     instance_port=8213, cdp_port=9228,
     activity_interval=8,
     reasoning_effort="low",
@@ -36,7 +36,7 @@ CONFIG = Config(
     tts="openai", tts_voice="sage",
     tts_instructions="Speak warmly, calmly, and unhurried. Soft-spoken and measured, with genuine care. Never rushed.",
     outlook_browser_tools=False,
-    tool_allow=TACITUS_ALLOWED_TOOLS,
+    tool_allow=PRIVATE_ALLOWED_TOOLS,
     plan_signin_aware=True,
     telegram_prompt="""
 ## Telegram
@@ -80,7 +80,7 @@ Use voice for conversational voice replies and text for precision or visual cont
 
 class TacitusApp(AgentApp):
     def dispatch_extra(self, name, inputs, chat_id):
-        if name not in TACITUS_ALLOWED_TOOLS:
+        if name not in PRIVATE_ALLOWED_TOOLS:
             return "That tool is outside Tacitus's role."
         if name == "write_memory":
             return "Whole-file memory replacement is disabled. Use remember with an exact correction or sourced fact."

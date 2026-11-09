@@ -15,17 +15,24 @@ import sqlite3
 import statistics
 import sys
 from tabularium.paths import home as _home
-from tabularium.paths import home as _home
 from contextlib import closing
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from tabularium.core.roster import AGENTS
+from tabularium.core.roster import AGENTS, ROLES
 
 LOCAL = ZoneInfo("UTC")
 STOPPED = ("needs_attention", "interrupted", "capped", "infeasible", "cancelled")
 BOUNCES = ("unbacked_promise", "cut_off", "step_limit", "runaway")
-ALIASES = {"cato": ("cato",), "tacitus": ("tacitus",), "callimachus": ("callimachus", "cal"), "vitruvius": ("vitruvius", "vit")}
+# Incident records name people, not slots: a slot matches its name, its persona's display name and the short
+# forms people use for that persona (keyed by display name so the export's slot rename leaves them alone).
+SHORT = {"Callimachus": ("cal",), "Vitruvius": ("vit",)}
+
+
+def aliases(name):
+    import importlib
+    display = importlib.import_module("tabularium.agents." + ROLES[name].entry).CONFIG.display
+    return (name, display.lower(), *SHORT.get(display, ()))
 
 
 def week_bounds(now=None, weeks_back=0):
@@ -109,7 +116,7 @@ def incidents_naming(root, name, start, end):
         text = path.read_text(encoding="utf-8", errors="replace")
         affected = re.search(r"\|\s*Affected\s*\|([^\n]*)", text)
         row = (affected.group(1) if affected else text[:600]).lower()
-        if any(re.search(r"\b" + alias + r"\b", row) for alias in ALIASES[name]):
+        if any(re.search(r"\b" + alias + r"\b", row) for alias in aliases(name)):
             count += 1
     return count
 

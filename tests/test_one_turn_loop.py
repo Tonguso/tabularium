@@ -34,8 +34,8 @@ def call(ident, name, inputs): return Exchange(blocks=[{"type": "tool_use", "id"
 class OneLoop(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
-        self.agent = make_agent("cato", root)
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
+        self.agent = make_agent("coordinator", root)
         self.agent.BACKGROUND_TASK_ID = ""
         self.agent.MAX_TOOL_ITERATIONS = 4; self.agent.TOOL_BUDGET_WARN_AT = 2
         self.ran = []

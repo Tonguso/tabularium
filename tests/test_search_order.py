@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 from tabularium.tools import search_routing as sr
-AGENTS = ("cato", "tacitus", "callimachus", "vitruvius")
+AGENTS = ("coordinator", "private", "librarian", "engineer")
 
 
 class SearchOrderFile(unittest.TestCase):

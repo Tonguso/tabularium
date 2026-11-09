@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = ("cato", "tacitus", "callimachus", "vitruvius")
+AGENTS = ("coordinator", "private", "librarian", "engineer")
 
 CHILD = r'''
 import os, sys, tempfile, json
@@ -27,7 +27,7 @@ for k in [k for k in os.environ if "TELEGRAM_BOT_TOKEN" in k]:
     del os.environ[k]
 os.environ.update(ANTHROPIC_API_KEY="test", SEARCH_PROVIDER="anthropic", OPENAI_API_KEY="test")
 os.environ[f"{a.upper()}_BACKGROUND_TASK"] = "1"
-os.environ["TELEGRAM_BOT_TOKEN" if a == "cato" else f"{a.upper()}_TELEGRAM_BOT_TOKEN"] = "1234%d:test" % len(a)
+os.environ["TELEGRAM_BOT_TOKEN" if a == "coordinator" else f"{a.upper()}_TELEGRAM_BOT_TOKEN"] = "1234%d:test" % len(a)
 from tabularium.agents import build
 runtime = build(tmp, a)
 
@@ -61,7 +61,7 @@ assert runtime.tool_remember(kind='note',content='fixture durable note',chat_id=
 assert 'fixture durable note' in (tmp/'memory.md').read_text(encoding='utf-8')
 assert 'Tracking' in runtime.tool_remember(kind='thread',name='fixture',state='next',chat_id=1)
 assert '[fixture]' in runtime._load_core_memory()
-if a != 'tacitus':
+if a != 'private':
     runtime.bot.send_message=Mock()
     runtime.handle_threads_cmd(NS(chat=NS(id=1),text='/threads pin fixture'))
     runtime.handle_threads_cmd(NS(chat=NS(id=1),text='/threads unpin fixture'))

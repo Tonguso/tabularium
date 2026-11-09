@@ -17,8 +17,8 @@ from tabularium.records import background_runtime
 class Guards(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
-        self.agent = make_agent("cato", root)
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
+        self.agent = make_agent("coordinator", root)
         self.calls = []
 
     def tearDown(self):

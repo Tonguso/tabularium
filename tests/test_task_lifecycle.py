@@ -91,12 +91,12 @@ class Agent(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / "cato"; self.root.mkdir()
+        self.root = Path(self.tmp.name) / "coordinator"; self.root.mkdir()
         self.next_id = 500
 
     def agent(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            agent = make_agent("cato", self.root)
+            agent = make_agent("coordinator", self.root)
         agent.BACKGROUND_TASK_ID = ""
         agent.bot = Mock()
         def send(chat, text, **kw):

@@ -3,7 +3,7 @@
 Every module keeps its file name; only its place changes. Three modules are renamed because their package already
 carries the name (dashboard.py -> dashboard/server.py, dashboard_audit.py -> dashboard/audit.py,
 dashboard_history.py -> dashboard/history.py) and the four agent entry points become role modules
-(cato/telegram.py -> agents/coordinator.py, ...). The same table drives the later migration of a private checkout:
+(coordinator/telegram.py -> agents/coordinator.py, ...). The same table drives the later migration of a private checkout:
 
     python tools/restructure.py            # in the repository root; refuses to run twice
 
@@ -41,12 +41,12 @@ GROUP_OF = {m: g for g, ms in GROUPS.items() for m in ms}
 RENAMED = {"dashboard": ("dashboard", "server"), "dashboard_audit": ("dashboard", "audit"),
            "dashboard_history": ("dashboard", "history")}
 # where each old file is
-OLD_PATH = {"video_intake": "cato/video_intake.py", "delegation_contract": "cato/delegation_contract.py",
-            "delegate_local": "cato/scripts/delegate_local.py", "textdiff": "cato/scripts/textdiff.py",
-            "knowledge": "callimachus/knowledge.py", "research_client": "callimachus/research_client.py",
-            "work_client": "vitruvius/work_client.py"}
-AGENT_ENTRIES = {"cato/telegram.py": "agents/coordinator.py", "callimachus/telegram.py": "agents/librarian.py",
-                 "vitruvius/telegram.py": "agents/engineer.py", "tacitus/telegram.py": "agents/private.py"}
+OLD_PATH = {"video_intake": "coordinator/video_intake.py", "delegation_contract": "coordinator/delegation_contract.py",
+            "delegate_local": "coordinator/scripts/delegate_local.py", "textdiff": "coordinator/scripts/textdiff.py",
+            "knowledge": "librarian/knowledge.py", "research_client": "librarian/research_client.py",
+            "work_client": "engineer/work_client.py"}
+AGENT_ENTRIES = {"coordinator/telegram.py": "agents/coordinator.py", "librarian/telegram.py": "agents/librarian.py",
+                 "engineer/telegram.py": "agents/engineer.py", "private/telegram.py": "agents/private.py"}
 TOP = set(GROUP_OF) | set(RENAMED)
 
 
@@ -79,9 +79,9 @@ def move_files():
         if p.is_file():
             rel = p.relative_to(ROOT).as_posix()
             moves[rel] = f"{PKG}/dashboard/android/{p.relative_to(ROOT / 'dashboard' / 'android').as_posix()}"
-    for p in sorted((ROOT / "cato" / "tests").glob("*.py")):
+    for p in sorted((ROOT / "coordinator" / "tests").glob("*.py")):
         assert not (ROOT / "tests" / p.name).exists(), p.name
-        moves[f"cato/tests/{p.name}"] = f"tests/{p.name}"
+        moves[f"coordinator/tests/{p.name}"] = f"tests/{p.name}"
     for old, new in moves.items():
         assert (ROOT / old).exists(), old
         (ROOT / new).parent.mkdir(parents=True, exist_ok=True)

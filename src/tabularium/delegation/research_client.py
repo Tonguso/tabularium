@@ -8,7 +8,7 @@ import os
 import sys
 import time
 
-ROOT = _home()/'callimachus'
+ROOT = _home()/'librarian'
 from tabularium.records.background_runtime import TaskStore, ACTIVE
 from tabularium.tools.knowledge import secret_check
 from tabularium.channels.owner_telegram import OWNER_CHAT_ID
@@ -33,7 +33,7 @@ def contract_of(request):
             'task_type': request.get('task_type')}
 
 def call(action, request=None, request_id=None):
-    if os.environ.get('CALLIMACHUS_BACKGROUND_TASK'):
+    if os.environ.get('LIBRARIAN_BACKGROUND_TASK'):
         raise ValueError('Cal workers cannot recursively delegate to Cal.')
     request_id = request_id or (request or {}).get('request_id')
     store = TaskStore(ROOT)

@@ -52,7 +52,7 @@ class ContextLoadingTests(unittest.TestCase):
             self.assertIn('UNRELATED DECISION', json.dumps(agent.trim_history(messages, 1)))
 
     def test_worker_memory_keeps_preferences_but_not_other_projects(self):
-        agent = make_agent('cato', self.root, background=True)
+        agent = make_agent('coordinator', self.root, background=True)
         (self.root / 'memory.md').write_text('# Memory\n## Core\nUse integer pence.\n', encoding='utf-8')
         from tabularium.memory.memory_context import WorkingMemory
         WorkingMemory(self.root).thread('OTHER PROJECT', 'UNRELATED NEXT STEP')
@@ -62,7 +62,7 @@ class ContextLoadingTests(unittest.TestCase):
         self.assertIn('UNRELATED NEXT STEP', agent._load_core_memory())
 
     def test_request_measurement_contains_sizes_not_private_text(self):
-        agent = make_agent('tacitus', self.root, background=True)
+        agent = make_agent('private', self.root, background=True)
         messages = agent.load_memory_context() + [{'role': 'user', 'content': 'PRIVATE SENTINEL'}]
         agent._prepare_request_context(agent.trim_history(messages, 1), 1)
         path = Path(agent.RUNTIME_DIR) / 'task_state' / 'context_sizes.json'
@@ -74,7 +74,7 @@ class ContextLoadingTests(unittest.TestCase):
         self.assertTrue(all(type(v) is int and v >= 0 for v in record.values()))
 
     def test_skill_catalogue_is_retrievable_without_loading_all_descriptions(self):
-        agent = make_agent('cato', self.root)
+        agent = make_agent('coordinator', self.root)
         folder = self.root / 'skills' / 'opaque-method'
         folder.mkdir(parents=True)
         (folder / 'SKILL.md').write_text('---\nname: opaque-method\ndescription: EXACT DISCOVERY DESCRIPTION\n---\nEXACT METHOD BODY', encoding='utf-8')

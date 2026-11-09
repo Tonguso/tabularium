@@ -32,30 +32,30 @@ cd tabularium
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt && pip install -e . --no-deps
 mkdir %USERPROFILE%\agents && cd %USERPROFILE%\agents
-tabularium init cato
+tabularium init coordinator
 ```
 
-`init` writes the agent's folder (`cato\SKILL.md`, `memory.md`, `agent.toml`, `routing.json`) and the installation's
+`init` writes the agent's folder (`coordinator\SKILL.md`, `memory.md`, `agent.toml`, `routing.json`) and the installation's
 `.env` and `POLICY.md` into the current folder, the *home* of this installation. Then:
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and get your own Telegram user id (message
    [@userinfobot](https://t.me/userinfobot)). Open `.env` and fill in `OWNER_TELEGRAM_USER_ID`,
    `TELEGRAM_BOT_TOKEN` and one model key, `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. The agent answers your user id
    and refuses everyone else.
-2. Open `cato\SKILL.md` and write who the agent is and who you are. The template is a plain assistant; everything
+2. Open `coordinator\SKILL.md` and write who the agent is and who you are. The template is a plain assistant; everything
    from the tone to what it must ask before doing is yours to change. `agent.toml` holds the settings that are the
    agent's own (its display name, its voice lines, its ports).
 3. Start it:
 
 ```bat
-tabularium run cato
+tabularium run coordinator
 ```
 
 4. Message your bot. In a second terminal, in the same folder, `tabularium dashboard` and open
    <http://127.0.0.1:8220> to see the agent's turns, tasks and anything waiting on you.
 
 Every `tabularium` command works on the home folder: the current directory, or `--home PATH`, or `TABULARIUM_HOME`.
-`cato` is the coordinator slot of the roster: the agent that can learn from your corrections and, once the other
+`coordinator` is the coordinator slot of the roster: the agent that can learn from your corrections and, once the other
 agents exist, delegate to them. On its own it is a complete single agent. What the folder holds and how to shape the
 agent is in [examples/minimal](examples/minimal/README.md).
 
@@ -85,10 +85,10 @@ The roster is one table in `src/tabularium/core/roster.py`; each slot names the 
 
 | Slot | Folder in the home | Role module | Does | Needs |
 |---|---|---|---|---|
-| `cato` | `cato/` | `agents/coordinator.py` | Talks to you, researches, delegates, learns | `TELEGRAM_BOT_TOKEN` |
-| `callimachus` | `callimachus/` | `agents/librarian.py` | Evidence gathering and knowledge records for the coordinator; two parallel workers | `CALLIMACHUS_TELEGRAM_BOT_TOKEN` |
-| `vitruvius` | `vitruvius/` | `agents/engineer.py` | Builds and tests artifacts on the machine for the coordinator | `VITRUVIUS_TELEGRAM_BOT_TOKEN` |
-| `tacitus` | `tacitus/` | `agents/private.py` | Personal matters in confidence: no shell, no delegation, no learning loop | `TACITUS_TELEGRAM_BOT_TOKEN` |
+| `coordinator` | `coordinator/` | `agents/coordinator.py` | Talks to you, researches, delegates, learns | `TELEGRAM_BOT_TOKEN` |
+| `librarian` | `librarian/` | `agents/librarian.py` | Evidence gathering and knowledge records for the coordinator; two parallel workers | `LIBRARIAN_TELEGRAM_BOT_TOKEN` |
+| `engineer` | `engineer/` | `agents/engineer.py` | Builds and tests artifacts on the machine for the coordinator | `ENGINEER_TELEGRAM_BOT_TOKEN` |
+| `private` | `private/` | `agents/private.py` | Personal matters in confidence: no shell, no delegation, no learning loop | `PRIVATE_TELEGRAM_BOT_TOKEN` |
 
 `tabularium init <slot>` writes each folder; each needs its own bot token. With more than one agent, run them under
 the supervisor instead of by hand: `tabularium supervisor` starts every configured agent and the dashboard, restarts
@@ -109,7 +109,7 @@ agent is three values; the rest are optional.
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | one of them | Model access. Both may be set; routing prefers the configured subscription route and falls back to the API |
 | `CLAUDE_CODE_OAUTH_TOKEN` | no | Claude subscription route through the Claude Code CLI |
 | `TABULARIUM_HOME` | no | The home folder, when the command is not run inside it (`--home PATH` does the same) |
-| `CALLIMACHUS_…`, `VITRUVIUS_…`, `TACITUS_TELEGRAM_BOT_TOKEN` | per agent | Tokens for the other slots |
+| `LIBRARIAN_…`, `ENGINEER_…`, `PRIVATE_TELEGRAM_BOT_TOKEN` | per agent | Tokens for the other slots |
 | `TAVILY_API_KEY`, `ANYSEARCH_API_KEY` | no | Web search providers, tried in the order set on the dashboard |
 | `ELEVENLABS_API_KEY` | no | Spoken replies to voice notes |
 | `EDGAR_IDENTITY` | no | Name and e-mail that SEC EDGAR requires of every client |
@@ -156,7 +156,7 @@ The code is one package, `src/tabularium/`; an installation's agents and records
 | `templates/` | What `tabularium init` writes: `SKILL.md`, `memory.md`, `agent.toml`, `routing.json`, `.env`, `POLICY.md` |
 | `cli.py`, `paths.py`, `config.py` | The `tabularium` command, the home folder, the `.env` loader |
 
-Outside the package: `cato/`, `callimachus/`, `vitruvius/`, `tacitus/` are the reference cast's folders (skills and
+Outside the package: `coordinator/`, `librarian/`, `engineer/`, `private/` are the reference cast's folders (skills and
 routing; no memory or records), so the repository root is itself a valid home for development. `tests/` is the
 offline suite that a release runs, `docs/` the white paper, its figures and the design notes, `tools/` the scripts
 that built this layout.
@@ -171,8 +171,8 @@ The benchmark is the versioned case set in `src/tabularium/learning/benchmark_ca
 version and the provenance of its expected values; see `docs/evaluation.md`). To run it:
 
 ```
-tabularium eval cato --k 1          # one pass, a first baseline
-tabularium eval cato --k 3          # three passes, for reliability
+tabularium eval coordinator --k 1          # one pass, a first baseline
+tabularium eval coordinator --k 3          # three passes, for reliability
 ```
 
 Results are written to `<home>/<agent>/evals/<timestamp>.json`, one file per run, with every requirement's verdict,

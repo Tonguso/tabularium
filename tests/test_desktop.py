@@ -43,7 +43,7 @@ class DesktopTool(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.agent = make_agent("cato", self.root)
+        self.agent = make_agent("coordinator", self.root)
         self.agent.send_message = lambda chat, text: None
         self.driver = FakeDriver()
         for name, value in (("monitors", lambda: [(0, 0, 1920, 1080), self.RECT]),
@@ -147,22 +147,22 @@ class DesktopTool(unittest.TestCase):
 
     def test_one_driver_at_a_time_and_never_from_a_background_task(self):
         tree = self.root / "agents"
-        for name, since in (("vitruvius", time.time()), ("callimachus", time.time() - desktop.GRANT_SECONDS - 1)):
+        for name, since in (("engineer", time.time()), ("librarian", time.time() - desktop.GRANT_SECONDS - 1)):
             (tree / name / "task_state").mkdir(parents=True)
             (tree / name / "task_state" / "desktop_grant.json").write_text(json.dumps({"chat": OWNER_CHAT_ID, "job": 0, "since": since}))
-        self.assertEqual(desktop.holder(tree, "cato"), "vitruvius")      # a live grant counts; an expired one does not
-        self.assertEqual(desktop.holder(tree, "vitruvius"), "")
-        with patch.object(desktop, "holder", lambda root, exclude: "vitruvius"):
+        self.assertEqual(desktop.holder(tree, "coordinator"), "engineer")      # a live grant counts; an expired one does not
+        self.assertEqual(desktop.holder(tree, "engineer"), "")
+        with patch.object(desktop, "holder", lambda root, exclude: "engineer"):
             result = self.run_tool(action="take", purpose="x")
         self.assertIsInstance(result, Refused)
-        self.assertIn("vitruvius holds the desktop", result)
+        self.assertIn("engineer holds the desktop", result)
         self.agent.BACKGROUND_TASK_ID = "1"
         result = self.run_tool(action="take", purpose="x")
         self.assertIsInstance(result, Refused)
         self.assertIn("foreground only", result)
 
     def test_every_agent_offers_the_tool(self):
-        for name in ("cato", "tacitus", "callimachus", "vitruvius"):
+        for name in ("coordinator", "private", "librarian", "engineer"):
             with tempfile.TemporaryDirectory() as tmp:
                 agent = make_agent(name, Path(tmp))
                 self.assertIn("desktop", [t["name"] for t in agent.get_tools("anthropic")], name)

@@ -17,7 +17,7 @@ class QuestionBinding(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def agent(self, name='cato'):
+    def agent(self, name='coordinator'):
         p = self.root / name
         p.mkdir(exist_ok=True)
         return make_agent(name, p)

@@ -46,7 +46,7 @@ class RestartEvidence(unittest.TestCase):
 
     def test_crashes_and_wrong_acknowledgments_consume_crash_budget(self):
         for code, acknowledged in [(1, True), (0, True), (75, False)]:
-            child = supervisor.Child('cato')
+            child = supervisor.Child('coordinator')
             child.instance = 'current'
             child.python_pid = 42
             for number in range(3):
@@ -109,28 +109,28 @@ class LiveEvidence(unittest.TestCase):
             atomic_json(self.root/name/'task_state/health.json', health)
         self.state['updated'] = self.now-31
         self.save()
-        self.assertEqual(self.view()['cato']['status'], 'unknown')
+        self.assertEqual(self.view()['coordinator']['status'], 'unknown')
         self.state['updated'] = self.now
         self.state['created'] -= 1  # PID reused by a different supervisor.
         self.save()
-        self.assertEqual(self.view()['cato']['status'], 'unknown')
+        self.assertEqual(self.view()['coordinator']['status'], 'unknown')
 
     def test_denied_process_query_is_unknown_not_a_status_crash(self):
         import pywintypes
         query = patch('win32api.OpenProcess', side_effect=pywintypes.error(5, 'OpenProcess', 'Access is denied.'))
         query.start()
         try:
-            self.assertEqual(self.view()['cato']['status'], 'unknown')
+            self.assertEqual(self.view()['coordinator']['status'], 'unknown')
         finally:
             query.stop()
 
     def test_denied_child_query_does_not_claim_stopped(self):
-        self.state['children']['cato']['pid'] = 99
+        self.state['children']['coordinator']['pid'] = 99
         self.save()
         query = patch.object(supervisor, 'process_created', side_effect=lambda pid: self.created if pid == self.pid else None)
         query.start()
         try:
-            self.assertEqual(self.view()['cato']['status'], 'unknown')
+            self.assertEqual(self.view()['coordinator']['status'], 'unknown')
         finally:
             query.stop()
 
@@ -138,16 +138,16 @@ class LiveEvidence(unittest.TestCase):
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'],
                                  creationflags=subprocess.CREATE_NO_WINDOW)
         try:
-            self.state['children']['cato'].update(pid=child.pid, created=supervisor.process_created(child.pid))
+            self.state['children']['coordinator'].update(pid=child.pid, created=supervisor.process_created(child.pid))
             self.save()
             child.kill(); child.wait(timeout=10)
-            self.assertEqual(self.view()['cato']['status'], 'stopped')
+            self.assertEqual(self.view()['coordinator']['status'], 'stopped')
         finally:
             if child.poll() is None:
                 child.kill(); child.wait(timeout=10)
-        self.state['children']['cato'] = dict(self.record, created=self.created-1)
+        self.state['children']['coordinator'] = dict(self.record, created=self.created-1)
         self.save()
-        self.assertEqual(self.view()['cato']['status'], 'stopped')
+        self.assertEqual(self.view()['coordinator']['status'], 'stopped')
 
     def test_supervisor_owns_durable_targeted_drains(self):
         from concurrent.futures import Future
@@ -163,13 +163,13 @@ class LiveEvidence(unittest.TestCase):
                 child=supervisor.Child(name);child.adopted=self.pid;child.instance='current';children.append(child)
             future=Future();future.set_result(target)
             supervisor.release_step(children,None,lambda *a:future)
-            first=supervisor.read_json(self.root/'cato/task_state/drain')
-            agent_control.request_restart(['cato'],root=self.root)
-            self.assertEqual(first,supervisor.read_json(self.root/'cato/task_state/drain'))
+            first=supervisor.read_json(self.root/'coordinator/task_state/drain')
+            agent_control.request_restart(['coordinator'],root=self.root)
+            self.assertEqual(first,supervisor.read_json(self.root/'coordinator/task_state/drain'))
             self.assertEqual(first['instance'],'current')
-            self.assertEqual(self.view()['cato']['status'],'draining')
-            atomic_json(self.root/'cato/task_state/drain',dict(first,instance='old'))
-            self.assertEqual(self.view()['cato']['status'],'ready')
+            self.assertEqual(self.view()['coordinator']['status'],'draining')
+            atomic_json(self.root/'coordinator/task_state/drain',dict(first,instance='old'))
+            self.assertEqual(self.view()['coordinator']['status'],'ready')
         finally:r.stop();q.stop();p.stop()
 
     def test_adoption_retains_exit_code_identity_and_crash_budget(self):
@@ -179,13 +179,13 @@ class LiveEvidence(unittest.TestCase):
             "import sys,time; from pathlib import Path; p=Path(sys.argv[1]); "
             "exec('while not p.exists(): time.sleep(0.02)'); raise SystemExit(75)", str(marker)],
             creationflags=subprocess.CREATE_NO_WINDOW)
-        adopted = supervisor.Child('cato')
+        adopted = supervisor.Child('coordinator')
         try:
             created = supervisor.process_created(child.pid)
-            self.state['children']['cato'] = dict(self.record, pid=child.pid, created=created, crashes=[self.now-1])
+            self.state['children']['coordinator'] = dict(self.record, pid=child.pid, created=created, crashes=[self.now-1])
             self.save()
             row = {'ProcessId': child.pid, 'ParentProcessId': os.getpid(), 'Name': 'python.exe',
-                   'CommandLine': 'python.exe -m tabularium run cato'}
+                   'CommandLine': 'python.exe -m tabularium run coordinator'}
             query = patch('subprocess.run', return_value=type('Result', (), {'stdout': json.dumps([row])})())
             state = patch.object(supervisor, 'STATE', self.root/'logs/supervisor_state.json')
             query.start(); state.start()

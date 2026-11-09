@@ -10,8 +10,8 @@ class Signal(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
-        self.agent = make_agent("cato", root)
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
+        self.agent = make_agent("coordinator", root)
         self.store = self.agent._background
         self.root = root
         cases = [{"id": "task-7", "source_task": 7, "request": "Research US towers and write a note", "context": "",

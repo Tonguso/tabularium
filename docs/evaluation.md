@@ -22,7 +22,7 @@ synthetic cases, not ordinary agents. Lesson trials use the stricter scope descr
 this benchmark is not a test of memory isolation or of every production tool.
 
 Run `tabularium eval <agent> --k 1` for a first baseline, then repeated runs (--k 3) when
-measuring reliability. Names: cato, callimachus, vitruvius, tacitus. Results retain each requirement,
+measuring reliability. Names: coordinator, librarian, engineer, private. Results retain each requirement,
 artifact evidence, release, routes, generation usage and grading usage. Unknown usage is labelled
 unknown; recorded subtotals are not claimed to be complete. Effective-token weights are the existing
 accounting heuristic, not provider quota units. Only the same cases/oracles/evaluator version/k are
@@ -172,7 +172,7 @@ a subjective case from ever reaching the judge. Ordinary completion checks are u
 
 ## Interactive workflow evaluation (2026-10-26)
 
-`tabularium eval cato --interactions --k 2` uses the same regression
+`tabularium eval coordinator --interactions --k 2` uses the same regression
 report, independent artifact grader and actual-usage accounting as the static benchmark.
 It adds controlled events while the real model is working. It does not install a new
 service, run a model judge, change live task completion, or run on every conversation.
@@ -262,8 +262,8 @@ Cal's total was 465,105 input (140,672 cached) and 12,886 output tokens. Cato's 
 subtotal was 1,387,611 input (1,284,551 cached) and 29,018 output; six responses had
 unknown usage. These include the harness-development runs, not just successful runs.
 
-Local evidence: cato/task_state/regression/20261026-095610.json and
-callimachus/task_state/regression/20261026-095914.json. The reports retain attempt paths,
+Local evidence: coordinator/task_state/regression/20261026-095610.json and
+librarian/task_state/regression/20261026-095914.json. The reports retain attempt paths,
 synthetic transcripts, observations and usage. Validation: 477 shared tests and 90 Cato
 tests passed. One earlier full-suite run hit a Windows SQLite cleanup race in an outbox
 test; the isolated outbox suite and subsequent full suite passed. Nine focused interaction
@@ -333,8 +333,8 @@ unknown. His existing foreground unanswered-message retry ran twice instead of o
 that unrelated behavior and cache variation must not be attributed to completion repair.
 Raw provider tokens are not subscription quota percentages.
 
-Evidence: cato/task_state/regression/20261026-123945.json and
-callimachus/task_state/regression/20261026-124149.json, compared with the baseline paths
+Evidence: coordinator/task_state/regression/20261026-123945.json and
+librarian/task_state/regression/20261026-124149.json, compared with the baseline paths
 above. These fourteen attempts are all live-model calls made for this change. Runtime
 code has not been restarted; deployment requires the next release or explicit exception.
 
@@ -391,8 +391,8 @@ quota or general cost saving. The revised full reply schema estimates 812 tokens
 795 previously with o200k_base (+17); this estimate is separate from actual usage and
 is not a Claude tokenizer measurement. No additional model call is introduced by design.
 
-Evidence: cato/task_state/regression/20261026-133049.json and
-callimachus/task_state/regression/20261026-133115.json, against the interaction-feedback
+Evidence: coordinator/task_state/regression/20261026-133049.json and
+librarian/task_state/regression/20261026-133115.json, against the interaction-feedback
 attempts in 20261026-123945.json and 20261026-124149.json respectively. No live memories,
 user tasks, checkpoints or routing settings changed. Deployment awaits a restart.
 
@@ -429,7 +429,7 @@ pass. OpenAI's existing per-exchange accounting is unchanged and covered by the 
 
 One live isolated Cato interaction-decision attempt passed all five independent checks:
 prepare once, ask, stop, resume in a new process and produce GBP without repeating the
-preparation. Report: cato/task_state/regression/20261026-161213.json. Its paused query now
+preparation. Report: coordinator/task_state/regression/20261026-161213.json. Its paused query now
 retains 9,850 input tokens (2 uncached, 9,848 cache writes) that the old final-only path
 would discard. Output for that query remains unknown. The resumed query reports 21,847
 input and 465 output. Combined known input is 31,697 (6 uncached, 19,289 cache reads,

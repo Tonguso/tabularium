@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 from tabularium.core import engine
 class SkillCatalogue(unittest.TestCase):
     def test_every_skill_has_a_description(self):
-        for agent in ("cato", "tacitus", "callimachus", "vitruvius"):
+        for agent in ("coordinator", "private", "librarian", "engineer"):
             runtime = engine.AgentRuntime()
             runtime.SKILLS_DIR = ROOT / agent / "skills"
             for name, skill in runtime.discover_skills().items():

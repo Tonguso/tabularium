@@ -64,10 +64,10 @@ crash-test teardown race. The test-only ownership/shutdown fix was verified 20 t
 
 | Agent | Input before | Input final | Output before | Output final | Responses before / final |
 |---|---:|---:|---:|---:|---:|
-| cato | 301595 | 261339 | 2454 | 2224 | 11 / 10 |
-| tacitus | 151987 | 148339 | 2153 | 1906 | 8 / 8 |
-| callimachus | 183587 | 133678 | 1737 | 1436 | 14 / 11 |
-| vitruvius | 236249 | 187983 | 2922 | 2114 | 12 / 10 |
+| coordinator | 301595 | 261339 | 2454 | 2224 | 11 / 10 |
+| private | 151987 | 148339 | 2153 | 1906 | 8 / 8 |
+| librarian | 183587 | 133678 | 1737 | 1436 | 14 / 11 |
+| engineer | 236249 | 187983 | 2922 | 2114 | 12 / 10 |
 
 Total input 873418 -> 731339 (-16.27%); output 9266 -> 7680 (-17.12%); responses 45 -> 39.
 All eight output files passed independent exact-byte checks (normal terminal newline allowed), and

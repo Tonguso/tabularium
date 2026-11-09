@@ -108,10 +108,10 @@ class AgentToml(unittest.TestCase):
 class Launch(unittest.TestCase):
     def test_launch_command_names_the_home_and_adoption_matches_on_it(self):
         from tabularium.ops import supervisor
-        argv = supervisor.command('cato')
+        argv = supervisor.command('coordinator')
         self.assertEqual(argv[1:4], ['-m', 'tabularium', '--home'])
         self.assertEqual(Path(argv[4]), supervisor.ROOT)
-        self.assertEqual(argv[5:], ['run', 'cato'])
+        self.assertEqual(argv[5:], ['run', 'coordinator'])
         self.assertEqual(supervisor.command('dashboard')[5:], ['dashboard'])
         src = (ROOT / 'src' / 'tabularium' / 'ops' / 'supervisor.py').read_text(encoding='utf-8')
         self.assertNotIn("'D:\\\\\\\\Agents'", src, "no fixed installation path in the adoption query")

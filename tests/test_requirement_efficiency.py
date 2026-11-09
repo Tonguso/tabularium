@@ -51,7 +51,7 @@ class EfficiencyTests(unittest.TestCase):
             self.assertEqual(verification.status(store, 1, '', 2), 'passed')
 
     def test_test_edit_invalidates_only_its_own_proof(self):
-        agent = self.agent('cato'); store = agent._background
+        agent = self.agent('coordinator'); store = agent._background
         first, second = self.item(agent, 'towers'), self.item(agent, 'carriers')
         self.declare(agent, [first, second])
         for n in (1, 2): verification.execute(agent, 1, 1, n)
@@ -98,7 +98,7 @@ class EfficiencyTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), before)
 
     def test_checkpoint_facts_and_decisions_are_available_in_the_one_current_context(self):
-        agent = self.agent('cato'); store = agent._background
+        agent = self.agent('coordinator'); store = agent._background
         store.checkpoint(1, 1, 'FILE SAVED', 'CONTINUE', ['saved.txt'], facts=['KNOWN FACT'],
                          guesses=['OPEN ASSUMPTION'], decisions=['Alex: "USE BLUE"'])
         text = store.contract(1)
@@ -106,7 +106,7 @@ class EfficiencyTests(unittest.TestCase):
             self.assertEqual(text.count(value), 1, value)
 
     def test_requirement_changed_during_check_cannot_report_passed(self):
-        agent = self.agent('cato')
+        agent = self.agent('coordinator')
         item = self.item(agent, 'towers')
         self.declare(agent, [item])
         original = agent._execute_tool_unguarded
@@ -159,7 +159,7 @@ class EfficiencyTests(unittest.TestCase):
 
     def test_current_legacy_proof_migrates_before_an_unrelated_addition(self):
         import hashlib
-        agent = self.agent('cato'); store = agent._background
+        agent = self.agent('coordinator'); store = agent._background
         self.declare(agent, [self.item(agent, 'towers')])
         verification.execute(agent, 1, 1, 1)
         path = verification.receipt_path(store, 1, '', 1)
@@ -173,7 +173,7 @@ class EfficiencyTests(unittest.TestCase):
         self.assertEqual(verification.status(store, 1, '', 1), 'passed')
 
     def test_progress_acknowledgement_does_not_repeat_the_contract(self):
-        agent = self.agent('cato')
+        agent = self.agent('coordinator')
         item = self.item(agent, 'unique-requirement-text')
         result = self.declare(agent, [item])
         self.assertNotIn('completion_items', result)

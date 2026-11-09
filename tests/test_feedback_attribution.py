@@ -16,9 +16,9 @@ class Attribution(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        root = Path(self.tmp.name) / 'cato'
+        root = Path(self.tmp.name) / 'coordinator'
         root.mkdir()
-        self.agent = make_agent('cato', root)
+        self.agent = make_agent('coordinator', root)
         self.inbox = self.agent._inbox
         self.inbox.local.job = 1
 
@@ -86,7 +86,7 @@ class Attribution(unittest.TestCase):
     def test_provider_retries_and_live_followups_for_all_agents(self):
         from tabularium.models import subscription_runtime as bridge
         import claude_agent_sdk as sdk
-        for name in ('cato', 'callimachus', 'vitruvius', 'tacitus'):
+        for name in ('coordinator', 'librarian', 'engineer', 'private'):
             for route in ('openai', 'anthropic', 'claude'):
                 root = Path(self.tmp.name) / (name + '_' + route)
                 root.mkdir()
@@ -164,7 +164,7 @@ class Attribution(unittest.TestCase):
                 self.assertNotIn(reply_envelope.DEAD_END, json.dumps(messages))
                 self.assertEqual([i for i,t in self.inbox.turn_messages()], [12,13])
                 records = corrections._pending(agent).get(str(CHAT), [])
-                self.assertEqual([r['message_id'] for r in records], [] if name=='tacitus' else [12,13])
+                self.assertEqual([r['message_id'] for r in records], [] if name=='private' else [12,13])
                 if route == 'claude':
                     self.assertIn('Incoming message 13', json.dumps(captured['tool_result']))
                 db = sqlite3.connect(self.inbox.database)

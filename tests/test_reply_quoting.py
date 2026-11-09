@@ -18,9 +18,9 @@ def telegram(message_id, text):
 class ReplyQuoting(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
         with contextlib.redirect_stdout(io.StringIO()):
-            self.agent = make_agent("cato", root)
+            self.agent = make_agent("coordinator", root)
         self.inbox = self.agent._inbox
         self.agent.bot = Mock()
 

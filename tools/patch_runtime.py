@@ -87,17 +87,17 @@ patch("dashboard/server.py",
       ('ROOT = Path(__file__).resolve().parent\n', 'ROOT = _home()\nSTATIC = Path(__file__).resolve().parent\n'),
       ("            static['/agents.apk']=('android/build/agents.apk','application/vnd.android.package-archive')\n",
        "            static['/agents.apk']=('android/build/agents.apk','application/vnd.android.package-archive')\n"),
-      ("            if not (ROOT/'dashboard/assets/callimachus.jpg').exists():\n", "            if not (STATIC/'static/assets/callimachus.jpg').exists():\n"),
-      ("            if not (ROOT/'dashboard/assets/vitruvius.jpg').exists():\n", "            if not (STATIC/'static/assets/vitruvius.jpg').exists():\n"),
+      ("            if not (ROOT/'dashboard/assets/librarian.jpg').exists():\n", "            if not (STATIC/'static/assets/librarian.jpg').exists():\n"),
+      ("            if not (ROOT/'dashboard/assets/engineer.jpg').exists():\n", "            if not (STATIC/'static/assets/engineer.jpg').exists():\n"),
       ("                filename,kind=static[url.path];self.send((ROOT/'dashboard'/filename).read_bytes(),kind)\n",
        "                filename,kind=static[url.path]\n"
        "                self.send((STATIC/('static/'+filename if not filename.startswith('android/') else filename)).read_bytes(),kind)\n"),
       add_import=HOME_IMPORT)
 patch("dashboard/history.py", ("ROOT=Path(__file__).resolve().parent\n", "ROOT=_home()\n"), add_import=HOME_IMPORT)
 patch("dashboard/audit.py",
-      ("import sys,json,re\nfrom pathlib import Path\nsys.path.insert(0,str(Path(__file__).parent/'cato'/'scripts'))\n",
+      ("import sys,json,re\nfrom pathlib import Path\nsys.path.insert(0,str(Path(__file__).parent/'coordinator'/'scripts'))\n",
        "import json,re\nfrom pathlib import Path\nfrom tabularium.paths import home as _home\n"),
-      ("    path=Path(__file__).parent/'cato'/'task_state'/'background'/'jobs.sqlite3'\n", "    path=_home()/'cato'/'task_state'/'background'/'jobs.sqlite3'\n"))
+      ("    path=Path(__file__).parent/'coordinator'/'task_state'/'background'/'jobs.sqlite3'\n", "    path=_home()/'coordinator'/'task_state'/'background'/'jobs.sqlite3'\n"))
 
 # --- models, tools, ops ---------------------------------------------------------------------------------------------
 patch("models/subscription_connections.py", ("ROOT = Path(__file__).resolve().parent\n", "ROOT = _home()\n"), add_import=HOME_IMPORT)
@@ -122,16 +122,16 @@ patch("ops/release.py",
        '        result = subprocess.run([\'git\', \'-C\', str(root), \'ls-files\', \'-z\'], capture_output=True, timeout=30, creationflags=getattr(subprocess, \'CREATE_NO_WINDOW\', 0))\n'
        '    except OSError:\n        result = None\n'
        '    if result is None or result.returncode:\n        return {\'commit\': \'\', \'digest\': \'\'}          # not a Git checkout: no release identity, no releases\n'),
-      ("        if not name or name.startswith(('docs/', 'tests/', 'cato/tests/', 'public/')):\n",
+      ("        if not name or name.startswith(('docs/', 'tests/', 'coordinator/tests/', 'public/')):\n",
        "        if not name or name.startswith(('docs/', 'tests/', 'public/')):\n"),
-      ("    for directory in ('tests', 'cato/tests'):\n", "    for directory in ('tests',):\n"),
+      ("    for directory in ('tests', 'coordinator/tests'):\n", "    for directory in ('tests',):\n"),
       ('"""Which code a worker ran: the Git commit of D:\\\\Agents (2026-10-21).', '"""Which code a worker ran: the Git commit of the home folder (2026-10-21).'),
       add_import=HOME_IMPORT)
 patch("core/agent_logging.py",
       ('LOG_DIR = Path(r"D:\\Agents\\logs")\n', 'LOG_DIR = _logs()\n'),
       ('    import sys\n    from pathlib import Path\n    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # D:\\\\Agents\n'
-       '    from tabularium.core.agent_logging import start_logging\n    start_logging("cato")\n',
-       '    from tabularium.core.agent_logging import start_logging\n    start_logging("cato")\n'),
+       '    from tabularium.core.agent_logging import start_logging\n    start_logging("coordinator")\n',
+       '    from tabularium.core.agent_logging import start_logging\n    start_logging("coordinator")\n'),
       ('This tees stdout/stderr to D:\\\\Agents\\\\logs\\\\<name>.log', 'This tees stdout/stderr to <home>/logs/<name>.log'),
       add_import="from tabularium.paths import logs as _logs\n")
 patch("core/agent_app.py",
@@ -156,21 +156,21 @@ patch("agents/coordinator.py",
        '            proc = run([*self.DELEGATE_ARGV, agent, action, *args])\n'),
       ('        """Wrap scripts/delegate_local.py (its credential checks and audit)', '        """Wrap tabularium.delegation.delegate_local (its credential checks and audit)'))
 patch("delegation/delegate_local.py",
-      ("ROOT = Path(__file__).resolve().parents[1]\nAGENTS = {'vit': ROOT.parent/'vitruvius', 'cal': ROOT.parent/'callimachus'}\n"
+      ("ROOT = Path(__file__).resolve().parents[1]\nAGENTS = {'vit': ROOT.parent/'engineer', 'cal': ROOT.parent/'librarian'}\n"
        "CLIENTS = {'vit': AGENTS['vit']/'work_client.py', 'cal': ROOT/'scripts'/'cal_research.py'}\n",
-       "ROOT = _home()/'cato'\nAGENTS = {'vit': _home()/'vitruvius', 'cal': _home()/'callimachus'}\n"
+       "ROOT = _home()/'coordinator'\nAGENTS = {'vit': _home()/'engineer', 'cal': _home()/'librarian'}\n"
        "CLIENTS = {'vit': 'tabularium.delegation.work_client', 'cal': 'tabularium.delegation.research_client'}\n"),
       ("    args=[sys.executable,str(CLIENTS[agent]),action]\n", "    args=[sys.executable,'-m',CLIENTS[agent],action]\n"),
       add_import=HOME_IMPORT)
-patch("delegation/research_client.py", ("ROOT = Path(__file__).resolve().parent\n", "ROOT = _home()/'callimachus'\n"), add_import=HOME_IMPORT)
-patch("delegation/work_client.py", ("ROOT = Path(__file__).resolve().parent\n", "ROOT = _home()/'vitruvius'\n"), add_import=HOME_IMPORT)
-patch("tools/knowledge.py", ("ROOT = Path(__file__).resolve().parent\n", "ROOT = _home()/'callimachus'\n"), add_import=HOME_IMPORT)
-patch("tools/video_intake.py", ('AGENT_DIR = Path(__file__).resolve().parent\n', "AGENT_DIR = _home()/'cato'\n"), add_import=HOME_IMPORT)
-patch("delegation/delegation_contract.py", ("ROOT = Path(__file__).resolve().parent                      # D:\\Agents\\cato\n", "ROOT = _home()/'cato'\n"), add_import=HOME_IMPORT)
+patch("delegation/research_client.py", ("ROOT = Path(__file__).resolve().parent\n", "ROOT = _home()/'librarian'\n"), add_import=HOME_IMPORT)
+patch("delegation/work_client.py", ("ROOT = Path(__file__).resolve().parent\n", "ROOT = _home()/'engineer'\n"), add_import=HOME_IMPORT)
+patch("tools/knowledge.py", ("ROOT = Path(__file__).resolve().parent\n", "ROOT = _home()/'librarian'\n"), add_import=HOME_IMPORT)
+patch("tools/video_intake.py", ('AGENT_DIR = Path(__file__).resolve().parent\n', "AGENT_DIR = _home()/'coordinator'\n"), add_import=HOME_IMPORT)
+patch("delegation/delegation_contract.py", ("ROOT = Path(__file__).resolve().parent                      # D:\\Agents\\coordinator\n", "ROOT = _home()/'coordinator'\n"), add_import=HOME_IMPORT)
 patch("learning/interaction_eval.py",
       ("ROOT = Path(__file__).resolve().parents[1]\n", "ROOT = _home()\n"),
-      ("    files = ['telegram.py'] + {'cato':['video_intake.py','delegation_contract.py'],\n"
-       "                              'callimachus':['knowledge.py']}.get(name, [])\n"
+      ("    files = ['telegram.py'] + {'coordinator':['video_intake.py','delegation_contract.py'],\n"
+       "                              'librarian':['knowledge.py']}.get(name, [])\n"
        "    for filename in files:\n        shutil.copyfile(ROOT/name/filename, root/filename)\n", ""),
       ("    \"\"\"Copy entry-point CODE only; no live skill, memory, conversation, queue or credentials.\"\"\"\n",
        "    \"\"\"An empty agent folder for the role: no live skill, memory, conversation, queue or credentials.\"\"\"\n"),
@@ -192,8 +192,8 @@ patch("ops/agent_control.py",
        '    icon = Path(__file__).resolve().parents[1] / "dashboard" / "static" / "assets" / "tabularium.ico"\n'),
       ('    log = Path(__file__).resolve().parent / "logs" / "dashboard-window.log"\n', '    log = _home() / "logs" / "dashboard-window.log"\n'),
       ('        root = Path(__file__).resolve().parent\n        name = next(', '        root = _home()\n        name = next('),
-      ('        root = Path(__file__).resolve().parent\n        for name in [a for a in args[1:] if not a.startswith("--")] or ["cato"]:',
-       '        root = _home()\n        for name in [a for a in args[1:] if not a.startswith("--")] or ["cato"]:'),
+      ('        root = Path(__file__).resolve().parent\n        for name in [a for a in args[1:] if not a.startswith("--")] or ["coordinator"]:',
+       '        root = _home()\n        for name in [a for a in args[1:] if not a.startswith("--")] or ["coordinator"]:'),
       ('            flag = Path(__file__).resolve().parent / name / "task_state" / f"memory_{args[0]}_requested"\n',
        '            flag = _home() / name / "task_state" / f"memory_{args[0]}_requested"\n'),
       ('    import subprocess\n    if supervisor_alive():\n', '    import subprocess, sys\n    if supervisor_alive():\n'),

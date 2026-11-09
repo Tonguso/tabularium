@@ -112,7 +112,7 @@ class CompletionFeedback(unittest.TestCase):
         from tabularium.records import verification
         root = self.root/suffix
         root.mkdir()
-        agent = make_agent('cato',root,background=True)
+        agent = make_agent('coordinator',root,background=True)
         artifact = root/'result.txt'
         artifact.write_text('correct',encoding='utf-8')
         agent._background.checkpoint(1,1,'','',[],guesses=[],completion_items=[{

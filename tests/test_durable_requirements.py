@@ -43,7 +43,7 @@ class RequirementsTests(unittest.TestCase):
 
     def test_later_instruction_stays_listed_as_uncovered_guidance_but_does_not_block_finishing(self):
         # 2026-10-24: coverage is guidance in the worker's context; completion rests on declared checks only.
-        agent = self.setup_agent('cato')
+        agent = self.setup_agent('coordinator')
         store = agent._background
         self.checkpoint(agent, [self.item('towers')])
         store.control(1, 1, 'steer', 'Also deliver carriers')
@@ -55,7 +55,7 @@ class RequirementsTests(unittest.TestCase):
         self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'finished')
 
     def test_delegated_rescope_cannot_shrink_the_contract(self):
-        agent = self.setup_agent('cato')
+        agent = self.setup_agent('coordinator')
         store = agent._background
         items = [self.item('towers'), self.item('carriers')]
         store.record_submission('r1', 1, 'vit', 'engineering', 1000, items)
@@ -80,7 +80,7 @@ class RequirementsTests(unittest.TestCase):
             self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'finished', name)
 
     def test_renaming_rebinding_and_unknown_sources_are_refused(self):
-        agent = self.setup_agent('cato')
+        agent = self.setup_agent('coordinator')
         self.checkpoint(agent, [self.item('towers')])
         self.assertRaises(ValueError, self.checkpoint, agent, [dict(self.item('carriers'), id=1)])
         self.assertRaises(ValueError, self.checkpoint, agent, [self.item('carriers', 999)])
@@ -92,7 +92,7 @@ class RequirementsTests(unittest.TestCase):
         self.assertEqual(verification.uncovered_sources(store, 1, verification.contract(store, 1)[0]), [added])
 
     def test_legacy_checkpoint_migrates_once_and_cannot_overwrite_the_contract(self):
-        agent = self.setup_agent('cato')
+        agent = self.setup_agent('coordinator')
         store = agent._background
         cp = store.directory(1) / 'checkpoint.json'
         cp.write_text(json.dumps({'completion_items': [self.item('towers'), self.item('carriers')]}))
@@ -103,7 +103,7 @@ class RequirementsTests(unittest.TestCase):
         self.assertNotIn('completion_items', json.loads(cp.read_text()))
 
     def test_fixed_benchmark_uses_its_existing_contract_without_a_second_checklist(self):
-        agent = self.setup_agent('cato')
+        agent = self.setup_agent('coordinator')
         from tabularium.learning import regression
         store = agent._background
         case = regression.load_cases(store.agent_dir)[0]
@@ -127,13 +127,13 @@ class RequirementsTests(unittest.TestCase):
             self.assertEqual(len(verification.contract(agent._background, 1)[0]), 2)
 
     def test_status_and_budget_views_use_the_durable_contract(self):
-        agent = self.setup_agent('cato')
+        agent = self.setup_agent('coordinator')
         self.checkpoint(agent, [self.item('towers'), self.item('carriers')])
         from tabularium.records import task_cost
         self.assertEqual(len(task_cost.contract(agent._background.directory(1))['completion_items']), 2)
 
     def test_initial_contract_is_saved_before_worker_launch(self):
-        agent = self.setup_agent('cato')
+        agent = self.setup_agent('coordinator')
         store = agent._background
         seen = []
         def launch():
@@ -148,7 +148,7 @@ class RequirementsTests(unittest.TestCase):
         self.assertEqual(len(verification.contract(store, 2)[0]), 2)
 
     def test_delegated_brief_seeds_requirements_and_preserves_parent_references(self):
-        agent = self.setup_agent('vitruvius')
+        agent = self.setup_agent('engineer')
         store = agent._background
         items = verification.delegated_items([dict(self.item('towers', 99), id=7), self.item('carriers')])
         (store.directory(1) / 'context.json').write_text(json.dumps({'contract': {'completion_items': items}}))

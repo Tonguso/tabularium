@@ -20,9 +20,9 @@ class ReviewConvergence(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / 'cato'
+        self.root = Path(self.tmp.name) / 'coordinator'
         self.root.mkdir()
-        self.agent = make_agent('cato', self.root)
+        self.agent = make_agent('coordinator', self.root)
         self.store = self.agent._background
         self.task = self.store.start(1, 'Owner brief', completion_items=[dict(item='Synthesis', check='Read it', critical=True)])['id']
         self.items = [dict(item='Explain tradeoffs', check='Assess reasoning', critical=True, early=True),
@@ -99,7 +99,7 @@ class ReviewConvergence(unittest.TestCase):
         self.accept({1: 'met', 2: 'met'})
         self.assertEqual(json.loads(self.store.scorecard('request')['rework_log'])[-1]['outcome'], {'1': 'changed'})
         from tabularium.ops import scorecard
-        week = scorecard.agent_week(self.root.parent, 'cato', time.time() - 60, time.time() + 60)['delegations']
+        week = scorecard.agent_week(self.root.parent, 'coordinator', time.time() - 60, time.time() + 60)['delegations']
         self.assertEqual((week['rework_changed'], week['rework_unchanged']), (1, 2))
 
     def test_a_report_only_verdict_needs_a_cold_read_of_that_delivery(self):
@@ -152,7 +152,7 @@ class ReviewConvergence(unittest.TestCase):
             line = regression.route_gap(self.root)
         self.assertIn('BENCHMARK? the primary model is now gpt-6-luna', line)
         self.assertIn('20261025-030125', line)
-        self.assertIn('eval cato', line)
+        self.assertIn('eval coordinator', line)
 
 
 if __name__ == '__main__':

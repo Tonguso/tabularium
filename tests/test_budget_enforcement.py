@@ -79,7 +79,7 @@ class TaskCost(unittest.TestCase):
         self.assertEqual(pb.status(self.task)["target"], 20000)
 
     def test_owner_estimate_is_awareness_only(self):
-        owner = self.root / "cato" / "task_state" / "background" / "9"
+        owner = self.root / "coordinator" / "task_state" / "background" / "9"
         owner.mkdir(parents=True)
         (owner / "context.json").write_text(json.dumps({"request": "r"}), encoding="utf-8")
         self.assertEqual(pb.phase(owner), "work")
@@ -110,22 +110,22 @@ class NoPollGaps(unittest.TestCase):
 
     def test_read_file_refused_for_other_agent_state_including_relative(self):
         self.store.add_delegation(7, "cal", "req-1", "research", "worker_judgment")
-        for path in [r"D:\Agents\callimachus\task_state\background\3\checkpoint.json",
-                     r"..\callimachus\task_state\background\3\checkpoint.json",
-                     "../vitruvius/health.json", r"D:\Agents\vitruvius\task_state\transport.json"]:
+        for path in [r"D:\Agents\librarian\task_state\background\3\checkpoint.json",
+                     r"..\librarian\task_state\background\3\checkpoint.json",
+                     "../engineer/health.json", r"D:\Agents\engineer\task_state\transport.json"]:
             self.assertEqual(self.store.path_refusal(7, path), IN_FLIGHT_REFUSAL, path)
-        for path in [r"D:\Agents\cato\task_state\background\7\checkpoint.json", "task_state/background/7/checkpoint.json",
-                     r"D:\Agents\callimachus\reports\summary.md", r"D:\projects\mylib\pkg\main.py"]:
+        for path in [r"D:\Agents\coordinator\task_state\background\7\checkpoint.json", "task_state/background/7/checkpoint.json",
+                     r"D:\Agents\librarian\reports\summary.md", r"D:\projects\mylib\pkg\main.py"]:
             self.assertIsNone(self.store.path_refusal(7, path), path)
-        self.assertIsNone(self.store.path_refusal(8, r"D:\Agents\callimachus\task_state\x.json"))  # not in flight
+        self.assertIsNone(self.store.path_refusal(8, r"D:\Agents\librarian\task_state\x.json"))  # not in flight
 
     def test_wait_regex_is_narrow(self):
         self.store.add_delegation(7, "vit", "req-2", "build", "worker_judgment")
         for cmd in ["python scripts/sleep_study.py", "Get-Content ping_check.log", "python timeout_report.py",
-                    "gc ..\\cato\\task_state\\background\\7\\checkpoint.json"]:
+                    "gc ..\\coordinator\\task_state\\background\\7\\checkpoint.json"]:
             self.assertIsNone(self.store.command_refusal(7, cmd), cmd)
         for cmd in ["Start-Sleep 55", "sleep 30", "ping -n 60 127.0.0.1", "timeout /t 60",
-                    "gc ..\\callimachus\\task_state\\background\\3\\checkpoint.json"]:
+                    "gc ..\\librarian\\task_state\\background\\3\\checkpoint.json"]:
             self.assertEqual(self.store.command_refusal(7, cmd), IN_FLIGHT_REFUSAL, cmd)
         self.assertFalse(WAIT_COMMAND_RE.search("python sleep_study.py"))
 
@@ -146,7 +146,7 @@ class NoPollGaps(unittest.TestCase):
         self.assertEqual(self.store.delegations(7)[0]["status"], "submitted")
 
     def test_acceptance_is_what_marks_a_delegation_read(self):
-        self.store = TaskStore(Path(self.tmp.name)/'cato')
+        self.store = TaskStore(Path(self.tmp.name)/'coordinator')
         db = sqlite3.connect(self.store.database)
         try:
             db.execute("INSERT INTO tasks(id,chat,request,status,created,updated) VALUES(7,1,'Review','running',0,0)")
@@ -235,11 +235,11 @@ class NoPollGaps(unittest.TestCase):
             db.execute("INSERT INTO tasks(id,chat,request,status,created,updated) VALUES (11,1,'r',?,0,0)", (rt.WAITING,))
         folder = self.store.directory(11); folder.mkdir(parents=True, exist_ok=True)
         (folder / "context.json").write_text(json.dumps({"context": "", "parked_at": 0}), encoding="utf-8")
-        self.store.add_delegation(11, "cal", "cato-cal-11-x", "exposure facts", "worker_judgment")
-        answers = {"cato-cal-11-x": {"status": "question", "question": "Which fiscal year: FY25 or FY26?"}}
+        self.store.add_delegation(11, "cal", "coordinator-cal-11-x", "exposure facts", "worker_judgment")
+        answers = {"coordinator-cal-11-x": {"status": "question", "question": "Which fiscal year: FY25 or FY26?"}}
         self.store.status_checker = lambda agent, rid: answers.get(rid)
         in_flight = self.store.refresh_delegations(11)
-        self.assertEqual([d["request_id"] for d in in_flight], ["cato-cal-11-x"])          # still in flight
+        self.assertEqual([d["request_id"] for d in in_flight], ["coordinator-cal-11-x"])          # still in flight
         controls = self.store.pending_controls(11)
         self.assertEqual(len(controls), 1)
         self.assertIn("Which fiscal year", controls[0]["text"])
@@ -251,7 +251,7 @@ class NoPollGaps(unittest.TestCase):
         self.assertEqual(self.store.get(11)["status"], "queued")                            # woken to answer
         self.store.acknowledge([controls[0]["id"]])                                         # the worker read it
         self.assertFalse(self.store.unanswered(11, in_flight))
-        answers["cato-cal-11-x"] = "completed"
+        answers["coordinator-cal-11-x"] = "completed"
         self.assertEqual(self.store.refresh_delegations(11), [])                             # returned afterwards
         self.assertEqual(self.store.delegations(11)[0]["status"], "returned")
 
@@ -279,7 +279,7 @@ class NoPollGaps(unittest.TestCase):
         self.assertEqual(self.store.worker_limit(), 1)                                   # temp folder: Cato behaviour
         self.assertEqual(self.store.claim_next()["id"], 31)
         self.assertIsNone(self.store.claim_next())                                       # one slot, taken
-        self.store.role = ROLES["callimachus"]
+        self.store.role = ROLES["librarian"]
         self.assertEqual(self.store.worker_limit(), 2)
         self.assertEqual(self.store.claim_next()["id"], 32)                              # second slot
         self.assertIsNone(self.store.claim_next())                                       # third queues
@@ -305,9 +305,9 @@ class DelegateContract(unittest.TestCase):
     when accepted with a verdict per item (rewritten 2026-10-14 from source-string checks)."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
         from agent_harness import make_agent
-        self.agent = make_agent("cato", root)
+        self.agent = make_agent("coordinator", root)
         self.never = lambda argv: self.fail("refused calls must not reach the delegate script")
 
     def tearDown(self):
@@ -330,9 +330,9 @@ class Guards(unittest.TestCase):
     """read_file in a worker consults the no-poll path rule; workers get the smaller request budget."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
         from agent_harness import make_agent
-        self.agent = make_agent("cato", root)
+        self.agent = make_agent("coordinator", root)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -340,8 +340,8 @@ class Guards(unittest.TestCase):
     def test_worker_read_file_is_checked(self):
         self.agent.BACKGROUND_TASK_ID = "1"
         self.agent._background.path_refusal = lambda ident, path: "REFUSED " + path
-        self.assertEqual(self.agent.tool_read_file(r"D:\Agents\callimachus\task_state\health.json"),
-                         r"REFUSED D:\Agents\callimachus\task_state\health.json")
+        self.assertEqual(self.agent.tool_read_file(r"D:\Agents\librarian\task_state\health.json"),
+                         r"REFUSED D:\Agents\librarian\task_state\health.json")
 
     def test_worker_context_budget_is_smaller(self):
         seen = []
@@ -376,12 +376,12 @@ class BriefRules(unittest.TestCase):
 
 
     def test_card_paths_are_enforced(self):
-        card = {"writable_paths": [r"D:\Agents\callimachus\reports", r"D:\Agents\callimachus\scratch"]}
-        self.assertIsNone(self.dc.path_refusal("cal", card, r"D:\Agents\callimachus\reports\pack.md", "brief"))
-        self.assertIn("cannot write", self.dc.path_refusal("cal", card, r"D:\Agents\cato\scratch\pack.md", "brief"))
-        brief = r"Returns a markdown pack saved to D:\Agents\cato\scratch\jp_food_security_cal.md with a table."
+        card = {"writable_paths": [r"D:\Agents\librarian\reports", r"D:\Agents\librarian\scratch"]}
+        self.assertIsNone(self.dc.path_refusal("cal", card, r"D:\Agents\librarian\reports\pack.md", "brief"))
+        self.assertIn("cannot write", self.dc.path_refusal("cal", card, r"D:\Agents\coordinator\scratch\pack.md", "brief"))
+        brief = r"Returns a markdown pack saved to D:\Agents\coordinator\scratch\jp_food_security_cal.md with a table."
         self.assertIn("cannot write", self.dc.path_refusal("cal", card, "", brief))
-        reads = r"Read the draft list in D:\Agents\cato\reports\draft.md and verify each code."   # reading is fine
+        reads = r"Read the draft list in D:\Agents\coordinator\reports\draft.md and verify each code."   # reading is fine
         self.assertIsNone(self.dc.path_refusal("cal", card, "", reads))
         self.assertIsNone(self.dc.path_refusal("cal", {}, r"D:\anywhere", "x"))                       # no card: no rule
         for agent in ("cal", "vit"):

@@ -6,7 +6,7 @@ from tabularium.records import background_runtime as rt
 class StartNow(unittest.TestCase):
     def test_without_a_monitor_it_only_queues(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = rt.TaskStore(Path(tmp) / "cato")
+            store = rt.TaskStore(Path(tmp) / "coordinator")
             store.launch = lambda row: self.fail("must not launch without a monitor")
             task = store.start(1, "job", "ctx")
             self.assertEqual(task["status"], "queued")
@@ -14,7 +14,7 @@ class StartNow(unittest.TestCase):
 
     def test_started_or_queued_behind(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = rt.TaskStore(Path(tmp) / "cato")
+            store = rt.TaskStore(Path(tmp) / "coordinator")
             launched = []
             store.launch = lambda row: launched.append(row["id"])          # no real worker process in a test
             store.monitoring = True                                          # as in a serving agent process

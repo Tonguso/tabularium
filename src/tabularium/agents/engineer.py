@@ -2,7 +2,7 @@
 Vitruvius -- Telegram Interface
 
 Run:
-    tabularium run vitruvius
+    tabularium run engineer
 
 The message path lives in tabularium/core/agent_app.py (one class for all four agents, 2026-10-11). This file holds what is
 Vit's alone: the run_checks tool and an engineer's prompt.
@@ -33,14 +33,14 @@ RUN_CHECKS_TOOL = {"name": "run_checks", "description": "Run tests, lint or type
       "required": ["kind", "cwd"]}}
 
 CONFIG = Config(
-    name="vitruvius", role=ROLES["vitruvius"], display="Vitruvius",
-    token_env="VITRUVIUS_TELEGRAM_BOT_TOKEN",
-    token_missing="VITRUVIUS_TELEGRAM_BOT_TOKEN not set. Add it to .env; never reuse another agent token.",
-    shared_token_envs=("TELEGRAM_BOT_TOKEN", "TACITUS_TELEGRAM_BOT_TOKEN", "CALLIMACHUS_TELEGRAM_BOT_TOKEN"),
+    name="engineer", role=ROLES["engineer"], display="Vitruvius",
+    token_env="ENGINEER_TELEGRAM_BOT_TOKEN",
+    token_missing="ENGINEER_TELEGRAM_BOT_TOKEN not set. Add it to .env; never reuse another agent token.",
+    shared_token_envs=("TELEGRAM_BOT_TOKEN", "PRIVATE_TELEGRAM_BOT_TOKEN", "LIBRARIAN_TELEGRAM_BOT_TOKEN"),
     token_refusal="Refusing to poll an existing agent's Telegram bot. Configure Vit's own token.",
-    provider_env="VITRUVIUS_MODEL_PROVIDER", provider_default="openai",
+    provider_env="ENGINEER_MODEL_PROVIDER", provider_default="openai",
     instance_port=8216, cdp_port=9226,
-    voice_env="VITRUVIUS_ELEVENLABS_VOICE_ID",
+    voice_env="ENGINEER_ELEVENLABS_VOICE_ID",
     tools_after=(("read_research_reports", RUN_CHECKS_TOOL),),
     tools_remove=frozenset({"sec_filing"}),        # filings research is Cato's and Cal's
     sanitise="code_safe",
@@ -157,7 +157,7 @@ class VitruviusApp(AgentApp):
         return encoded if result["passed"] else Failed(encoded)
 
 def build(agent_dir, overrides=None):
-    """The vitruvius agent for this folder (see tabularium.agents.build)."""
+    """The engineer agent for this folder (see tabularium.agents.build)."""
     import os
     for limit in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         os.environ[limit] = "1"

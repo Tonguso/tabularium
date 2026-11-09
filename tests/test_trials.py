@@ -28,7 +28,7 @@ class Trials(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name).resolve() / 'cato'
+        self.root = Path(self.tmp.name).resolve() / 'coordinator'
         (self.root / 'task_state').mkdir(parents=True)
         db = sqlite3.connect(self.root / 'task_state/conversation_recall.sqlite3')
         try:
@@ -269,7 +269,7 @@ import json, os
 from tabularium.records.background_runtime import TaskStore
 AGENT_DIR = Path(__file__).resolve().parent
 store = TaskStore(AGENT_DIR)
-ident = int(os.environ["CATO_BACKGROUND_TASK"])
+ident = int(os.environ["COORDINATOR_BACKGROUND_TASK"])
 RUNTIME_DIR = store.directory(ident)
 _inbox = NS(local=NS())
 SYSTEM_PROMPT = "fixture"

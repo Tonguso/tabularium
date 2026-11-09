@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 from agent_harness import make_agent
 
 FATAL = (r"Get-Process python -ErrorAction SilentlyContinue | ? {$_.StartTime -gt (Get-Date).AddMinutes(-40)} "
-         r"| Stop-Process -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force D:\Agents\cato\scratch\jls; "
+         r"| Stop-Process -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force D:\Agents\coordinator\scratch\jls; "
          r'"cleaned"')
 REFUSED = [
     FATAL,
@@ -34,8 +34,8 @@ ALLOWED = [
     r'Get-Content seg.err -Tail 2; Stop-Process -Id 29116 -ErrorAction SilentlyContinue; cmd /c "start /b python seg.py"',
     "python -c \"import subprocess; p=subprocess.Popen(['x']); p.kill()\"",
     "Get-Process python | Select Id,StartTime",
-    r"python D:\Agents\cato\scripts\build_basket.py",
-    r"Remove-Item -Recurse -Force D:\Agents\cato\scratch\jls",
+    r"python D:\Agents\coordinator\scripts\build_basket.py",
+    r"Remove-Item -Recurse -Force D:\Agents\coordinator\scratch\jls",
 ]
 
 
@@ -43,8 +43,8 @@ class ProcessKillGuard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        root = Path(cls.tmp.name) / "cato"; root.mkdir()
-        cls.agent = make_agent("cato", root)
+        root = Path(cls.tmp.name) / "coordinator"; root.mkdir()
+        cls.agent = make_agent("coordinator", root)
 
     @classmethod
     def tearDownClass(cls):

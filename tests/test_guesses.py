@@ -17,7 +17,7 @@ class FirstCheckpoint(unittest.TestCase):
     def test_progress_can_be_saved_without_inventing_assumptions(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        for name in ("callimachus", "vitruvius"):
+        for name in ("librarian", "engineer"):
             store = self.store(tmp.name, name)
             store.checkpoint(1, 1, "saved file", "continue", [])
             store.checkpoint(1, 1, "saved file", "wait", [], blocker="QUESTION: which currency?")
@@ -27,7 +27,7 @@ class FirstCheckpoint(unittest.TestCase):
 
     def test_owner_task_is_not_gated(self):
         with tempfile.TemporaryDirectory() as tmp:
-            s = self.store(tmp, "cato")
+            s = self.store(tmp, "coordinator")
             s.checkpoint(1, 1, "started", "next", [])
 
 

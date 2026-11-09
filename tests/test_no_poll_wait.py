@@ -31,16 +31,16 @@ class NoPollWait(unittest.TestCase):
                     "Start-Sleep -Seconds 58", "sleep 30", "timeout /t 60", "ping -n 60 127.0.0.1",
                     "Wait-Process -Id 123", "Wait-Event", "python -c \"import time; time.sleep(50)\"",
                     "[System.Threading.Thread]::Sleep(5000)",
-                    "python D:\\Agents\\cato\\scripts\\delegate_local.py cal status --request-id req-1",
+                    "python D:\\Agents\\coordinator\\scripts\\delegate_local.py cal status --request-id req-1",
                     "Get-Content D:\\Agents\\cal\\health.json",
-                    "gc 'D:/Agents/vitruvius/task_state/background/8/checkpoint.json'",
+                    "gc 'D:/Agents/engineer/task_state/background/8/checkpoint.json'",
                     "$p='D:\\Agents\\cal'; Get-ChildItem \"$p\\task_state\""]:
             self.assertEqual(self.store.command_refusal(7, cmd), REFUSAL, cmd)
 
     def test_ordinary_commands_still_run_while_in_flight(self):
         self.store.add_delegation(7, "vit", "req-2", "build", "worker_judgment")
-        for cmd in ["Get-ChildItem D:\\Agents\\cato\\reports", "python scripts\\build.py",
-                    "gc D:\\Agents\\cato\\task_state\\background\\7\\checkpoint.json",
+        for cmd in ["Get-ChildItem D:\\Agents\\coordinator\\reports", "python scripts\\build.py",
+                    "gc D:\\Agents\\coordinator\\task_state\\background\\7\\checkpoint.json",
                     "gc D:\\Agents\\cal\\reports\\summary.md"]:
             self.assertIsNone(self.store.command_refusal(7, cmd), cmd)
 
@@ -73,8 +73,8 @@ class OnlyWorkersAreRefused(unittest.TestCase):
     from a syntax-tree inspection of the source)."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
-        self.agent = make_agent("cato", root)
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
+        self.agent = make_agent("coordinator", root)
         self.asked = []
 
     def tearDown(self):

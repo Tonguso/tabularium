@@ -21,8 +21,8 @@ def png(width, height):
 class ImageFiles(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name) / "cato"; root.mkdir()
-        self.rt = load_agent("cato", root)["runtime"]
+        root = Path(self.tmp.name) / "coordinator"; root.mkdir()
+        self.rt = load_agent("coordinator", root)["runtime"]
         self.rt.BACKGROUND_TASK_ID = ""
         self.seen = []
         self.rt.run_turn = lambda messages, chat: self.seen.append(messages[-1]) or "OK"

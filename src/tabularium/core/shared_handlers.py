@@ -1,6 +1,6 @@
 """Behaviour shared by all four agents, as methods on the runtime (2026-10-11, finishing the AgentRuntime refactor).
 
-These 21 functions were identical in cato/tacitus/callimachus/vitruvius telegram.py apart from the agent's name; each
+These 21 functions were identical in coordinator/private/librarian/engineer telegram.py apart from the agent's name; each
 agent file now keeps only its tools, prompt and configuration. The handlers are registered with the bot in each
 telegram.py (one line each) because the bot and inbox objects are created there. Any name they need from the agent
 (AGENT_DIR, MEMORY_FILE, OPENAI_REASONING_EFFORT, bot, _inbox, ...) is an attribute AgentApp sets in its constructor."""

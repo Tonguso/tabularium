@@ -2,7 +2,7 @@
 Callimachus -- Telegram Interface
 
 Run:
-    tabularium run callimachus
+    tabularium run librarian
 
 The message path lives in tabularium/core/agent_app.py (one class for all four agents, 2026-10-11). This file holds what is
 Cal's alone: the knowledge tool, his write scope, and a librarian's prompt.
@@ -18,14 +18,14 @@ from tabularium.core.agent_app import AgentApp, Config
 from tabularium.core.roster import ROLES
 
 CONFIG = Config(
-    name="callimachus", role=ROLES["callimachus"], display="Callimachus",
-    token_env="CALLIMACHUS_TELEGRAM_BOT_TOKEN",
-    token_missing="CALLIMACHUS_TELEGRAM_BOT_TOKEN not set. Add it to .env; never reuse another agent token.",
-    shared_token_envs=("TELEGRAM_BOT_TOKEN", "TACITUS_TELEGRAM_BOT_TOKEN"),
+    name="librarian", role=ROLES["librarian"], display="Callimachus",
+    token_env="LIBRARIAN_TELEGRAM_BOT_TOKEN",
+    token_missing="LIBRARIAN_TELEGRAM_BOT_TOKEN not set. Add it to .env; never reuse another agent token.",
+    shared_token_envs=("TELEGRAM_BOT_TOKEN", "PRIVATE_TELEGRAM_BOT_TOKEN"),
     token_refusal="Refusing to poll an existing agent's Telegram bot. Configure Cal's own token.",
-    provider_env="CALLIMACHUS_MODEL_PROVIDER", provider_default="openai",
+    provider_env="LIBRARIAN_MODEL_PROVIDER", provider_default="openai",
     instance_port=8215, cdp_port=9224,
-    voice_env="CALLIMACHUS_ELEVENLABS_VOICE_ID",
+    voice_env="LIBRARIAN_ELEVENLABS_VOICE_ID",
     tools_after=(("list_images", KNOWLEDGE_TOOL),),
     tools_remove=frozenset({"project_record"}),      # Cal keeps task progress locally; Cato owns the cross-project register.
     sanitise="code_safe",
@@ -112,6 +112,6 @@ class CallimachusApp(AgentApp):
         return None
 
 def build(agent_dir, overrides=None):
-    """The callimachus agent for this folder (see tabularium.agents.build)."""
+    """The librarian agent for this folder (see tabularium.agents.build)."""
     from tabularium.agents import configure
     return CallimachusApp(configure(CONFIG, overrides or {}), agent_dir)

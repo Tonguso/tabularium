@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import time
 
-AGENT_DIR = _home()/'cato'
+AGENT_DIR = _home()/'coordinator'
 VIDEO_DIR = AGENT_DIR / "media" / "videos"
 MAX_BYTES = 20 * 1024 * 1024          # Telegram cloud Bot API download cap
 TOTAL_SECONDS = 600                   # whole job bound
@@ -214,7 +214,7 @@ def transcribe(path, deadline, ffmpeg, python=MEDIA_PYTHON):
     threads = max(1, min(8, (os.cpu_count() or 4) // 2))
     env = {**os.environ, "OMP_NUM_THREADS": str(threads), "MKL_NUM_THREADS": str(threads),
            "OPENBLAS_NUM_THREADS": str(threads), "PYTHONIOENCODING": "utf-8"}
-    with tempfile.TemporaryDirectory(prefix="cato_video_") as work:
+    with tempfile.TemporaryDirectory(prefix="coordinator_video_") as work:
         wav, result = Path(work) / "audio.wav", Path(work) / "transcript.json"
         out = _run([ffmpeg, "-hide_banner", "-nostdin", "-y", "-i", str(path), "-vn", "-ac", "1",
                     "-ar", "16000", str(wav)], deadline, 120)

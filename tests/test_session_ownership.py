@@ -72,7 +72,7 @@ class SessionLifecycle(unittest.TestCase):
                 self.assertTrue((agent.RUNTIME_DIR/'task_state/session_checkpoint.json').exists())
 
     def test_api_limit_preserves_receipt_then_finishes(self):
-        agent = make_agent('cato',self.root)
+        agent = make_agent('coordinator',self.root)
         agent.MAX_TOOL_ITERATIONS = 1
         agent._background_boundary = lambda *a: []
         agent.execute_tool = lambda *a: 'one durable result'
@@ -90,7 +90,7 @@ class SessionLifecycle(unittest.TestCase):
         self.assertEqual(provider.calls,2)
 
     def test_unknown_action_and_zero_progress_never_auto_continue(self):
-        agent = make_agent('cato',self.root)
+        agent = make_agent('coordinator',self.root)
         for pending in (False,True):
             messages = [{'role':'user','content':'work'}]
             agent.conversations[1] = messages
@@ -140,7 +140,7 @@ class Ownership(unittest.TestCase):
             self.fail('stale writer accepted')
         except RuntimeError:
             pass
-        worker(first,self.root,ROLES['cato'],row['attempt'])
+        worker(first,self.root,ROLES['coordinator'],row['attempt'])
         self.assertEqual(restarted.get(first)['status'],'starting')
         self.assertEqual(restarted.get(first)['attempt'],replacement['attempt'])
 
@@ -249,9 +249,9 @@ def run_turn(messages, chat):
         store = TaskStore(self.root)
         ident = store.start(1,'work')['id']
         put(store, ident,'starting')
-        env = dict(os.environ,CATO_BACKGROUND_TASK=str(ident))
+        env = dict(os.environ,COORDINATOR_BACKGROUND_TASK=str(ident))
         proc = subprocess.run([sys.executable,'-B','-m','tabularium','worker',str(ident),
-                               '--agent',str(self.root),'--role','cato'],env=env,capture_output=True,timeout=10,
+                               '--agent',str(self.root),'--role','coordinator'],env=env,capture_output=True,timeout=10,
                               creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         self.assertEqual(proc.returncode,0,proc.stderr)
         self.assertTrue(store.get(ident)['attempt'])

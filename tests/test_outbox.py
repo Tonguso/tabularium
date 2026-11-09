@@ -1,7 +1,7 @@
 """Messages to Alex survive a Telegram outage; credentials never reach a log (2026-10-21).
 
 22:11-22:14 the PC lost its route to api.telegram.org. Cato's reply to Alex's 22:11 message failed once and was
-dropped, and the error line printed the request URL with the bot token into cato.log."""
+dropped, and the error line printed the request URL with the bot token into coordinator.log."""
 import contextlib, io, sqlite3, tempfile, time, unittest
 from contextlib import closing
 from pathlib import Path
@@ -139,9 +139,9 @@ class Delivery(unittest.TestCase):
 class AgentPath(unittest.TestCase):
     def test_send_message_accepts_during_an_outage_and_delivers_after(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
+            root = Path(tmp) / "coordinator"; root.mkdir()
             with contextlib.redirect_stdout(io.StringIO()):
-                agent = make_agent("cato", root)
+                agent = make_agent("coordinator", root)
             agent.bot = FakeBot(); agent.bot.down = True
             self.assertTrue(agent.send_message(CHAT, "The default subtitle should match your selection."))
             self.assertEqual(len(agent.outbox().pending()), 1)
@@ -162,7 +162,7 @@ class NoCredentialsInLogs(unittest.TestCase):
 
     def test_existing_files_are_masked_in_place_at_the_same_length(self):
         with tempfile.TemporaryDirectory() as tmp:
-            log = Path(tmp) / "cato-launch.log"
+            log = Path(tmp) / "coordinator-launch.log"
             text = f"before /bot{self.TOKEN}/sendMessage after\n"
             log.write_text(text, encoding="utf-8")
             self.assertEqual(agent_logging.mask_file(log), 1)

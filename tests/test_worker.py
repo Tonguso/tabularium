@@ -12,7 +12,7 @@ import json, os
 from tabularium.records.background_runtime import TaskStore
 AGENT_DIR = Path(__file__).resolve().parent
 store = TaskStore(AGENT_DIR)
-ident = int(os.environ["CATO_BACKGROUND_TASK"])
+ident = int(os.environ["COORDINATOR_BACKGROUND_TASK"])
 RUNTIME_DIR = store.directory(ident)
 _inbox = NS(local=NS())
 SYSTEM_PROMPT = "fixture"
@@ -33,7 +33,7 @@ def run_turn(messages, chat):
 class LoopingWorker(unittest.TestCase):
     def test_a_looping_agent_is_stopped_in_the_runtimes_words(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
+            root = Path(tmp) / "coordinator"; root.mkdir()
             (root / "agent.py").write_text(STUB, encoding="utf-8")
             store = background_runtime.TaskStore(root)
             task = store.start(1, "Review the workbook")
@@ -63,7 +63,7 @@ class Notification(unittest.TestCase):
     def test_a_stopped_task_reports_what_it_saved(self):
         """A capped or needs-attention task sends its saved result, not a generic 'stopped' line (2026-10-07)."""
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
+            root = Path(tmp) / "coordinator"; root.mkdir()
             store = background_runtime.TaskStore(root)
             for status in ("capped", "needs_attention"):
                 task = store.start(1, "Build the basket")

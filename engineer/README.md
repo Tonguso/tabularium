@@ -2,10 +2,10 @@
 Dedicated engineer and web designer. Identity is SKILL.md; requirements are docs/design-brief.md.
 
 ## Connect
-1. Create a separate bot with Telegram @BotFather and enter its token in the home folder's .env under VITRUVIUS_TELEGRAM_BOT_TOKEN. Never reuse another bot token.
+1. Create a separate bot with Telegram @BotFather and enter its token in the home folder's .env under ENGINEER_TELEGRAM_BOT_TOKEN. Never reuse another bot token.
 2. Open Start Vit.vbs through Explorer. This starts only Vit, hidden, with logs in D:\Agents\logs. Do not launch persistent agents as children of a coding app.
 3. In Vit's Telegram chat send /start then /openai_connect and complete his own browser sign-in. Existing agents' sign-ins are not copied.
-The configured model is gpt-6.1-sol through the existing subscription routing, with its existing quota/API handling. Availability is determined by service responses, not promised by this file. API-only mode requires explicit VITRUVIUS_ALLOW_API=1; no new service was purchased.
+The configured model is gpt-6.1-sol through the existing subscription routing, with its existing quota/API handling. Availability is determined by service responses, not promised by this file. API-only mode requires explicit ENGINEER_ALLOW_API=1; no new service was purchased.
 
 ## Delegation
 Cato's vit-engineering skill documents work_client.py. submit queues an isolated task; status/result retrieve evidence; steer adds clarification; resume is explicit after a blocked/terminal task. cancel is cooperative. Stable request IDs prevent duplicate submission. Foreground chat remains separate.

@@ -40,10 +40,10 @@
   </nav>
   <p class="navlabel roster-label">ROSTER</p>
   <div class="sidebar-roster">
-    <button data-view="agents"><img src="/assets/cato.jpg" alt=""><span>Cato<small>Chief of staff</small></span><i id="side-cato" class="presence"></i></button>
-    <button data-view="agents"><img src="/assets/tacitus.jpg" alt=""><span>Tacitus<small>Private agent</small></span><i id="side-tacitus" class="presence"></i></button>
-    <button data-view="agents"><img src="/assets/callimachus.jpg" alt=""><span>Cal<small>Librarian</small></span><i id="side-callimachus" class="presence"></i></button>
-    <button data-view="agents"><img src="/assets/vitruvius.jpg" alt=""><span>Vit<small>Engineer</small></span><i id="side-vitruvius" class="presence"></i></button>
+    <button data-view="agents"><img src="/assets/coordinator.jpg" alt=""><span>Cato<small>Chief of staff</small></span><i id="side-coordinator" class="presence"></i></button>
+    <button data-view="agents"><img src="/assets/private.jpg" alt=""><span>Tacitus<small>Private agent</small></span><i id="side-private" class="presence"></i></button>
+    <button data-view="agents"><img src="/assets/librarian.jpg" alt=""><span>Cal<small>Librarian</small></span><i id="side-librarian" class="presence"></i></button>
+    <button data-view="agents"><img src="/assets/engineer.jpg" alt=""><span>Vit<small>Engineer</small></span><i id="side-engineer" class="presence"></i></button>
   </div>
   <div class="sidebar-bottom"><span class="owner-avatar">A</span><div>Alex<small>UTC</small></div></div>
 </aside>
@@ -125,7 +125,7 @@
 
   <section id="messaging" class="view" hidden>
     <section class="panel">
-      <div class="section-title"><button id="message-menu" class="button secondary" type="button" aria-label="Dashboard menu" aria-expanded="false" aria-controls="main-nav">Menu</button><label>Talk to <select id="message-agent"><option value="cato">Cato</option><option value="callimachus">Cal</option><option value="vitruvius">Vit</option><option value="tacitus">Tacitus</option></select></label><span id="message-connection" role="status">Connecting</span></div>
+      <div class="section-title"><button id="message-menu" class="button secondary" type="button" aria-label="Dashboard menu" aria-expanded="false" aria-controls="main-nav">Menu</button><label>Talk to <select id="message-agent"><option value="coordinator">Cato</option><option value="librarian">Cal</option><option value="engineer">Vit</option><option value="private">Tacitus</option></select></label><span id="message-connection" role="status">Connecting</span></div>
       <p class="muted">Only dashboard messages appear here. Your agent also remembers what you say on Telegram.</p>
       <div id="message-list" role="log" aria-label="Messages" aria-live="polite"></div>
       <div id="message-question" hidden></div>
@@ -136,7 +136,7 @@
   <section id="history" class="view" hidden>
     <section class="panel history-toolbar">
       <form id="history-form">
-        <label>Agent<select id="history-agent"><option value="cato">Cato</option><option value="tacitus">Tacitus</option><option value="callimachus">Cal</option><option value="vitruvius">Vit</option></select></label>
+        <label>Agent<select id="history-agent"><option value="coordinator">Cato</option><option value="private">Tacitus</option><option value="librarian">Cal</option><option value="engineer">Vit</option></select></label>
         <label>From<input id="history-from" type="date"></label>
         <label>To<input id="history-to" type="date"></label>
         <label class="search-field">Find in messages<input id="history-query" type="search" placeholder="Search a word or topic" maxlength="300"></label>
@@ -185,7 +185,7 @@
       <p class="muted">Saved browser profiles do not prove that a website login or membership is currently valid.</p>
     </section>
     <section class="panel logpanel">
-      <div class="section-title"><h2>Technical log</h2><div><select id="log-agent" aria-label="Agent log"><option value="cato">Cato</option><option value="tacitus">Tacitus</option><option value="callimachus">Cal</option><option value="vitruvius">Vit</option></select> <button class="button secondary" id="load-log">Read latest</button></div></div>
+      <div class="section-title"><h2>Technical log</h2><div><select id="log-agent" aria-label="Agent log"><option value="coordinator">Cato</option><option value="private">Tacitus</option><option value="librarian">Cal</option><option value="engineer">Vit</option></select> <button class="button secondary" id="load-log">Read latest</button></div></div>
       <pre id="logs">Select an agent to read its latest log. Common credential formats are redacted.</pre>
     </section>
   </section>

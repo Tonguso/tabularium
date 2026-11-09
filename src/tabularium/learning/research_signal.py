@@ -7,7 +7,7 @@ real cases (<agent>/evals/cases.json, the "candidates" the eval does not grade) 
 model says only whether the new answer is closer to what was asked than the earlier accepted answer, about the same,
 or further. Three weeks of "further" on research tasks means something changed; one run means little.
 
-    python agent_control.py eval cato --signal 3
+    python agent_control.py eval coordinator --signal 3
 
 Reruns carry an eval context without a benchmark fingerprint: isolated (nothing sent, delegated or started) but
 with the agent's normal tools, so a research rerun can search. Results: <agent>/task_state/research_signal/<stamp>.json.

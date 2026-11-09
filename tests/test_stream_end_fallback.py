@@ -29,8 +29,8 @@ class StreamEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        root = Path(cls.tmp.name) / "tacitus"; root.mkdir()
-        cls.agent = make_agent("tacitus", root)
+        root = Path(cls.tmp.name) / "private"; root.mkdir()
+        cls.agent = make_agent("private", root)
 
     @classmethod
     def tearDownClass(cls):
@@ -64,7 +64,7 @@ class StreamEnd(unittest.TestCase):
         self.agent._responses_call(NS(responses=NS(create=create)), model="m", instructions="", input_items=[],
                                    tools=[{"type": "function", "name": "read_file"}], plan_mode=True)
         space = next(t for t in seen["tools"] if t.get("type") == "namespace")
-        self.assertEqual(space["name"], "tacitus")
+        self.assertEqual(space["name"], "private")
         self.assertIn("Tacitus", space["description"])
 
 

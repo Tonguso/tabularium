@@ -28,7 +28,7 @@ class LessonCases(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name).resolve() / "cato"
+        self.root = Path(self.tmp.name).resolve() / "coordinator"
         (self.root / "task_state").mkdir(parents=True)
         db = sqlite3.connect(self.root / "task_state/conversation_recall.sqlite3")
         try:

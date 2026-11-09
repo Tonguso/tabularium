@@ -177,7 +177,7 @@ def main(args):
         from tabularium.records.background_runtime import TaskStore
         from tabularium.channels.owner_telegram import OWNER_CHAT_ID
         root = _home()
-        name = next((a for a in args[1:] if not a.startswith("--")), "cato")
+        name = next((a for a in args[1:] if not a.startswith("--")), "coordinator")
         if name not in AGENTS:
             sys.exit("Unknown agent: " + name)
         agent_root = root / name
@@ -226,7 +226,7 @@ def main(args):
         from tabularium.learning import learning
         from tabularium.channels.owner_telegram import OWNER_CHAT_ID
         root = _home()
-        for name in [a for a in args[1:] if not a.startswith("--")] or ["cato"]:
+        for name in [a for a in args[1:] if not a.startswith("--")] or ["coordinator"]:
             gone = learning.expire(root / name, OWNER_CHAT_ID)
             print(f"== {name}: {len(gone)} candidate(s) expired")
             print(learning.digest(root / name, OWNER_CHAT_ID))

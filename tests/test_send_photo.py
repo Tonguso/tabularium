@@ -17,7 +17,7 @@ class SendPhoto(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.agent = make_agent("cato", self.root)
+        self.agent = make_agent("coordinator", self.root)
         self.agent.bot = Mock()
         self.png = self.root / "board.png"
         Image.new("RGB", (400, 200), "white").save(self.png)

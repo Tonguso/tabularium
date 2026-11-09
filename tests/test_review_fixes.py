@@ -70,14 +70,14 @@ class Release(unittest.TestCase):
         (self.root/'engine.py').write_text('x = 2\n',encoding='utf-8')
         self.assertEqual(release.uncommitted(self.root),['engine.py'])
         with patch.object(release, 'REPO', self.root):          # the release's checkout is the package's, not the home
-            self.assertRaisesRegex(RuntimeError,'Commit tracked changes',agent_control.request_restart,['cato'],root=self.root)
-        self.assertFalse((self.root/'cato/task_state/drain').exists())
+            self.assertRaisesRegex(RuntimeError,'Commit tracked changes',agent_control.request_restart,['coordinator'],root=self.root)
+        self.assertFalse((self.root/'coordinator/task_state/drain').exists())
         self.assertFalse((self.root/'dashboard/restart_status.json').exists())
 
     def test_a_worker_attempt_records_its_release(self):
         from tabularium.records.background_runtime import TaskStore
         from tabularium.records import lifecycle
-        store = TaskStore(self.root / "cato")
+        store = TaskStore(self.root / "coordinator")
         ident = store.start(1, "work")["id"]
         store.claim_next()
         with store.db() as db:

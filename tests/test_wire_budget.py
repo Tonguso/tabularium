@@ -74,7 +74,7 @@ class WireBudget(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.agent = make_agent("cato", self.root)
+        self.agent = make_agent("coordinator", self.root)
 
     def bridge_turn(self, calls):
         captured = {}
@@ -199,7 +199,7 @@ class CrashDelivery(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        store = TaskStore(root, ROLES["vitruvius"])
+        store = TaskStore(root, ROLES["engineer"])
         task = store.start(123, "View test screenshot")
         ident = task["id"]
         context = store.directory(ident) / "context.json"
@@ -225,7 +225,7 @@ class CrashDelivery(unittest.TestCase):
         # Worker retries and a supervisor restart must not issue duplicate incident notices.
         put(store, ident, "running")
         put(store, ident, "interrupted", "Worker error: CLIJSONDecodeError.")
-        tick(TaskStore(root, ROLES["vitruvius"]))
+        tick(TaskStore(root, ROLES["engineer"]))
         self.assertEqual(len(notices), 1)
         store.control(123, ident, "resume")
         put(store, ident, "interrupted", "Worker error: a new incident.")
@@ -238,11 +238,11 @@ class CrashDelivery(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        stub = (STUB + "\n_routing = NS(enabled=lambda root: True)\n").replace('os.environ["CATO_BACKGROUND_TASK"]', 'os.environ["VITRUVIUS_BACKGROUND_TASK"]')
+        stub = (STUB + "\n_routing = NS(enabled=lambda root: True)\n").replace('os.environ["COORDINATOR_BACKGROUND_TASK"]', 'os.environ["ENGINEER_BACKGROUND_TASK"]')
         stub = stub.replace('raise RunawayStop("5 consecutive tool calls failed or were refused; the last was review_output")',
                             'raise RuntimeError("test worker exception")')
         (root / "agent.py").write_text(stub, encoding="utf-8")
-        store = TaskStore(root, ROLES["vitruvius"])
+        store = TaskStore(root, ROLES["engineer"])
         task = store.start(123, "Inspect screenshot")
         context = store.directory(task["id"]) / "context.json"
         context.write_text(json.dumps({"context": "", "notify_telegram": False, "retries": 0}), encoding="utf-8")

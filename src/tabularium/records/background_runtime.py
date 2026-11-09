@@ -62,7 +62,7 @@ IN_FLIGHT_REFUSAL = Refused("A delegate is in flight. Save task_checkpoint and e
 WAIT_COMMAND_RE = re.compile(r"(?:^|[;&|(]\s*|\bstart-)sleep\b\s*(?:-s(?:econds)?\s+)?\d|\btimeout(?:\.exe)?\s+/t\b|"
                              r"\bwait-\w+|\bping(?:\.exe)?\s+-(?:n|t|c)\b|\btime\.sleep\(|\bwaitforexit\b|"
                              r"thread\]::sleep|delegate_local\.py\b.*\bstatus\b", re.IGNORECASE)
-OTHER_AGENT_RE = re.compile(r"agents[\\/]+(?!cato\b)\w|\.\.[\\/]+(?!cato\b)\w+[\\/]", re.IGNORECASE)
+OTHER_AGENT_RE = re.compile(r"agents[\\/]+(?!coordinator\b)\w|\.\.[\\/]+(?!coordinator\b)\w+[\\/]", re.IGNORECASE)
 STATE_FILE_RE = re.compile(r"task_state|checkpoint|health\.json", re.IGNORECASE)
 STATUS_REPEAT_SECONDS = 300
 
@@ -81,10 +81,12 @@ REPEAT_NOTE = ("This lesson restates candidate {key}. The same lesson twice mean
                "Until then it stays a candidate.")
 
 class TaskStore:
-    def __init__(self, agent_dir, role=ROLES["cato"]):
-        """role: the agent's Role from tabularium.core.roster. Callers pass it; the default (Cato's) is for tests on temp folders."""
+    def __init__(self, agent_dir, role=ROLES["coordinator"], display=None):
+        """role: the agent's Role from tabularium.core.roster; display: the persona name used in messages to the owner.
+        Callers pass them; the defaults (the coordinator slot, named by its slot) are for tests on temp folders."""
         self.agent_dir = Path(agent_dir)
         self.role = role
+        self.display = display or role.name.capitalize()
         self.monitoring = False
         self.answering = None           # set by the agent: () -> the Telegram message id the running turn answers
         self.root = self.agent_dir / "task_state" / "background"
@@ -399,7 +401,7 @@ class TaskStore:
     def path_refusal(self, ident, path):
         """IN_FLIGHT_REFUSAL when read_file targets another agent's task_state/checkpoint/health while a
         delegate is in flight. Relative paths resolve against the worker's cwd (the agent directory), so
-        '..\\callimachus\\task_state\\...' is caught; the worker's own files and project files stay readable."""
+        '..\\librarian\\task_state\\...' is caught; the worker's own files and project files stay readable."""
         if not any(d["status"] == "submitted" for d in self.delegations(ident)):
             return None
         text = str(path or "")
@@ -1120,7 +1122,7 @@ class TaskStore:
                                    "JOIN tasks t ON t.id=f.task WHERE f.notified=0"))
             for row in rows:
                 task = dict(row)
-                delivered = send(task["chat"], f"{self.role.name.capitalize()} could not finish '{self.label(task)}' (background task "
+                delivered = send(task["chat"], f"{self.display} could not finish '{self.label(task)}' (background task "
                                  f"{task['task']}) and has stopped trying; it is listed under attention on the dashboard.")
                 if delivered is False:
                     raise OSError("Worker failure notification was not delivered")

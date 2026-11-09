@@ -6,7 +6,7 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 class EverydayStyle(unittest.TestCase):
     def test_each_agent_retains_its_installed_communication_core(self):
-        for agent in ('cato','tacitus','callimachus','vitruvius'):
+        for agent in ('coordinator','private','librarian','engineer'):
             path=ROOT/agent/'skills/talk-like-a-human-being/runtime-core.md'
             text=path.read_text(encoding='utf-8')
             self.assertEqual(text.count('## Everyday communication core'),1)

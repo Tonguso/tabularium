@@ -33,7 +33,7 @@ def acceptance(request_id):
     """Cato's side of one request: purpose, source, status, per-item verdicts and the brief lesson (jobs.sqlite3)."""
     import sqlite3
     from contextlib import closing
-    path=_home()/'cato'/'task_state'/'background'/'jobs.sqlite3'
+    path=_home()/'coordinator'/'task_state'/'background'/'jobs.sqlite3'
     if not request_id or not path.exists():return None
     try:
         with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=5)) as con:

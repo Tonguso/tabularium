@@ -72,7 +72,7 @@ class Diagnosis(unittest.TestCase):
         return [t for t in agent._background.status(CHAT) if corrections.is_diagnosis(t["request"])]
 
     def test_a_thread_of_corrections_is_one_diagnosis_started_once_it_goes_quiet(self):
-        agent = agent_for("cato", self.tmp.name)
+        agent = agent_for("coordinator", self.tmp.name)
         self.assertEqual(feedback(agent, CHAT, self.conversation(), now=T0), 1)
         more = self.conversation() + [{"role": "assistant", "content": "我把编号去掉了。"},
                                       {"role": "user", "content": "什么在等我决定"}]
@@ -99,7 +99,7 @@ class Diagnosis(unittest.TestCase):
     def test_a_failure_the_runtime_recorded_joins_the_next_diagnosis(self):
         """GEPA's point (2026-10-24): a lesson that recurred or a declared check that failed is diagnosed from the
         actual run, in the same silent diagnosis as Alex's corrections, marked as the runtime's record, not his words."""
-        agent = agent_for("cato", self.tmp.name)
+        agent = agent_for("coordinator", self.tmp.name)
         self.assertEqual(corrections.start_failure(agent, CHAT, "Lesson L7 recurred", "task 161: rebuilt twice", now=T0), 1)
         started = corrections.flush(agent, now=T0 + corrections.QUIET_SECONDS)
         self.assertEqual(len(started), 1)
@@ -108,11 +108,11 @@ class Diagnosis(unittest.TestCase):
         self.assertIn("Evidence: task 161: rebuilt twice", request)
         context = json.loads((agent._background.directory(started[0]) / "context.json").read_text(encoding="utf-8"))
         self.assertIs(context["notify_telegram"], False)
-        tacitus = agent_for("tacitus", self.tmp.name)
-        self.assertIsNone(corrections.start_failure(tacitus, CHAT, "Lesson L7 recurred", "x", now=T0))
+        private = agent_for("private", self.tmp.name)
+        self.assertIsNone(corrections.start_failure(private, CHAT, "Lesson L7 recurred", "x", now=T0))
 
     def test_a_later_thread_joins_a_diagnosis_still_running(self):
-        agent = agent_for("cato", self.tmp.name)
+        agent = agent_for("coordinator", self.tmp.name)
         feedback(agent, CHAT, self.conversation(), now=T0)
         first = corrections.flush(agent, now=T0 + corrections.QUIET_SECONDS)[0]
         feedback(agent, CHAT, self.conversation() + [{"role": "user", "content": "还是不对"}], now=T0 + 700)
@@ -122,7 +122,7 @@ class Diagnosis(unittest.TestCase):
 
     def test_an_eval_or_trial_rerun_cannot_ask_owner_either(self):
         from tabularium.learning import regression
-        agent = agent_for("cato", self.tmp.name)
+        agent = agent_for("coordinator", self.tmp.name)
         store = agent._background
         ident = regression.start_rerun(store, CHAT, regression.load_cases(agent.AGENT_DIR)[0], 1)   # a benchmark case
         put(store, ident, "running")
@@ -132,7 +132,7 @@ class Diagnosis(unittest.TestCase):
         self.assertEqual(store.decisions(CHAT, ident), [])
 
     def test_a_diagnosis_cannot_ask_owner_and_ends_finished(self):
-        agent = agent_for("cato", self.tmp.name)
+        agent = agent_for("coordinator", self.tmp.name)
         store = agent._background
         feedback(agent, CHAT, self.conversation(), now=T0)
         ident = corrections.flush(agent, now=T0 + corrections.QUIET_SECONDS)[0]
@@ -142,16 +142,16 @@ class Diagnosis(unittest.TestCase):
         self.assertEqual(store.decisions(CHAT, ident), [])
         self.assertEqual(store.get(ident)["status"], "finished")
 
-    def test_tacitus_and_workers_do_not_record_one(self):
-        tacitus = agent_for("tacitus", self.tmp.name)
-        self.assertIsNone(feedback(tacitus, CHAT, self.conversation()))
-        cato = agent_for("cato", self.tmp.name)
-        cato.BACKGROUND_TASK_ID = "5"
-        self.assertIsNone(feedback(cato, CHAT, self.conversation()))
-        self.assertFalse((cato.AGENT_DIR / "task_state" / "corrections_pending.json").exists())
+    def test_private_and_workers_do_not_record_one(self):
+        private = agent_for("private", self.tmp.name)
+        self.assertIsNone(feedback(private, CHAT, self.conversation()))
+        coordinator = agent_for("coordinator", self.tmp.name)
+        coordinator.BACKGROUND_TASK_ID = "5"
+        self.assertIsNone(feedback(coordinator, CHAT, self.conversation()))
+        self.assertFalse((coordinator.AGENT_DIR / "task_state" / "corrections_pending.json").exists())
 
     def test_the_turn_records_it_only_when_the_reply_says_corrected(self):
-        agent = agent_for("cato", self.tmp.name)
+        agent = agent_for("coordinator", self.tmp.name)
         agent.BACKGROUND_TASK_ID = ""
         for flag, expected in (([], 0), ([12], 1)):
             messages = self.conversation()[:3]
@@ -174,9 +174,9 @@ class Diagnosis(unittest.TestCase):
 
 
 class LessonToolForEveryAgentThatLearns(unittest.TestCase):
-    def test_cato_cal_and_vit_have_it_once_and_tacitus_does_not(self):
+    def test_coordinator_cal_and_vit_have_it_once_and_private_does_not(self):
         with tempfile.TemporaryDirectory() as tmp:
-            for name, has in (("cato", True), ("callimachus", True), ("vitruvius", True), ("tacitus", False)):
+            for name, has in (("coordinator", True), ("librarian", True), ("engineer", True), ("private", False)):
                 names = [t["name"] for t in agent_for(name, tmp).get_tools("anthropic")]
                 self.assertEqual(names.count("lesson"), 1 if has else 0, name)
 
@@ -190,7 +190,7 @@ class Burst(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.agent = agent_for("cato", self.tmp.name)
+        self.agent = agent_for("coordinator", self.tmp.name)
         self.agent.BACKGROUND_TASK_ID = ""
 
     def conversation(self, text):

@@ -10,9 +10,9 @@ from agent_harness import make_agent
 class StateWrites(unittest.TestCase):
     def test_failed_save_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
+            root = Path(tmp) / "coordinator"; root.mkdir()
             with contextlib.redirect_stdout(io.StringIO()):
-                agent = make_agent("cato", root)
+                agent = make_agent("coordinator", root)
             missing = Path(tmp) / "no-such-dir" / "x.json"
             agent._voice_mode_path = lambda chat_id: missing
             agent._auto_mode_path = lambda chat_id: missing

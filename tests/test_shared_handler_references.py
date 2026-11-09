@@ -41,7 +41,7 @@ class UndefinedNames(unittest.TestCase):
         self.assertEqual(problems, {}, f"names used but never bound (NameError waiting to happen): {problems}")
 
     def test_catches_the_october_regressions(self):
-        broken = ROOT / "backups" / "hotfix-language-hint-20261011-151123" / "cato-telegram.py"
+        broken = ROOT / "backups" / "hotfix-language-hint-20261011-151123" / "coordinator-telegram.py"
         if broken.exists():
             self.assertEqual([n for n, _ in undefined(broken)], ["_background", "_background", "_background", "_background", "_kill_headless_outlook", "_language_hint"])
 

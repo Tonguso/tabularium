@@ -36,7 +36,7 @@ def run(name):
         value = json.loads(p.read_text())
         actions.append(dict(tool=value['tool'], inputs=value.get('inputs'), result=value.get('result')))
     record = dict(agent=name, task=ident, first=initial, status=final, files=files, usage=regression.generation_usage(folder), actions=actions, release=store.get(ident).get('release'))
-    (ROOT / 'cato/scratch' / f'ordinary-{sys.argv[1]}-{name}.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
+    (ROOT / 'coordinator/scratch' / f'ordinary-{sys.argv[1]}-{name}.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
     print(json.dumps({k:v for k,v in record.items() if k!='actions'}), flush=True)
     return record
 pool = ThreadPoolExecutor(max_workers=4)
@@ -44,4 +44,4 @@ try:
     records = list(pool.map(run, [arg for arg in sys.argv[2:] if arg != '--eval-lane'] or ROLES))
 finally:
     pool.shutdown()
-(ROOT / 'cato/scratch' / f'ordinary-{sys.argv[1]}.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
+(ROOT / 'coordinator/scratch' / f'ordinary-{sys.argv[1]}.json').write_text(json.dumps(records, indent=2), encoding='utf-8')

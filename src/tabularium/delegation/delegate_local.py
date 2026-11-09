@@ -21,8 +21,8 @@ import sys
 import tempfile
 import uuid
 
-ROOT = _home()/'cato'
-AGENTS = {'vit': _home()/'vitruvius', 'cal': _home()/'callimachus'}
+ROOT = _home()/'coordinator'
+AGENTS = {'vit': _home()/'engineer', 'cal': _home()/'librarian'}
 CLIENTS = {'vit': 'tabularium.delegation.work_client', 'cal': 'tabularium.delegation.research_client'}
 DB = ROOT/'reports'/'delegation_audit'/'events.sqlite3'
 SECRET = re.compile(r'(?:sk-[A-Za-z0-9_-]{20,}|\b\d{7,12}:[A-Za-z0-9_-]{25,}|Bearer\s+\S+|-----BEGIN .*PRIVATE KEY|(?:api[_ -]?key|password|access_token|refresh_token)\s*[=:]\s*[^\s,;]+)', re.I)
@@ -52,7 +52,7 @@ def record(db, agent, request_id, payload):
     now=datetime.now().astimezone().isoformat()
     ident=str(uuid.uuid4())
     returned=payload.get('phase')=='return'
-    event={'event_id':ident,'timestamp':now,'agent':agent,'sender':agent if returned else 'cato','recipient':'cato' if returned else agent,'request_id':request_id,**safe(payload)}
+    event={'event_id':ident,'timestamp':now,'agent':agent,'sender':agent if returned else 'coordinator','recipient':'coordinator' if returned else agent,'request_id':request_id,**safe(payload)}
     with db:
         db.execute('INSERT INTO events VALUES(?,?,?,?,?)',(ident,now,agent,request_id,json.dumps(event,ensure_ascii=False)))
     return ident
@@ -113,7 +113,7 @@ def audit_events(agent=None,request_id=None,date=None,max_events=None):
         if 'agent' not in event:
             event['agent']=event['recipient']
             if event.get('phase')=='return':
-                event['sender'],event['recipient']=event['agent'],'cato'
+                event['sender'],event['recipient']=event['agent'],'coordinator'
                 event['export_normalization']='Direction corrected from initial wrapper schema; original stored event retained.'
     events=[e for e in events if (not agent or e.get('agent',e['recipient'])==agent) and (not request_id or e['request_id']==request_id) and (not date or e['timestamp'][:10]==date)]
     return safe([e for e in events if e.get('agent') in AGENTS])

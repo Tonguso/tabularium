@@ -83,7 +83,7 @@ class DurableDecisionTests(unittest.TestCase):
         self.assertIn("Old unresolved choice", TaskStore(self.root).live_context(1))
 
     def test_waiting_delegate_reports_through_owner_not_duplicate_chat(self):
-        self.store.role = ROLES["callimachus"]
+        self.store.role = ROLES["librarian"]
         db = sqlite3.connect(self.store.database)
         try:
             db.execute("CREATE TABLE research_requests(task INTEGER)")
@@ -128,7 +128,7 @@ class AgentDecisionFlowTests(unittest.TestCase):
     def test_new_waiting_claim_is_recorded_before_verification(self):
         tmp = tempfile.TemporaryDirectory()
         try:
-            agent = make_agent("cato", tmp.name, background=True)
+            agent = make_agent("coordinator", tmp.name, background=True)
             # A worker's own declared question is recorded without a second model call (2026-10-20).
             out = verify_reply(agent, [], 1, Reply("Choose A or B", task_outcome="waiting", question="A or B?", decision_task_id=1,
                                                    status_claims=[{"task_id": 1, "state": "waiting"}]))
@@ -178,7 +178,7 @@ class KeepTheAnswer(unittest.TestCase):
     def test_a_workers_claim_about_its_own_task_is_its_outcome_not_a_mismatch(self):
         tmp = tempfile.TemporaryDirectory()
         try:
-            agent = make_agent("cato", tmp.name, background=True)
+            agent = make_agent("coordinator", tmp.name, background=True)
             draft = "一、结论：核心是二线供应商。需要您确认：FTI 是不是 FTAI 的笔误？"
             fake = patch.object(agent._routing, "run", return_value=Reply(
                 "audited", task_outcome="waiting", question="FTI 是不是 FTAI 的笔误？", decision_task_id=1,
@@ -197,7 +197,7 @@ class KeepTheAnswer(unittest.TestCase):
         # 2026-10-20 22:08: "状态更正：任务 241 在等您决定；任务 245 没有在运行。这都是啥？"
         tmp = tempfile.TemporaryDirectory()
         try:
-            agent = make_agent("cato", tmp.name)
+            agent = make_agent("coordinator", tmp.name)
             # The declared claim is checked against the records; no second model reads the reply (2026-10-21).
             with patch.object(agent._routing, "run") as model:
                 out = verify_reply(agent, [], 1, Reply("反推已经做完了，结论如下……",
@@ -214,7 +214,7 @@ class KeepTheAnswer(unittest.TestCase):
     def test_a_failed_check_still_delivers_the_answer(self):
         tmp = tempfile.TemporaryDirectory()
         try:
-            agent = make_agent("cato", tmp.name)
+            agent = make_agent("coordinator", tmp.name)
             fake = patch.object(agent._routing, "run", side_effect=RuntimeError("route down"))
             fake.start()
             try:
@@ -275,7 +275,7 @@ from tabularium.core.reply_envelope import Reply
 from tabularium.records import task_decisions
 task_decisions.audit=lambda agent,chat,draft,evidence: draft
 AGENT_DIR=Path(__file__).resolve().parent
-ident=int(os.environ["CATO_BACKGROUND_TASK"])
+ident=int(os.environ["COORDINATOR_BACKGROUND_TASK"])
 store=TaskStore(AGENT_DIR)
 RUNTIME_DIR=store.directory(ident)
 _inbox=NS(local=NS())

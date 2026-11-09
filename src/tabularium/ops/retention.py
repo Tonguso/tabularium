@@ -4,7 +4,7 @@ Run daily by the supervisor (python retention.py sweeps once by hand). Every act
 Rules, oldest-first, sizes measured before acting:
 
 - Trials: directories under <agent>/scratch named tools_trial, trials, node_modules, .venv or ending in _venv are
-  throwaway installs (a 2.3 GB document-conversion trial sat under cato/scratch on 2026-10-10), and so are
+  throwaway installs (a 2.3 GB document-conversion trial sat under coordinator/scratch on 2026-10-10), and so are
   smoke_* test folders at any depth under scratch. Older than TRIAL_DAYS: deleted. A tool that is meant to stay
   lives under <agent>/tools or D:\\Agents\\tools, never in scratch.
 - Finished background tasks: <agent>/task_state/background/<id> older than TASK_DAYS (and not active in jobs.sqlite3)
@@ -63,7 +63,7 @@ def sweep_trials(root, now, days=TRIAL_DAYS):
         if not scratch.exists():
             continue
         # Smoke-test folders (smoke_<agent>_xxxx, left by test runs whose TEMP pointed into scratch: 41 under
-        # cato/scratch/agent_refactor/tmp on 2026-10-11) are trials wherever they sit under scratch.
+        # coordinator/scratch/agent_refactor/tmp on 2026-10-11) are trials wherever they sit under scratch.
         candidates = [d for d in scratch.iterdir()] + [d for d in scratch.rglob("smoke_*") if d.parent != scratch]
         for d in candidates:
             if not d.is_dir() or not (d.name in TRIAL_NAMES or d.name.endswith("_venv") or d.name.startswith("smoke_")):

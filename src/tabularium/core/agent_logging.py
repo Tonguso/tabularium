@@ -11,7 +11,7 @@ exception or a normal exit is written to the log before the process goes away.
 Usage — first thing after imports, before any other setup:
 
     from tabularium.core.agent_logging import start_logging
-    start_logging("cato")
+    start_logging("coordinator")
 """
 from tabularium.paths import logs as _logs
 import re
@@ -24,7 +24,7 @@ HEARTBEAT_SECONDS = 120             # ~700 lines/day; pins time of death to with
 
 
 # Credentials never reach a log file (2026-10-21: a Telegram connection error printed the request URL, which
-# carries the bot token, into cato.log and cato-launch.log). Bot tokens are digits:secret; API keys start sk-.
+# carries the bot token, into coordinator.log and coordinator-launch.log). Bot tokens are digits:secret; API keys start sk-.
 SECRETS = re.compile(r"\d{6,12}:[A-Za-z0-9_-]{30,}|sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}")
 
 

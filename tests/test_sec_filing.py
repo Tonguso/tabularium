@@ -74,13 +74,13 @@ class SecFiling(unittest.TestCase):
 
     def test_only_the_research_agents_have_it(self):
         have = {}
-        for agent in ("cato", "callimachus", "tacitus", "vitruvius"):
+        for agent in ("coordinator", "librarian", "private", "engineer"):
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp) / agent; root.mkdir()
                 with contextlib.redirect_stdout(io.StringIO()):
                     a = make_agent(agent, root)
                 have[agent] = "sec_filing" in {t["name"] for t in a.get_tools("anthropic")}
-        self.assertEqual(have, {"cato": True, "callimachus": True, "tacitus": False, "vitruvius": False})
+        self.assertEqual(have, {"coordinator": True, "librarian": True, "private": False, "engineer": False})
 
 
 if __name__ == "__main__":

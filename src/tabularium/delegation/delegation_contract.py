@@ -13,7 +13,7 @@ import re
 import time
 from pathlib import Path
 
-ROOT = _home()/'cato'
+ROOT = _home()/'coordinator'
 SKILL = ROOT / 'skills' / 'work-delegation'
 CARDS = SKILL / 'references' / 'delegates'
 BRIEFS = SKILL / 'references' / 'briefs'

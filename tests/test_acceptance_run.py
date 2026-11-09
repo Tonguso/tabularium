@@ -10,9 +10,9 @@ class RunBeforeReady(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / 'cato'
+        self.root = Path(self.tmp.name) / 'coordinator'
         self.root.mkdir()
-        self.agent = make_agent('cato', self.root)
+        self.agent = make_agent('coordinator', self.root)
         self.store = self.agent._background
         self.task = self.store.start(1, 'Check delivered document')['id']
         self.artifact = self.root / 'delivered.txt'

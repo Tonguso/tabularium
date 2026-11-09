@@ -40,10 +40,10 @@ class AlwaysSkills(unittest.TestCase):
         self.assertIn("method description", runtime.tool_skill(""))
         self.assertIn("other description", runtime.tool_skill(""))
 
-    def test_tacitus_declares_the_personal_method(self):
+    def test_private_declares_the_personal_method(self):
         src = (ROOT / "src" / "tabularium" / "agents" / "private.py").read_text(encoding="utf-8")
         self.assertIn('always_skills=("standing-method",)', src)
-        self.assertTrue((ROOT / "tacitus" / "skills" / "standing-method" / "SKILL.md").exists())
+        self.assertTrue((ROOT / "private" / "skills" / "standing-method" / "SKILL.md").exists())
 
 
 if __name__ == "__main__":

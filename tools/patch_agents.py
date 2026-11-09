@@ -3,8 +3,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = {"coordinator": ("Cato", "CatoApp", "cato"), "librarian": ("Callimachus", "CallimachusApp", "callimachus"),
-          "engineer": ("Vitruvius", "VitruviusApp", "vitruvius"), "private": ("Tacitus", "TacitusApp", "tacitus")}
+AGENTS = {"coordinator": ("Cato", "CatoApp", "coordinator"), "librarian": ("Callimachus", "CallimachusApp", "librarian"),
+          "engineer": ("Vitruvius", "VitruviusApp", "engineer"), "private": ("Tacitus", "TacitusApp", "private")}
 
 HEADER = re.compile(r"# --- durable logging:.*?\n(?:.*\n)*?    _start_logging\(\"\w+\"\)\n", re.M)
 AGENT_DIR = re.compile(r"^AGENT_DIR   = Path\(__file__\)\.resolve\(\)\.parent.*\n\n?", re.M)

@@ -8,7 +8,7 @@ import os
 import sys
 import time
 
-ROOT = _home()/'vitruvius'
+ROOT = _home()/'engineer'
 from tabularium.records.background_runtime import TaskStore, ACTIVE
 import re
 
@@ -39,7 +39,7 @@ def contract_of(request):
             'task_type': request.get('task_type')}
 
 def call(action, request=None, request_id=None):
-    if os.environ.get('VITRUVIUS_BACKGROUND_TASK'):
+    if os.environ.get('ENGINEER_BACKGROUND_TASK'):
         raise ValueError('Vit workers cannot recursively delegate to themselves.')
     request_id = request_id or (request or {}).get('request_id')
     store = TaskStore(ROOT)

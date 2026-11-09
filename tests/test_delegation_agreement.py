@@ -15,7 +15,7 @@ from tabularium.core.roster import ROLES
 
 
 def bind_delegate(store, task, request, items, agent='vit'):
-    name, table = ('vitruvius', 'engineering_requests') if agent == 'vit' else ('callimachus', 'research_requests')
+    name, table = ('engineer', 'engineering_requests') if agent == 'vit' else ('librarian', 'research_requests')
     remote = TaskStore(store.agent_dir.parent / name, ROLES[name])
     child = remote.start(store.get(task)['chat'], 'Synthetic delegated brief', completion_items=items)['id']
     db = sqlite3.connect(remote.database)
@@ -34,9 +34,9 @@ class DelegationAgreement(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)/'cato'
+        self.root = Path(self.tmp.name)/'coordinator'
         self.root.mkdir()
-        self.agent = make_agent('cato', self.root)
+        self.agent = make_agent('coordinator', self.root)
         self.store = self.agent._background
         self.task = self.store.start(1, 'Owner brief', completion_items=[dict(item='Synthesis', check='Read it', critical=True)])['id']
         self.items = [dict(item='Explain tradeoffs', check='Assess reasoning', critical=True, early=True)]
@@ -172,7 +172,7 @@ class DelegationAgreement(unittest.TestCase):
         self.assertEqual(verification.status(self.store,self.task,'request',1),'unverified')
 
     def test_real_clients_share_answers_rescope_and_rework_for_both_delegates(self):
-        for short, name, filename in [('vit','vitruvius','work_client.py'),('cal','callimachus','research_client.py')]:
+        for short, name, filename in [('vit','engineer','work_client.py'),('cal','librarian','research_client.py')]:
             spec = importlib.util.spec_from_file_location('synthetic_client_'+short, Path(__file__).resolve().parents[1]/'src'/'tabularium'/'delegation'/filename)
             client = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(client)

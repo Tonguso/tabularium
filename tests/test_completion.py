@@ -14,7 +14,7 @@ class CompletionTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def agent(self, name='cato'):
+    def agent(self, name='coordinator'):
         root = self.root / name
         root.mkdir(exist_ok=True)
         agent = make_agent(name, root, background=True)

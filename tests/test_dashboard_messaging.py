@@ -97,7 +97,7 @@ class DashboardMessaging(unittest.TestCase):
         from tests.agent_harness import make_agent
         from tabularium.channels.messaging import decode
         from tabularium.records import task_decisions as td
-        a = make_agent('cato', self.root)
+        a = make_agent('coordinator', self.root)
         a.send_message = Mock()
         a.execute_tool = Mock(return_value='done')
         d = td.park_action(a._background, OWNER_CHAT_ID, 'execute_command', {'command':'echo test'}, 'Run this exact command?')
@@ -114,7 +114,7 @@ class DashboardMessaging(unittest.TestCase):
         from tests.agent_harness import make_agent
         from tabularium.channels.messaging import decode
         from tabularium.learning import learning
-        a = make_agent('cato', self.root)
+        a = make_agent('coordinator', self.root)
         a.send_message = Mock()
         skill = a.AGENT_DIR / 'skills' / 'basket' / 'SKILL.md'
         skill.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +146,7 @@ class DashboardMessaging(unittest.TestCase):
     def test_source_routing_survives_background_delivery_without_current_turn(self):
         from tests.agent_harness import make_agent
         from tabularium.channels.messaging import conversation
-        a = make_agent('cato', self.root)
+        a = make_agent('coordinator', self.root)
         a._inbox = self.inbox
         a.RUNTIME_DIR = self.root
         a.bot = Mock()
@@ -211,14 +211,14 @@ class DashboardMessaging(unittest.TestCase):
         runner.start()
         connection=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=5)
         headers={'Host':f'127.0.0.1:{dashboard.PORT}','Origin':dashboard.URL,'Content-Type':'application/json'}
-        body=json.dumps({'agent':'cato','client_id':'http-1','text':'HTTP request'})
-        (self.root/'cato').mkdir()
+        body=json.dumps({'agent':'coordinator','client_id':'http-1','text':'HTTP request'})
+        (self.root/'coordinator').mkdir()
         try:
             connection.request('POST','/api/messages',body,headers)
             response=connection.getresponse()
             self.assertEqual(response.status,403)
             response.read()
-            self.assertFalse((self.root/'cato/task_state/inbox.sqlite3').exists())
+            self.assertFalse((self.root/'coordinator/task_state/inbox.sqlite3').exists())
             headers['X-CSRF-Token']=dashboard.TOKEN
             receipts=[]
             for _ in range(2):
@@ -227,7 +227,7 @@ class DashboardMessaging(unittest.TestCase):
                 self.assertEqual(response.status,200)
                 receipts.append(json.loads(response.read()))
             self.assertEqual(receipts[0],receipts[1])
-            connection.request('GET','/api/messages?agent=cato',headers={'Host':headers['Host']})
+            connection.request('GET','/api/messages?agent=coordinator',headers={'Host':headers['Host']})
             response=connection.getresponse()
             self.assertEqual(response.status,200)
             self.assertEqual(len(json.loads(response.read())['messages']),1)

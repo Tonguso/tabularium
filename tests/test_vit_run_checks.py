@@ -9,8 +9,8 @@ class RunChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        root = Path(cls.tmp.name) / "vitruvius"; root.mkdir()
-        cls.vit = make_agent("vitruvius", root)
+        root = Path(cls.tmp.name) / "engineer"; root.mkdir()
+        cls.vit = make_agent("engineer", root)
 
     @classmethod
     def tearDownClass(cls):

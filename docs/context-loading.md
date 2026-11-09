@@ -71,10 +71,10 @@ All eight live attempts then completed under e8a536d, using the same benchmark f
 
 | Agent | Requirements passed | Input tokens | Cache-read portion | Output tokens | Responses |
 |---|---:|---:|---:|---:|---:|
-| cato | 100% → 100% | 162,156 → 93,235 (-42.5%) | 122,205 → 66,474 | 1,335 → 1,264 | 7 → 6 |
-| callimachus | 100% → 100% | 55,238 → 36,363 (-34.2%) | 0 → 0 | 513 → 453 | 6 → 5 |
-| vitruvius | 100% → 100% | 87,001 → 54,341 (-37.5%) | 69,420 → 40,791 | 1,296 → 1,376 | 7 → 6 |
-| tacitus | 50% → 100% | 86,908 → 104,307 (+20.0%) | 56,221 → 78,417 | 2,120 → 1,374 | 6 → 7 |
+| coordinator | 100% → 100% | 162,156 → 93,235 (-42.5%) | 122,205 → 66,474 | 1,335 → 1,264 | 7 → 6 |
+| librarian | 100% → 100% | 55,238 → 36,363 (-34.2%) | 0 → 0 | 513 → 453 | 6 → 5 |
+| engineer | 100% → 100% | 87,001 → 54,341 (-37.5%) | 69,420 → 40,791 | 1,296 → 1,376 | 7 → 6 |
+| private | 50% → 100% | 86,908 → 104,307 (+20.0%) | 56,221 → 78,417 | 2,120 → 1,374 | 6 → 7 |
 
 All 32 requirements passed after the change (28/32 before). Grading still costs zero model calls.
 Combined input tokens: 391,303 → 288,246 (-26.3%). This is an observed result,
@@ -91,10 +91,10 @@ Invoice-task context counts after the change:
 
 | Agent | Core characters | Own live task characters | Contract characters | Prepared messages characters |
 |---|---:|---:|---:|---:|
-| cato | 7,569 | 374 | 512 | 13,258 |
-| callimachus | 1,270 | 373 | 512 | 6,581 |
-| vitruvius | 1,193 | 373 | 512 | 4,753 |
-| tacitus | 14,856 | 372 | 512 | 17,868 |
+| coordinator | 7,569 | 374 | 512 | 13,258 |
+| librarian | 1,270 | 373 | 512 | 6,581 |
+| engineer | 1,193 | 373 | 512 | 4,753 |
+| private | 14,856 | 372 | 512 | 17,868 |
 
 The tool schemas are 5,316 characters in these restricted benchmark workers. Ordinary workers have
 larger tool sets. The core, live state and contract are already included in prepared message counts.

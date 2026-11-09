@@ -73,8 +73,8 @@ class MessageTypes(unittest.TestCase):
         import tempfile
         from agent_harness import make_agent
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "cato"; root.mkdir()
-            agent = make_agent("cato", root)
+            root = Path(tmp) / "coordinator"; root.mkdir()
+            agent = make_agent("coordinator", root)
             agent._inbox.handler = lambda fn=None, album=False: fn if fn is not None else (lambda g: g)   # leave handlers recognisable
             agent.register_handlers()
             handlers = [h["function"] for h in agent.bot.message_handlers]

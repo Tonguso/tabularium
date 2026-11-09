@@ -37,12 +37,12 @@ def main():
     old_shared = load("baseline_shared", baseline / "agent_core/shared_handlers.py")
     encoder = tiktoken.get_encoding("o200k_base")
     count = lambda text: len(encoder.encode(text))
-    folder = Path(__file__).resolve().parents[1] / "cato/reports/token-efficiency"
+    folder = Path(__file__).resolve().parents[1] / "coordinator/reports/token-efficiency"
     folder.mkdir(parents=True, exist_ok=True)
     scratch = tempfile.TemporaryDirectory()
     try:
         root = Path(scratch.name)
-        agent = make_agent("callimachus", root)
+        agent = make_agent("librarian", root)
         stdout = "".join(f"case_{i:04d} PASS: verified fixture record\n" for i in range(350))
         stdout += "FAIL: test_balance\nAssertionError: expected 73, observed 71\n"
         stdout += "".join(f"case_{i:04d} PASS: verified fixture record\n" for i in range(350, 700))

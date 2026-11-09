@@ -14,7 +14,7 @@ class InteractiveEvaluation(unittest.TestCase):
     def test_workflows_are_explicitly_selected_and_not_lesson_trial_inputs(self):
         from tabularium.learning import interaction_eval as ie
         ordinary = regression.load_cases(self.root)
-        cases = ie.cases('cato')
+        cases = ie.cases('coordinator')
         self.assertEqual(len(cases), 4)
         self.assertFalse({c['id'] for c in ordinary} & {c['id'] for c in cases})
         for case in cases:
@@ -23,7 +23,7 @@ class InteractiveEvaluation(unittest.TestCase):
 
     def test_missing_event_cannot_pass_even_with_correct_deliverable(self):
         from tabularium.learning import interaction_eval as ie
-        case = ie.cases('cato')[0]
+        case = ie.cases('coordinator')[0]
         (self.root/'result.json').write_text(json.dumps({'towers': 4, 'carriers': 3}), encoding='utf-8')
         result = regression.grade(None, case, 'All done', self.root)
         self.assertFalse(result['passed'])
@@ -31,7 +31,7 @@ class InteractiveEvaluation(unittest.TestCase):
 
     def test_crashed_executor_cannot_pass_on_leftover_files(self):
         from tabularium.learning import interaction_eval as ie
-        case = ie.cases('cato')[0]
+        case = ie.cases('coordinator')[0]
         out = self.root/'attempt'/'trial_output'
         out.mkdir(parents=True)
         for requirement in case['requirements']:
@@ -63,9 +63,9 @@ class RuntimeScenarios(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.base=Path(self.tmp.name)
-        env={'ANTHROPIC_API_KEY':'test','TELEGRAM_BOT_TOKEN':'1:a','CALLIMACHUS_TELEGRAM_BOT_TOKEN':'2:b',
-             'VITRUVIUS_TELEGRAM_BOT_TOKEN':'3:c','TACITUS_TELEGRAM_BOT_TOKEN':'4:d',
-             **{n.upper()+'_BACKGROUND_TASK':'1' for n in ('cato','callimachus','vitruvius','tacitus')}}
+        env={'ANTHROPIC_API_KEY':'test','TELEGRAM_BOT_TOKEN':'1:a','LIBRARIAN_TELEGRAM_BOT_TOKEN':'2:b',
+             'ENGINEER_TELEGRAM_BOT_TOKEN':'3:c','PRIVATE_TELEGRAM_BOT_TOKEN':'4:d',
+             **{n.upper()+'_BACKGROUND_TASK':'1' for n in ('coordinator','librarian','engineer','private')}}
         p=patch.dict('os.environ',env)
         p.start();self.addCleanup(p.stop)
 
@@ -74,7 +74,7 @@ class RuntimeScenarios(unittest.TestCase):
         from tabularium.learning import interaction_eval as ie
         from tabularium.core import reply_envelope
         from tabularium.models import provider_routing
-        for name in ('cato','callimachus','vitruvius','tacitus'):
+        for name in ('coordinator','librarian','engineer','private'):
             for case in ie.cases(name):
                 root=ie.prepare(self.base/(name+case['id']),name,{'kind':'anthropic_subscription','model':'claude-test'})
                 calls=[]
@@ -137,8 +137,8 @@ class RuntimeScenarios(unittest.TestCase):
         from tabularium.learning import interaction_eval as ie
         from tabularium.core import reply_envelope
         from tabularium.models import provider_routing
-        for case in ie.cases('cato'):
-            root=ie.prepare(self.base/case['id'],'cato',{'kind':'anthropic_subscription','model':'claude-test'})
+        for case in ie.cases('coordinator'):
+            root=ie.prepare(self.base/case['id'],'coordinator',{'kind':'anthropic_subscription','model':'claude-test'})
             def model(agent,messages,chat):
                 output=root/'outputs'
                 def tool(name,**kw):
@@ -192,7 +192,7 @@ class RuntimeScenarios(unittest.TestCase):
         secret=self.base/'private.txt'
         secret.write_text('Synthetic private sentinel',encoding='utf-8')
         target=self.base/'outside.txt'
-        for name in ('cato','callimachus','vitruvius','tacitus'):
+        for name in ('coordinator','librarian','engineer','private'):
             root=ie.prepare(self.base/name,name,{'kind':'anthropic_subscription','model':'claude-test'})
             def model(agent,messages,chat):
                 for tool,args in [('read_file',dict(path=str(secret))),('write_file',dict(path=str(target),content='changed')),
@@ -214,7 +214,7 @@ class RuntimeScenarios(unittest.TestCase):
         from tabularium.learning import interaction_eval as ie
         from tabularium.core import reply_envelope
         from tabularium.models import provider_routing
-        root=ie.prepare(self.base/'late','cato',{'kind':'anthropic_subscription','model':'claude-test'})
+        root=ie.prepare(self.base/'late','coordinator',{'kind':'anthropic_subscription','model':'claude-test'})
         calls=[]
         def model(agent,messages,chat):
             calls.append(1)
@@ -243,7 +243,7 @@ class RuntimeScenarios(unittest.TestCase):
         from tabularium.learning import interaction_eval as ie
         from tabularium.core import reply_envelope
         from tabularium.models import provider_routing
-        root=ie.prepare(self.base/'park','cato',{'kind':'anthropic_subscription','model':'claude-test'})
+        root=ie.prepare(self.base/'park','coordinator',{'kind':'anthropic_subscription','model':'claude-test'})
         calls=[]
         def model(agent,messages,chat):
             calls.append(1)

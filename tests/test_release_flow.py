@@ -42,23 +42,23 @@ class ReleaseFlow(unittest.TestCase):
         supervisor.release_step(self.children,job,lambda *a:future)
         self.assertEqual(self.record()['status'],'failed')
         self.assertFalse(any(self.root.glob('*/task_state/drain')))
-        self.assertFalse(supervisor.release_allows_start('cato',self.record(),self.root))
+        self.assertFalse(supervisor.release_allows_start('coordinator',self.record(),self.root))
     def stage_tested(self):
         self.request();r=self.record();r['status']='draining';r['tested']=self.target
         r['previous']={n:'old-'+n for n in r['components']}
         atomic_json(self.root/'dashboard/restart_status.json',r)
         return r
     def test_busy_worker_lease_prevents_replacement_even_after_parent_exits(self):
-        r=self.stage_tested();lock=WorkerLease(self.root/'cato/task_state/background/1/worker.lock')
+        r=self.stage_tested();lock=WorkerLease(self.root/'coordinator/task_state/background/1/worker.lock')
         self.assertTrue(lock.acquire())
         try:
-            self.assertFalse(supervisor.release_allows_start('cato',r,self.root))
+            self.assertFalse(supervisor.release_allows_start('coordinator',r,self.root))
         finally:lock.close()
-        self.assertTrue(supervisor.release_allows_start('cato',r,self.root))
+        self.assertTrue(supervisor.release_allows_start('coordinator',r,self.root))
     def test_a_completed_release_on_an_older_commit_never_blocks_a_cold_start(self):
         # 2026-10-29 14:36: the supervisor came back on df40fc0 with the last release complete on 64c3f7d and started nothing.
         r=self.stage_tested();r['status']='complete';r['tested']={'commit':'older','digest':'older'}
-        self.assertTrue(supervisor.release_allows_start('cato',r,self.root))
+        self.assertTrue(supervisor.release_allows_start('coordinator',r,self.root))
     def test_source_change_after_testing_blocks_every_start(self):
         r=self.stage_tested();self.target['digest']='changed'
         # The persisted tested identity remains abc.

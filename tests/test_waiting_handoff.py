@@ -73,7 +73,7 @@ class WaitingHandoff(unittest.TestCase):
     def test_answer_during_handoff_queues_once_without_overlapping_owner(self):
         import os, sqlite3, time
         from tabularium.core.agent_runtime import atomic_json
-        agent = make_agent('cato', self.root, background=True)
+        agent = make_agent('coordinator', self.root, background=True)
         store = agent._background
         messages = [{'role':'user','content':'Do the work'}]
         agent.conversations[1] = messages
@@ -102,7 +102,7 @@ class WaitingHandoff(unittest.TestCase):
 
 
     def test_late_instruction_is_not_acknowledged_as_seen_by_an_old_model_reply(self):
-        agent = make_agent('cato',self.root,background=True)
+        agent = make_agent('coordinator',self.root,background=True)
         store = agent._background
         messages = [{'role':'user','content':'Original requirement'}]
         agent.conversations[1] = messages

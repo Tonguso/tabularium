@@ -13,13 +13,13 @@ RUNTIME_FILES = sorted(p for p in (ROOT / "src" / "tabularium").rglob("*.py") if
 
 class Roster(unittest.TestCase):
     def test_roles_are_explicit_not_inferred_from_the_folder(self):
-        store = rt.TaskStore(ROOT / "callimachus")                       # no role passed: Cato's default, whatever the folder says
-        self.assertEqual(store.role, ROLES["cato"])
-        store = rt.TaskStore(ROOT / "anything", ROLES["callimachus"])
+        store = rt.TaskStore(ROOT / "librarian")                       # no role passed: Cato's default, whatever the folder says
+        self.assertEqual(store.role, ROLES["coordinator"])
+        store = rt.TaskStore(ROOT / "anything", ROLES["librarian"])
         self.assertEqual((store.role.delegates, store.role.owner_budget, store.role.request_table, store.worker_limit()),
                          (False, False, "research_requests", 2))
-        self.assertEqual(ROLES["vitruvius"].env_var, "VITRUVIUS_BACKGROUND_TASK")
-        self.assertEqual(AGENTS, ("cato", "tacitus", "callimachus", "vitruvius"))
+        self.assertEqual(ROLES["engineer"].env_var, "ENGINEER_BACKGROUND_TASK")
+        self.assertEqual(AGENTS, ("coordinator", "private", "librarian", "engineer"))
         self.assertTrue(all(isinstance(r, Role) and r.name == n for n, r in ROLES.items()))
 
     def test_no_other_file_keeps_its_own_agent_list(self):
@@ -30,7 +30,7 @@ class Roster(unittest.TestCase):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8-sig"))):
                 if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
                     names = {n.value for n in node.elts if isinstance(n, ast.Constant) and isinstance(n.value, str)}
-                    if {"cato", "callimachus", "vitruvius"} <= names or {"cato", "tacitus"} == names:
+                    if {"coordinator", "librarian", "engineer"} <= names or {"coordinator", "private"} == names:
                         offenders.append(f"{path.name}:{node.lineno}")
         self.assertEqual(offenders, [])
 

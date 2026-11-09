@@ -1094,7 +1094,7 @@ class AgentRuntime(SharedHandlers):
                 return False                     # deletes something we cannot see: ask
         cwd_ok = cwd is not None and self._disposable(cwd)
         relative = self._relative_targets(statement)
-        # Relative names resolve against the folder the command cd'd into: "cd D:\Agents\cato;
+        # Relative names resolve against the folder the command cd'd into: "cd D:\Agents\coordinator;
         # Remove-Item scratch\x" is inside scratch even though the cd folder itself is not.
         if relative and not (cwd is not None and
                              all(self._disposable(cwd.rstrip('\\/') + '\\' + r) for r in relative)):

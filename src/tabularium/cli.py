@@ -10,7 +10,7 @@
 
 The home folder is --home, else TABULARIUM_HOME, else the current directory. Its .env is loaded before anything else
 is imported, and the variable is set so that every child process (workers, agents the supervisor starts) uses the same
-home. Slots are the roster's names: cato, callimachus, vitruvius, tacitus.
+home. Slots are the roster's names: coordinator, librarian, engineer, private.
 """
 import os
 import shutil

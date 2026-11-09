@@ -16,8 +16,8 @@ from tabularium.models import subscription_runtime
 class HiddenConsoles(unittest.TestCase):
     def test_shell_tool_requests_no_console(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / 'cato'; root.mkdir()
-            runtime = load_agent('cato', root)['runtime']
+            root = Path(tmp) / 'coordinator'; root.mkdir()
+            runtime = load_agent('coordinator', root)['runtime']
             runtime.BACKGROUND_TASK_ID = ''
             runtime.auto_modes[1] = True
             with patch('tabularium.core.agent_app.subprocess.Popen') as launch:
