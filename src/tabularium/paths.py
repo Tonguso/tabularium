@@ -6,6 +6,7 @@ otherwise the current directory; the command-line entry point sets the variable 
 passes it to every child process, so one installation never reads another's records.
 """
 import os
+import sys
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parent
@@ -24,10 +25,14 @@ def logs() -> Path:
 
 
 def child_env(**extra) -> dict:
-    """The environment for a process this installation starts: the same home, and the package importable whether
-    or not it is installed (its parent folder leads PYTHONPATH), plus whatever the caller adds."""
+    """The environment for a process this installation starts: the same home, the package importable whether or
+    not it is installed (its parent folder leads PYTHONPATH), the interpreter's own Scripts folder on PATH so the
+    tools installed in its environment can be run, plus whatever the caller adds."""
     env = dict(os.environ, TABULARIUM_HOME=str(home()), **{k: str(v) for k, v in extra.items()})
     src = str(PACKAGE.parent)
     current = [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p and p != src]
     env["PYTHONPATH"] = os.pathsep.join([src, *current])
+    scripts = str(Path(sys.executable).resolve().parent / "Scripts")
+    if os.path.isdir(scripts) and scripts.lower() not in env.get("PATH", "").lower():
+        env["PATH"] = os.pathsep.join([scripts, env.get("PATH", "")])
     return env

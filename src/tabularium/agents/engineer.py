@@ -44,7 +44,7 @@ CONFIG = Config(
     tools_after=(("read_research_reports", RUN_CHECKS_TOOL),),
     tools_remove=frozenset({"sec_filing"}),        # filings research is Cato's and Cal's
     sanitise="code_safe",
-    expire_module="work_client",
+    expire_module="tabularium.delegation.work_client",
     telegram_prompt="""
 
 ## Telegram Formatting

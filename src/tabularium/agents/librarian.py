@@ -29,7 +29,7 @@ CONFIG = Config(
     tools_after=(("list_images", KNOWLEDGE_TOOL),),
     tools_remove=frozenset({"project_record"}),      # Cal keeps task progress locally; Cato owns the cross-project register.
     sanitise="code_safe",
-    expire_module="research_client",
+    expire_module="tabularium.delegation.research_client",
     telegram_prompt="""
 
 ## Telegram Formatting
