@@ -103,7 +103,8 @@ class ClaudeBridge(unittest.TestCase):
     def test_api_login_is_not_accepted_as_subscription(self):
         from tabularium.models import subscription_runtime as bridge
         agent=NS()
-        with patch.object(bridge,'find_cli',return_value='fake.exe'),patch.object(bridge,'auth_status',return_value={'loggedIn':True,'authMethod':'api_key'}):
+        with patch.object(bridge,'find_cli',return_value='fake.exe'),patch.object(bridge,'long_lived_token',return_value=''),\
+             patch.object(bridge,'auth_status',return_value={'loggedIn':True,'authMethod':'api_key'}):   # no long-lived token on this machine either
             with self.assertRaises(routing.Unavailable):
                 bridge.run_claude(agent,[],1,'claude-test')
 
