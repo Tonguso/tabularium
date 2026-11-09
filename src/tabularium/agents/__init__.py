@@ -31,16 +31,29 @@ def configure(default, values: dict):
     changes = {}
     for key, value in values.items():
         current = getattr(default, key)
-        if isinstance(current, tuple):
-            value = tuple(tuple(v) if isinstance(v, list) else v for v in value)
-        elif isinstance(current, frozenset):
-            value = frozenset(value)
+        if isinstance(current, (tuple, frozenset)):
+            if not isinstance(value, list):
+                raise ValueError(f"agent.toml: {key} must be a list, not {type(value).__name__}")
+            sample = next(iter(current), None)
+            if isinstance(sample, tuple):                      # a list of lists, each the shape of the default's
+                if any(not isinstance(v, list) or len(v) != len(sample) for v in value):
+                    raise ValueError(f"agent.toml: every item of {key} must be a list of {len(sample)}")
+                value = tuple(tuple(v) for v in value)
+            else:
+                kind = type(sample) if sample is not None else str
+                if any(not isinstance(v, kind) or isinstance(v, bool) != isinstance(sample, bool) for v in value):
+                    raise ValueError(f"agent.toml: every item of {key} must be {kind.__name__}")
+                value = tuple(value) if isinstance(current, tuple) else frozenset(value)
         elif isinstance(current, dict):
+            if not isinstance(value, dict):
+                raise ValueError(f"agent.toml: {key} must be a table, not {type(value).__name__}")
             value = dict(current, **value)
         elif isinstance(current, bool) and not isinstance(value, bool) or \
-                isinstance(current, int) and not isinstance(current, bool) and not isinstance(value, int) or \
+                isinstance(current, int) and not isinstance(current, bool) and (not isinstance(value, int) or isinstance(value, bool)) or \
                 isinstance(current, str) and not isinstance(value, str):
             raise ValueError(f"agent.toml: {key} must be {type(current).__name__}, not {type(value).__name__}")
+        if key.endswith("_port") and not 0 < value < 65536:
+            raise ValueError(f"agent.toml: {key} must be a port number (1-65535)")
         changes[key] = value
     return dataclasses.replace(default, **changes)
 

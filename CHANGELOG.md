@@ -18,6 +18,12 @@ versioning.
 - Configuration is a `.env` file in the home folder, read by the command; API keys are read when an agent is built,
   not when a module is imported.
 - One test suite (`tests/`); the coordinator's suite merged into it. The release gate runs it.
+- After review of the layout (2026-11-09): release identity is the checkout that holds the package, not the home,
+  so a home that is not a Git repository starts, and an installed package fingerprints its own files; the launch
+  command names its home (`--home`) and the supervisor adopts only this installation's processes; the release gate
+  runs the suites with the checkout as home and without the home's settings; a child process can be bound to another
+  home (isolated evaluation runs); `agent.toml` values are validated, not coerced; the browser profile lives in the
+  agent folder; pywin32 is needed only to store a ChatGPT connection; the scorecard's command line reads the home.
 
 ## [0.3.0] - 2026-11-08
 

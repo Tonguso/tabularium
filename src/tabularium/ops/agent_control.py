@@ -17,7 +17,7 @@
         background workers. --interactions: disposable processes, controlled follow-ups/restart/delegation,
         first configured model route only; no live tasks or messages. --collect stores untrusted candidates only.
 """
-from tabularium.paths import home as _home
+from tabularium.paths import child_env as _child_env, home as _home
 import os
 import threading
 import time
@@ -54,9 +54,9 @@ def request_restart(agents=AGENTS, root=None):
     root = Path(root or _home())
     if any(a not in AGENTS for a in agents):
         raise ValueError('Unknown agent')
-    if release.uncommitted(root):
+    if release.uncommitted():
         raise RuntimeError('Commit tracked changes before requesting a release')
-    target = release.identity(root)
+    target = release.identity()
     path = root/'dashboard/restart_status.json'
     prior = read_json(path)
     if prior.get('target') and prior.get('status') not in ('complete', 'failed'):
@@ -96,7 +96,7 @@ def start_all():
     if done.returncode == 0:
         return "Supervisor started through Task Scheduler; the agents and the dashboard come up within a minute."
     pythonw = Path(sys.executable).with_name("pythonw.exe")
-    subprocess.Popen([str(pythonw if pythonw.exists() else sys.executable), "-m", "tabularium", "supervisor"], cwd=str(_home()),
+    subprocess.Popen([str(pythonw if pythonw.exists() else sys.executable), "-m", "tabularium", "supervisor"], cwd=str(_home()), env=_child_env(),
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     return "Task AgentsSupervisor is not installed; started the supervisor directly instead."

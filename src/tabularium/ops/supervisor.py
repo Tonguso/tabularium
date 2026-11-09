@@ -36,8 +36,8 @@ HEALTH_STALE = 600     # an idle agent rewrites health.json every second; ten si
 
 def command(name):
     if name == "dashboard":
-        return [PY, "-m", "tabularium", "dashboard"]
-    return [PY, "-m", "tabularium", "run", name]
+        return [PY, "-m", "tabularium", "--home", str(ROOT), "dashboard"]
+    return [PY, "-m", "tabularium", "--home", str(ROOT), "run", name]
 
 
 def process_created(pid):
@@ -98,9 +98,9 @@ def adopt_existing(children):
     """A supervisor that starts while agents already run (a supervisor restart, or the first run after the old
     launchers) takes them over instead of starting duplicates that would lose the single-instance port."""
     import subprocess as sp
-    # Every process of this installation either runs the package (`-m tabularium ...`) or names the home folder
-    # (the flat layout's launchers); the regex is built from the home, not a fixed path.
-    pattern = "-m tabularium|" + str(ROOT).replace("\\", "\\\\")
+    # Every process of this installation names its home on the command line (`--home <path>`), so another
+    # installation's agents on the same machine are never adopted.
+    pattern = str(ROOT).replace("\\", "\\\\")
     query = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '" + pattern + "' } | "
              "Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress")
     try:
@@ -121,9 +121,9 @@ def adopt_existing(children):
             cmd = (r.get("CommandLine") or "").lower()
             name = (r.get("Name") or "").lower()
             if child.name == "dashboard":
-                hit = name.startswith("python") and "-m tabularium dashboard" in cmd
+                hit = name.startswith("python") and "-m tabularium" in cmd and cmd.rstrip().endswith(" dashboard")
             else:
-                hit = name.startswith("python") and "-m tabularium run " + child.name in cmd
+                hit = name.startswith("python") and "-m tabularium" in cmd and cmd.rstrip().endswith(" run " + child.name)
             if hit and alive(r["ProcessId"]):
                 import win32api
                 child.adopted = int(r["ProcessId"])
@@ -323,7 +323,7 @@ def release_allows_start(name, request, root):
     came back after the fleet outage started nothing for the four minutes Alex watched."""
     if not request or name not in request.get('components', []) or request.get('status') == 'complete':
         return True
-    if request.get('status') not in ('draining', 'complete') or not release.same_source(request.get('tested'), release.identity(root)):
+    if request.get('status') not in ('draining', 'complete') or not release.same_source(request.get('tested'), release.identity()):
         return False
     from tabularium.records.worker_lease import busy
     return not any(busy(path) for path in (root/name/'task_state/background').glob('*/worker.lock'))
@@ -347,7 +347,7 @@ def release_step(children, job, submit):
     if not request.get('target') or request.get('status') in ('complete', 'failed'):
         return None
     try:
-        if not release.same_source(release.identity(ROOT), request['target']):
+        if not release.same_source(release.identity(), request['target']):
             raise RuntimeError('Source changed; commit it and request a new release')
         if request['status'] in ('queued', 'testing'):
             if job is None:

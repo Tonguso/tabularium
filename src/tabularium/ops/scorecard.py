@@ -14,6 +14,8 @@ import re
 import sqlite3
 import statistics
 import sys
+from tabularium.paths import home as _home
+from tabularium.paths import home as _home
 from contextlib import closing
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -143,4 +145,4 @@ def table(report):
 
 
 if __name__ == "__main__":
-    print(table(weekly(Path(__file__).resolve().parents[1], weeks=int(sys.argv[1]) if len(sys.argv) > 1 else 2)))
+    print(table(weekly(_home(), weeks=int(sys.argv[1]) if len(sys.argv) > 1 else 2)))

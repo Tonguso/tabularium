@@ -24,11 +24,27 @@ import webbrowser
 from pathlib import Path
 
 import requests
-import win32crypt
+
+try:
+    import win32crypt                                    # Windows DPAPI, the desktop extra (pywin32)
+except ImportError:                                      # the connection cannot be stored, everything else works
+    win32crypt = None
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa, utils
 
 from tabularium.memory.memory_store import memory_lock
+
+
+def _dpapi():
+    if win32crypt is None:
+        raise RuntimeError("Storing a ChatGPT connection needs pywin32 (pip install tabularium[desktop]).")
+    return win32crypt
+
+
+def _dpapi():
+    if win32crypt is None:
+        raise RuntimeError("Storing a ChatGPT connection needs pywin32 (pip install tabularium[desktop]).")
+    return win32crypt
 
 AUTH_URL = "https://auth.openai.com/api/accounts/authorize"
 TOKEN_URL = "https://auth.openai.com/api/accounts/oauth/token"
@@ -144,7 +160,7 @@ class ChatGPTPlan:
     def _save(self, profile: dict) -> None:
         self.store.parent.mkdir(parents=True, exist_ok=True)
         raw = json.dumps(profile, separators=(",", ":")).encode("utf-8")
-        encrypted = win32crypt.CryptProtectData(raw, self.name + " ChatGPT connection", None, None, None, 0)
+        encrypted = _dpapi().CryptProtectData(raw, self.name + " ChatGPT connection", None, None, None, 0)
         temp = self.store.with_suffix(".tmp")
         temp.write_bytes(encrypted)
         os.replace(temp, self.store)
@@ -153,7 +169,7 @@ class ChatGPTPlan:
         if not self.store.exists():
             return None
         try:
-            raw = win32crypt.CryptUnprotectData(self.store.read_bytes(), None, None, None, 0)[1]
+            raw = _dpapi().CryptUnprotectData(self.store.read_bytes(), None, None, None, 0)[1]
             return json.loads(raw.decode("utf-8"))
         except Exception as exc:
             raise RuntimeError("Saved ChatGPT sign-in could not be decrypted; reconnect with /openai connect.") from exc

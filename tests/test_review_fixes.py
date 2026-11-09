@@ -6,6 +6,7 @@
 (Item 7, token double counting, is in test_trace; item 3, the second-model status audit, in test_task_decisions.)"""
 import json, subprocess, tempfile, unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tabularium.memory import memory_consolidation as mc
 
@@ -68,7 +69,8 @@ class Release(unittest.TestCase):
     def test_release_refuses_uncommitted_changes(self):
         (self.root/'engine.py').write_text('x = 2\n',encoding='utf-8')
         self.assertEqual(release.uncommitted(self.root),['engine.py'])
-        self.assertRaisesRegex(RuntimeError,'Commit tracked changes',agent_control.request_restart,['cato'],root=self.root)
+        with patch.object(release, 'REPO', self.root):          # the release's checkout is the package's, not the home
+            self.assertRaisesRegex(RuntimeError,'Commit tracked changes',agent_control.request_restart,['cato'],root=self.root)
         self.assertFalse((self.root/'cato/task_state/drain').exists())
         self.assertFalse((self.root/'dashboard/restart_status.json').exists())
 

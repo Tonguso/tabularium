@@ -24,11 +24,13 @@ def logs() -> Path:
     return home() / "logs"
 
 
-def child_env(**extra) -> dict:
+def child_env(home_dir=None, **extra) -> dict:
     """The environment for a process this installation starts: the same home, the package importable whether or
     not it is installed (its parent folder leads PYTHONPATH), the interpreter's own Scripts folder on PATH so the
-    tools installed in its environment can be run, plus whatever the caller adds."""
-    env = dict(os.environ, TABULARIUM_HOME=str(home()), **{k: str(v) for k, v in extra.items()})
+    tools installed in its environment can be run, plus whatever the caller adds. `home_dir` names another
+    installation for a child that must not read this one (an isolated evaluation run)."""
+    env = dict(os.environ, **{k: str(v) for k, v in extra.items()})
+    env["TABULARIUM_HOME"] = str(Path(home_dir).resolve() if home_dir else home())
     src = str(PACKAGE.parent)
     current = [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p and p != src]
     env["PYTHONPATH"] = os.pathsep.join([src, *current])

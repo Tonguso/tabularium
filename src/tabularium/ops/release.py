@@ -1,19 +1,36 @@
-"""Which code a worker ran: the Git commit of the home folder (2026-10-21).
+"""Which code a worker ran: the Git commit of the checkout that holds the package (2026-10-21; home-independent 2026-11-09).
 
 Until today the source tree had no version history; backups and OPERATIONS.txt helped recovery but could not say
 which code, prompts and skills a task actually ran on. Now each worker attempt records the commit it started from,
 and a restart refuses to switch the agents to uncommitted changes, so every running release is a commit.
 """
-from tabularium.paths import home as _home
+from tabularium.paths import PACKAGE, child_env, home as _home
+import os
 import subprocess
 from pathlib import Path
 
 ROOT = _home()
 
 
-def commit(root=ROOT):
-    """The current commit id, read from .git without running git (cheap enough for every worker start); '' if none."""
-    git = Path(root) / ".git"
+def repo(start=PACKAGE):
+    """The Git checkout that holds the package, else None: an installed package has no release of its own, and a home
+    that is a Git repository of its own data is not the code's version."""
+    for folder in (start, *start.parents):
+        if (folder / ".git").exists():
+            return folder
+    return None
+
+
+REPO = repo()
+
+
+def commit(checkout=None):
+    """The current commit id of the checkout (default: the package's own), read from .git without running git (cheap
+    enough for every worker start); '' if none."""
+    repo = Path(checkout) if checkout else REPO
+    if repo is None:
+        return ""
+    git = repo / ".git"
     try:
         head = (git / "HEAD").read_text(encoding="utf-8").strip()
         if not head.startswith("ref: "):
@@ -30,33 +47,41 @@ def commit(root=ROOT):
     return ""
 
 
-def uncommitted(root=ROOT):
+def uncommitted(checkout=None):
     """Tracked files changed since the last commit (git status --porcelain, untracked excluded); [] when clean."""
-    out = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
+    repo = Path(checkout) if checkout else REPO
+    if repo is None:
+        return []
+    out = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if out.returncode:
         raise RuntimeError("git status failed: " + out.stderr.strip()[:300])
     return [line[3:] for line in out.stdout.splitlines() if line.strip()]
 
 
-def identity(root=ROOT):
-    """Fingerprint versioned executable code/resources, not mutable task data or memory."""
+def identity(checkout=None):
+    """Fingerprint of the code: the checkout's versioned executable files and resources, never task data or memory.
+    An installed package without a checkout is fingerprinted from its own files, so startup and adoption still agree."""
     import hashlib
-    try:
-        result = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'], capture_output=True, timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    except OSError:
-        result = None
-    if result is None or result.returncode:
-        return {'commit': '', 'digest': ''}          # not a Git checkout: no release identity, no releases
     digest = hashlib.sha256()
+    repo = Path(checkout) if checkout else REPO
+    if repo is None:
+        for path in sorted(p for p in PACKAGE.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
+            if path.suffix in ('.py', '.bat', '.json', '.js', '.html', '.css'):
+                digest.update(path.relative_to(PACKAGE).as_posix().encode() + b'\0')
+                digest.update(path.read_bytes())
+        return {'commit': '', 'digest': digest.hexdigest()}
+    result = subprocess.run(['git', '-C', str(repo), 'ls-files', '-z'], capture_output=True, timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if result.returncode:
+        raise RuntimeError('Cannot identify release source')
     for name in sorted(result.stdout.decode('utf-8').split('\0')):
         if not name or name.startswith(('docs/', 'tests/', 'public/')):
             continue
         if Path(name).suffix not in ('.py', '.bat', '.json', '.js', '.html', '.css'):
             continue
         digest.update(name.encode()+b'\0')
-        digest.update((Path(root)/name).read_bytes())
-    return {'commit': commit(root), 'digest': digest.hexdigest()}
+        digest.update((repo/name).read_bytes())
+    return {'commit': commit(repo), 'digest': digest.hexdigest()}
 
 
 def same_source(a, b):
@@ -64,14 +89,21 @@ def same_source(a, b):
 
 
 def test_version(root, target):
-    """Both suites certify only source unchanged across the entire test run."""
+    """The checkout's suites certify the source, unchanged across the entire run. They run with the checkout as their
+    home and without this home's settings, so a green gate does not depend on this machine's credentials. An installed
+    package has no suites to run (it was tested when it was built)."""
     import sys
-    if not same_source(identity(root), target) or uncommitted(root):
+    from tabularium import config
+    if not same_source(identity(), target) or uncommitted():
         raise RuntimeError('Source changed before tests; request a new release')
+    if REPO is None:
+        return target
     python = str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable
+    settings = config.settings_keys(root)
+    env = {k: v for k, v in child_env(REPO).items() if k not in settings}
     for directory in ('tests',):
-        result = subprocess.run([python, '-B', '-X', 'utf8', '-m', 'unittest', 'discover', '-s', str(root/directory)],
-                                capture_output=True, timeout=300, encoding='utf-8', errors='replace',
+        result = subprocess.run([python, '-B', '-X', 'utf8', '-m', 'unittest', 'discover', '-s', str(REPO/directory)],
+                                capture_output=True, timeout=300, encoding='utf-8', errors='replace', env=env, cwd=str(REPO),
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         log = root/'logs/release-tests.log'
         log.parent.mkdir(parents=True, exist_ok=True)
@@ -80,7 +112,7 @@ def test_version(root, target):
         finally: output.close()
         if result.returncode:
             raise RuntimeError(f'Tests failed in {directory}; see logs/release-tests.log')
-    if not same_source(identity(root), target) or uncommitted(root):
+    if not same_source(identity(), target) or uncommitted():
         raise RuntimeError('Source changed during tests; request a new release')
     return target
 

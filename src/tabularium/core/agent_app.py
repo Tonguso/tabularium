@@ -315,7 +315,7 @@ class AgentApp(engine.AgentRuntime):
         self.WINDOW_LOW, self.WINDOW_HIGH = cfg.window
         self.ZSXQ_SCRIPT = self.AGENT_DIR / "scripts" / "zsxq_reader.py"
         self.ZSXQ_REPORTS_DIR = self.AGENT_DIR / "reports"
-        self.BROWSER_PROFILE_DIR = rf"D:\agents\{cfg.name}\browser_profile"
+        self.BROWSER_PROFILE_DIR = str(self.AGENT_DIR / "browser_profile")
         atexit.register(self._browser_shutdown)
 
         # ── Agent Skills (same design as Claude Code) ──

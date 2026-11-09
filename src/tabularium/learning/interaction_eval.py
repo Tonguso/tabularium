@@ -319,7 +319,7 @@ def executor(name, route, destination):
     def execute(case, attempt):
         folder=Path(destination)/('interaction-'+uuid.uuid4().hex)
         root=prepare(folder,name,route)
-        env=child_env(PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8',
+        env=child_env(folder, PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8',   # the run's own home: its policy is the template's
                  TELEGRAM_BOT_TOKEN='1:evaluation',CALLIMACHUS_TELEGRAM_BOT_TOKEN='2:evaluation',
                  VITRUVIUS_TELEGRAM_BOT_TOKEN='3:evaluation',TACITUS_TELEGRAM_BOT_TOKEN='4:evaluation')
         env[name.upper()+'_BACKGROUND_TASK']='1'
