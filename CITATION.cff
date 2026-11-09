@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use Tabularium in research, please cite it as below."
+type: software
+title: "Tabularium: An Owner-Judged Agent Framework"
+authors:
+  - family-names: Tong
+    given-names: Hogan
+version: 0.4.0.dev0
+date-released: 2026-11-09
+license: Apache-2.0
+repository-code: "https://github.com/Tonguso/tabularium"
+abstract: >-
+  A framework for a small cast of personal agents on Telegram whose work is judged by their owner.
+  Tasks carry requirements with verifiable checks, delegation is by contract, memory is reviewed, and lessons
+  change methods only after a trial and the owner's word. The repository holds the runtime, the evaluation
+  benchmark and the design record.
+keywords:
+  - agents
+  - evaluation
+  - human-in-the-loop
+  - personal assistant

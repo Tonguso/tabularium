@@ -165,6 +165,29 @@ A home folder holds, per agent, `<slot>/SKILL.md`, `memory.md`, `agent.toml`, `s
 agent's records under `task_state/`; and for the installation `.env`, `POLICY.md`, `logs/` and the dashboard's state
 under `dashboard/`.
 
+## Reproducing the evaluation
+
+The benchmark is the versioned case set in `src/tabularium/learning/benchmark_cases.json` (each case carries its
+version and the provenance of its expected values; see `docs/evaluation.md`). To run it:
+
+```
+tabularium eval cato --k 1          # one pass, a first baseline
+tabularium eval cato --k 3          # three passes, for reliability
+```
+
+Results are written to `<home>/<agent>/evals/<timestamp>.json`, one file per run, with every requirement's verdict,
+the artifact bytes checked (path and SHA-256), the release the agent ran, the model routes and the token accounting.
+Two runs are comparable only when they share the case set, the oracle, the evaluator version and `--k`; the
+comparison code refuses anything else.
+
+`requirements.lock` is the exact environment of the runs reported in `docs/`, frozen with `pip freeze`
+(`pyproject.toml` states minimums; the lock reproduces a run). Model outputs are not deterministic and the
+subscription routes need a signed-in client, so a reproduction is a fresh run on the same cases and evaluator, not
+a byte-for-byte replay. The measured evaluator comparison in `docs/evaluation.md` was made on the author's
+installation; the cases and the evaluator it used are in this repository.
+
+To cite the software, see `CITATION.cff`.
+
 ## Status
 
 Version 0.4 (in progress). It runs daily, and it is not yet a drop-in product:

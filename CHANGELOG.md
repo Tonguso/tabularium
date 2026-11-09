@@ -24,6 +24,8 @@ versioning.
   runs the suites with the checkout as home and without the home's settings; a child process can be bound to another
   home (isolated evaluation runs); `agent.toml` values are validated, not coerced; the browser profile lives in the
   agent folder; pywin32 is needed only to store a ChatGPT connection; the scorecard's command line reads the home.
+- For reproduction: `CITATION.cff`, `requirements.lock` (the frozen environment of the reported runs) and a README
+  section on running the benchmark and what makes two runs comparable.
 
 ## [0.3.0] - 2026-11-08
 
