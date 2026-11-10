@@ -4,11 +4,17 @@ A recorded failure is an observation: the lesson record as a candidate, never me
 theme is a stored record (kind 'theme' in the agent's project store, written only here, never through the model's
 project_record tool): a method file, a cause claim, the members the owning agent confirmed and the unreviewed members
 the similarity measure proposed. Membership is written only by the owning agent's lesson(action='group' / 'ungroup');
-the runtime proposes it from the same bigram measure the digest used. THRESHOLD observations within WINDOW_DAYS (the
-owner's setting: three in sixty days) open a method review: one task in the task store's runtime lane, keyed by the
-theme, asking the owner agent for the cause and the edit for the theme as a whole. Later observations attach as
-unreviewed members and are not new digest lines. A theme closes when a proposal explaining its members is applied,
-or when the agent ungroups every member.
+the runtime proposes it from the same bigram measure the digest used.
+
+Each observation carries one review state on its own record (`review`): none until the runtime proposes it into a
+theme; then the theme, the time and a verdict, 'proposed' until the owning agent rules, 'member' when grouped,
+'excluded' when ungrouped. The proposer sees only observations with no review state, so a judgement is never
+re-proposed and ungrouped observations are never re-clustered on their own (2026-11-10 evening: without this state the
+minute loop re-attached what an agent had just ungrouped and reviewed one theme ten times). THRESHOLD observations
+within WINDOW_DAYS (the owner's setting: three in sixty days) open a method review: one task in the task store's
+runtime lane, keyed by the theme, asking the owner agent for the cause and the edit for the theme as a whole. A theme
+is reviewed again only when THRESHOLD observations have been proposed into it since its last review started. A theme
+closes when a proposal explaining its members is applied, or when the agent ungroups every member.
 """
 from contextlib import closing
 import hashlib
@@ -33,7 +39,7 @@ the register and the dashboard when he chooses. Do this:
    path in its source names that task's records).
 2. Decide which observations share one cause. Confirm membership with lesson(action='group', theme='{theme}',
    members=[...], method_path=<the method file>); move one out with lesson(action='ungroup', theme='{theme}',
-   members=[...], note=<why>).
+   members=[...], note=<why>). An observation you move out is judged: the runtime will not propose it again.
 3. Name the decision in the method that allowed every member, and the edit that removes it: lesson(action='propose',
    key=<one member>, method_path, cause={{claim, anchor quoted exactly from the method or silent_at}},
    explains=[the other members], current_text, new_text). The edit rewrites the anchored rule; a rule that must be
@@ -67,6 +73,15 @@ def _save(root, chat, key, data):
         db.execute("INSERT OR REPLACE INTO records VALUES(?,?,?,?,?,?)",
                    (chat, "theme", key, (rec["version"] + 1) if rec else 1, json.dumps(data, ensure_ascii=False), data["updated"]))
     return data
+
+
+def _mark(root, chat, key, theme, verdict, note="", at=None):
+    """The observation's own review state: which theme, when, and the verdict."""
+    state = {"theme": theme, "at": at or time.time(), "verdict": verdict}
+    if note:
+        state["note"] = " ".join(str(note).split())
+    learning._update(root, chat, key, lambda d: d.update(review=state))
+    return state
 
 
 def themes(root, chat, statuses=None):
@@ -121,12 +136,13 @@ def _similar(a, b):
 
 
 def propose_groups(root, chat, now=None):
-    """The runtime's proposal of membership, from the similarity measure: ungrouped candidates that resemble a theme's
-    first member attach to it as unreviewed; the rest that resemble each other become a new proposed theme. Nothing
-    here is membership until the owning agent confirms it (group). Returns the theme keys touched."""
+    """The runtime's proposal of membership, from the similarity measure, over observations nobody has judged yet
+    (no review state): one that resembles a theme's first member attaches to it as unreviewed; the rest that resemble
+    each other become a new proposed theme. Nothing here is membership until the owning agent confirms it (group).
+    Returns the theme keys touched."""
+    now = now or time.time()
     lessons = dict(learning._lessons(root, chat, ("candidate",)))
-    taken = grouped(root, chat)
-    loose = [(k, d) for k, d in lessons.items() if k not in taken]
+    loose = [(k, d) for k, d in lessons.items() if not d.get("review")]
     touched = []
     for key, theme in themes(root, chat):
         if theme.get("status") == "closed" or not members_of(theme):
@@ -136,6 +152,8 @@ def propose_groups(root, chat, now=None):
         if added:
             theme["unreviewed"] = list(dict.fromkeys(theme.get("unreviewed", []) + added))
             _save(root, chat, key, theme)
+            for k in added:
+                _mark(root, chat, k, key, "proposed", at=now)
             touched.append(key)
             loose = [(k, d) for k, d in loose if k not in added]
     groups = []
@@ -152,7 +170,9 @@ def propose_groups(root, chat, now=None):
         key = _theme_key(first)
         method = next((((lessons[k].get("proposal") or {}).get("method_path")) for k in keys if (lessons[k].get("proposal") or {}).get("method_path")), "")
         _save(root, chat, key, dict(title=text_of(d)[:160], method_path=method, cause="", members=[], unreviewed=keys,
-                                    status="proposed", proposed_by="similarity", created=now or time.time(), notes=[]))
+                                    status="proposed", proposed_by="similarity", created=now, notes=[]))
+        for k in keys:
+            _mark(root, chat, k, key, "proposed", at=now)
         touched.append(key)
     return touched
 
@@ -188,12 +208,15 @@ def group(root, chat, theme_key, members, method_path="", cause=""):
     if theme["status"] == "proposed":
         theme["status"] = "open"
     _save(root, chat, key, theme)
+    for k in members:
+        _mark(root, chat, k, key, "member")
     return dict(theme=key, status=theme["status"], members=len(theme["members"]), unreviewed=len(theme["unreviewed"]))
 
 
 def ungroup(root, chat, theme_key, members, note=""):
     """Membership is reversible: the keys leave the theme and are open observations again, with their own records and
-    times untouched. An emptied theme closes."""
+    times untouched except for the verdict, which says they were judged and keeps the runtime from proposing them
+    again. An emptied theme closes."""
     theme = read(root, chat, theme_key)
     members = list(dict.fromkeys(members or []))
     if not members:
@@ -208,6 +231,8 @@ def ungroup(root, chat, theme_key, members, note=""):
         theme["status"] = "closed"
         theme["closed"] = dict(at=time.time(), reason=note or "every observation ungrouped")
     _save(root, chat, theme_key, theme)
+    for k in members:
+        _mark(root, chat, k, theme_key, "excluded", note)
     return dict(theme=theme_key, status=theme["status"], members=len(theme["members"]), unreviewed=len(theme["unreviewed"]))
 
 
@@ -228,20 +253,30 @@ def recent_count(root, chat, theme, now=None):
     return sum(1 for k in members_of(theme) if now - observed_at(root, chat, k) <= WINDOW_DAYS * 86400)
 
 
+def _proposed_since(root, chat, theme, since):
+    """Observations proposed into the theme after `since` and not yet ruled on: the only new evidence a review can add."""
+    count = 0
+    for k in theme.get("unreviewed", []):
+        state = learning.read(root, chat, k).get("review") or {}
+        if state.get("verdict") == "proposed" and state.get("at", 0) > since:
+            count += 1
+    return count
+
+
 def due(root, chat, store, now=None):
-    """Themes that cross the threshold and have no review in flight: a first review, or a new round once at least
-    THRESHOLD unreviewed observations have arrived since the last review settled."""
+    """Themes that cross the threshold and have no review in flight: a first review, or another round once THRESHOLD
+    observations have been proposed into the theme since its last review started."""
     out = []
     for key, theme in themes(root, chat):
         if theme.get("status") not in ("proposed", "open", "review") or recent_count(root, chat, theme, now) < THRESHOLD:
             continue
-        task = theme.get("review_task")
-        if task:
+        reviews = theme.get("reviews") or []
+        if reviews:
             try:
-                settled = store.get(task)["status"] not in ACTIVE
+                settled = store.get(reviews[-1]["task"])["status"] not in ACTIVE
             except Exception:
                 settled = True
-            if not settled or len(theme.get("unreviewed", [])) < THRESHOLD:
+            if not settled or _proposed_since(root, chat, theme, reviews[-1]["at"]) < THRESHOLD:
                 continue
         out.append((key, theme))
     return out
@@ -250,6 +285,7 @@ def due(root, chat, store, now=None):
 def start_review(root, chat, store, key, theme, now=None):
     """One task in the runtime lane for one theme: the review is the agent's next idle work, never a message to the
     owner. Keyed by the theme, so the same review is never queued twice."""
+    now = now or time.time()
     items = []
     for k in members_of(theme):
         d = learning.read(root, chat, k)
@@ -259,7 +295,7 @@ def start_review(root, chat, store, key, theme, now=None):
     row = store.start(chat, request, "", extra={"notify_telegram": False, "theme": key})
     theme["review_task"] = row["id"]
     theme["status"] = "review"
-    theme.setdefault("reviews", []).append(dict(task=row["id"], at=now or time.time(), observations=len(items)))
+    theme.setdefault("reviews", []).append(dict(task=row["id"], at=now, observations=len(items)))
     _save(root, chat, key, theme)
     return row["id"]
 
@@ -300,9 +336,40 @@ def reviews(root, chat, store=None):
     return out
 
 
+def backfill_review_state(root, chat):
+    """Observations grouped, proposed or ungrouped before review states existed get theirs from the theme records
+    (members: member; unreviewed: proposed at the theme's creation; ungrouped in a note: excluded, which wins and leaves
+    the unreviewed list). Returns the number of observations marked."""
+    marked = 0
+    verdicts = {}
+    for key, theme in themes(root, chat):
+        for k in theme.get("members", []):
+            verdicts[k] = (key, "member", theme.get("created") or theme.get("updated", 0), "")
+        for k in theme.get("unreviewed", []):
+            verdicts.setdefault(k, (key, "proposed", theme.get("created") or theme.get("updated", 0), ""))
+    for key, theme in themes(root, chat):
+        for note in theme.get("notes", []):
+            for k in note.get("ungrouped", []):
+                verdicts[k] = (key, "excluded", note.get("at", 0), note.get("note", ""))
+        cleaned = [k for k in theme.get("unreviewed", []) if verdicts.get(k, ("", ""))[1] != "excluded"]
+        if cleaned != theme.get("unreviewed", []):
+            theme["unreviewed"] = cleaned
+            _save(root, chat, key, theme)
+    for k, (theme_key, verdict, at, note) in verdicts.items():
+        try:
+            if learning.read(root, chat, k).get("review"):
+                continue
+        except ValueError:
+            continue
+        _mark(root, chat, k, theme_key, verdict, note, at)
+        marked += 1
+    return marked
+
+
 def migrate(root, chat):
     """Migration (design section 6): existing checks carry no receipts and become judgements; counts are recomputed
-    from measured checks; the grouping is run once and shown as proposed membership. Safe to run twice."""
+    from measured checks; review states are backfilled from the theme records; the grouping is run once and shown as
+    proposed membership. Safe to run twice."""
     relabelled = 0
     for key, d in learning._lessons(root, chat, ("applied", "verified", "candidate", "proposed", "retired", "expired", "rejected")):
         checks = learning.checks_of(d)
@@ -319,4 +386,5 @@ def migrate(root, chat):
             x["hurt"] = sum(1 for c in measured if not c.get("worked"))
         learning._update(root, chat, key, change)
         relabelled += 1
-    return dict(relabelled=relabelled, themes=propose_groups(root, chat))
+    marked = backfill_review_state(root, chat)
+    return dict(relabelled=relabelled, marked=marked, themes=propose_groups(root, chat))

@@ -61,6 +61,13 @@ class Themes(unittest.TestCase):
         self.assertEqual(learning.read(self.root, 1, keys[0])["status"], "candidate")     # untouched, with its time
         self.assertEqual(themes.observed_at(self.root, 1, keys[0]), before)
         self.assertNotIn(keys[0], themes.grouped(self.root, 1))
+        state = learning.read(self.root, 1, keys[0])["review"]                            # judged: never proposed again
+        self.assertEqual((state["theme"], state["verdict"]), (touched[0], "excluded"))
+        self.assertIn("different failure", state["note"])
+        self.assertEqual(themes.propose_groups(self.root, 1), [])
+        self.assertNotIn(keys[0], themes.members_of(themes.read(self.root, 1, touched[0])))
+        self.assertEqual(learning.read(self.root, 1, keys[1])["review"]["verdict"], "member")
+        self.assertEqual(learning.read(self.root, 1, keys[2])["review"]["verdict"], "proposed")
         themes.ungroup(self.root, 1, touched[0], keys[1:])
         self.assertEqual(themes.read(self.root, 1, touched[0])["status"], "closed")       # emptied: closed, not deleted
 
@@ -93,6 +100,18 @@ class Themes(unittest.TestCase):
         self.assertNotIn(fourth, digest)
         self.assertEqual(learning.expire(self.root, 1, days=30, now=now + 40 * DAY), [])     # evidence never expires
         self.assertEqual(learning.read(self.root, 1, old)["status"], "candidate")
+        # A second round needs three observations proposed since the last review started, not a recount.
+        self.store.control(1, started[0], "cancel", "settled for the test")
+        self.assertEqual(themes.flush(self.agent, now + 60), [])                            # one new (the fourth): no round
+        themes.ungroup(self.root, 1, key, [fourth], note="unrelated")
+        for n in (5, 6):
+            self.prose_only(n, at=now - n * DAY)
+        self.assertEqual(themes.flush(self.agent, now + 120), [])                           # two new, one excluded: no round
+        self.prose_only(7, at=now - 7 * DAY)
+        again = themes.flush(self.agent, now + 180)
+        self.assertEqual(len(again), 1)
+        self.assertEqual(len(themes.read(self.root, 1, key)["reviews"]), 2)
+        self.assertEqual(themes.flush(self.agent, now + 240), [])
 
     def test_an_applied_proposal_that_explains_the_members_closes_the_theme(self):
         keys = [self.prose_only(n) for n in range(3)]
@@ -123,7 +142,18 @@ class Themes(unittest.TestCase):
         d = learning.read(self.root, 1, key)
         self.assertTrue(d["checks"][0]["judgement"]); self.assertEqual((d["helped"], d["hurt"], d["status"]), (0, 0, "verified"))
         self.assertEqual(len(out["themes"]), 1)
-        self.assertEqual(themes.migrate(self.root, 1), {"relabelled": 0, "themes": []})      # idempotent
+        self.assertEqual(themes.migrate(self.root, 1), {"relabelled": 0, "marked": 0, "themes": []})      # idempotent
+        theme = out["themes"][0]
+        members = themes.members_of(themes.read(self.root, 1, theme))
+        themes.ungroup(self.root, 1, theme, members[:1], note="old-style exclusion")
+        for k in members:                                                                    # records from before review states
+            learning._update(self.root, 1, k, lambda d: d.pop("review", None))
+        t = themes.read(self.root, 1, theme); t["unreviewed"] = members; themes._save(self.root, 1, theme, t)
+        out = themes.migrate(self.root, 1)
+        self.assertEqual((out["marked"], out["themes"]), (len(members), []))
+        self.assertEqual(learning.read(self.root, 1, members[0])["review"]["verdict"], "excluded")
+        self.assertEqual(learning.read(self.root, 1, members[1])["review"]["verdict"], "proposed")
+        self.assertNotIn(members[0], themes.read(self.root, 1, theme)["unreviewed"])
 
 
 if __name__ == "__main__":
