@@ -1,6 +1,6 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.4 (draft), 9 November 2026
+Version 0.5 (draft), 10 November 2026
 
 ## Abstract
 
@@ -297,9 +297,9 @@ Every reply names, by message id, which incoming messages corrected the agent. T
 and the owner's own reply references, never from text copied back; a runtime warning carries no id and cannot be
 counted (twice in October a warning injected by the runtime was recorded as the owner's correction and diagnosed as
 his words). Corrections collect, and once the thread has been quiet for ten minutes one background diagnosis runs for the whole thread: what the agent did, what the owner expected,
-why, and whose fault it was. A fault in the agent's method becomes a lesson, recorded together with the exact skill
-edit that would have prevented it, and only when one sharpened rule would stop a recurrence; a one-off misreading
-records nothing. A fault in the runtime becomes a report for the coding agents. The diagnosis never speaks to the owner and cannot ask him anything; he reads the digest when he
+why, and whose fault it was. A fault in the agent's method becomes a lesson: the decision in the method that allowed
+it, anchored in the method file, the other observations it explains, and the edit that removes it; a one-off
+misreading records nothing. A fault in the runtime becomes a report for the coding agents. The diagnosis never speaks to the owner and cannot ask him anything; he reads the digest when he
 chooses. After two corrections in a thread, the agent's next reply may not fix, compute or propose anything: it
 restates in the owner's words what it now understands and asks whether that is right.
 
@@ -334,59 +334,86 @@ sight, and the agent asked him who the buyer was.
 ## 8. Learning
 
 Agents never quietly rewrite their own rules. Skills are folders of written method, separate from who does the work
-and what it costs, so a method can be published without the practice. The learning loop has four states with the
-owner between the first and second.
+and what it costs, so a method can be published without the practice. The loop that changes a method has one
+principle: a failure is an observation, and a lesson is a claim about the decision in the method that allowed it.
+The edit that closes a lesson removes that decision; a rule that must be remembered is a sign that the method still
+permits the failure.
 
-1. **Proposed.** A mistake noticed by the agent or the owner is recorded in one step with the exact edit to one
-   skill file: the failure, the file, the current text quoted and the new text in the skill's voice. Without the
-   edit nothing is recorded. The runtime, not the agent, puts every proposal in front of the owner: on the "Waiting
-   on you" page at any time, and in a weekly message with the oldest edits in full. The owner applies or drops each
-   one in his own words. A verdict from the page is settled by the runtime on arrival: drop retires the edit; apply
-   starts the trial where the skill has benchmark cases, and otherwise applies the edit with the skipped trial and
-   its reason on the record. An edit on trial leaves the owner's list until its report returns with it. Before this,
-   the verdict only told the agent to trial and approve, and twenty-five approved edits stood on the list for a day. The earlier design had a separate candidate state, with the edit drafted later at the
-   agent's initiative and shown at the agent's initiative; after three weeks the register held 183 candidates and
-   40 drafted edits, and the owner had seen none of them. Candidates recorded before that change still expire after
-   thirty days unless repeated.
-2. **Trial.** A screening, not an anecdote. The proposal, the baseline skill, the exact candidate edit, the seed and
-   the case set are frozen before anything runs. Development cases and reserved cases, disjoint and drawn from the
-   reviewed benchmark, are each run with both skills and repeated; files are graded by the independent artifact
-   checks with no model judge, and actual usage is reported with unknowns left unknown. Trial workers hold only
-   read and write tools fenced to their own outputs, see no live memory or task context, and cannot send, delegate
-   or record lessons. The owner reads the report as evidence; a failed screening can still be approved knowingly,
-   and old trial evidence cannot approve a new edit. The earlier trial reran one past task twice and let a model
-   recommend a winner; both were retired on 2026-10-25.
-3. **Applied.** On the owner's yes in his own words, the runtime applies exactly the proposed edit and bumps the
-   skill's version, provided the passage the edit changes is still in the file; other edits to the same file, sibling
-   lessons and version bumps, do not invalidate it. An edit that sharpens an existing rule replaces it in place; an edit that adds a rule becomes one
-   tagged entry in a ledger at the end of the skill, so the method's prose is never rewritten by accretion. The agent
-   never edits the file itself for a lesson.
-4. **Verified or back.** The next real task where the failure could recur records whether it did. A recurrence before
-   any success returns the lesson to candidate. Every such check also counts for the ledger entry, helped or hurt,
-   and a verified entry stays in the ledger and keeps being counted.
+The first month of the loop had produced the opposite. The coordinator's register held 144 candidates in 23 themes
+and 19 applied edits; every applied edit was a line appended to a skill's ledger and none rewrote a rule, while one
+failure (briefs whose acceptance was stated in prose, so no script could verify the result) had recurred 116 times
+and was still a candidate. The record was the unit of thought: one failure, one edit, appended because appending
+needed no quotation and no judgement about what it replaced. The redesign of 2026-11-10 changed what the tool
+accepts rather than what the agent is told.
+
+1. **Observation.** A failure noticed by the agent, by a worker's checkpoint or by the owner's correction is recorded
+   as an observation: text, time, source and task. Observations are evidence; they are never merged away, and an
+   observation that belongs to a theme never expires.
+2. **Cause.** To propose an edit, the agent names the cause: a claim about the decision in the method that allowed
+   the failure, with an anchor the runtime checks, a passage quoted exactly from the method file, which the edit
+   must then rewrite, or the statement that the method is silent at a named place, the only case in which a line may
+   be appended. The agent also names the observations the cause explains. One instance is enough when it carries a
+   receipt (the owner's message or a task record); a claim with neither a receipt nor a second instance stays an
+   observation. The runtime checks the anchor and the observations; the claim itself is the owner's to judge
+   against the instances it cites, as every edit is.
+3. **Themes and method review.** The runtime proposes which observations belong together, from the same similarity
+   measure the digest used, and stores the theme; only the owning agent confirms or reverses membership, so a wrong
+   merge is undone without loss. Three observations within sixty days open a method review: one task in the runtime
+   lane, keyed by the theme so it is never queued twice, that asks the agent for one cause and one edit for the theme
+   as a whole. Later observations attach to the theme as unreviewed members instead of becoming new digest lines.
+4. **The owner's verdict.** The runtime, not the agent, puts every proposal in front of the owner with its cause,
+   its anchor and the observations it explains: on the "Waiting on you" page at any time, and in a weekly message.
+   A verdict from the page is settled by the runtime on arrival. Drop retires the edit; apply starts the trial where
+   the skill has benchmark cases. Where it has none, nothing is applied: the edit stays on the list with the reason
+   and the owner chooses "apply it, no trial needed" or "draft a case first". Until this change an exception handler
+   applied the edit when no trial could start, so a missing case was a reason to apply.
+5. **Trial.** A screening, not an anecdote. The baseline skill and the exact candidate edit are frozen as two arms,
+   development and reserved cases from the reviewed benchmark are run with both and repeated, files are graded by
+   the independent artifact checks with no model judge, and actual usage is reported with unknowns left unknown.
+   Trial workers hold read and write tools fenced to their own outputs, see no live memory or task context, and
+   cannot send, delegate or record lessons. A case may declare fixtures the worker provides without a side effect:
+   input files placed in the run's folder, a scripted delegate result, a scripted verification command with its
+   exit code and output, scripted search results. So a method about delegating, verifying or reading inputs can be
+   exercised, and live effects stay blocked.
+6. **Applied.** On the owner's yes in his own words, the runtime applies exactly the proposed edit and bumps the
+   skill's version, provided the passage the edit changes is still in the file. A rewrite replaces the anchored
+   rule in place; an addition, allowed only where the method is silent, becomes one tagged entry in a ledger at the
+   end of the skill, and the ledger never grows past five entries. Rewrites, removals and folds are always allowed,
+   so a ledger of unproven entries never blocks the repair it needs. A fold takes entries with measured checks and
+   a rewrite of the prose that absorbs them, shows before and after, and on approval applies both in one write
+   guarded by the file's hash; the folded entries keep their keys as the provenance of the prose.
+7. **Measured.** On the next real task where the failure could recur, the agent records whether it did. A check
+   counts only when it is bound to a task, a receipt resolvable in the records (a result, a completion record or the
+   owner's message) and the version of the method the task ran under; one task counts once per lesson. A check
+   without those three is a judgement: kept and shown with the lesson, counting nothing. A measured recurrence
+   before any success returns the lesson to candidate; a verified entry stays and keeps being counted.
 
 ![Figure 4. The life of a lesson](figures/fig4-lesson.svg)
 
-*Figure 4. The life of a lesson. A lesson is recorded with its exact edit, the owner rules on it, the runtime applies or trials it, and the next real task decides whether it stays.*
+*Figure 4. The life of a lesson. An observation becomes a lesson when the agent names its cause in the method; the
+owner rules on the edit, the runtime applies or trials it, and measured checks on later tasks decide whether it
+stays.*
 
 Every lesson also carries its own benchmark case. When a lesson is recorded, the runtime drafts a case from it: the
 request of the task it came from, or the owner's message when the lesson names it, as the input; the proposed edit's
-text as the rule; and a placeholder for the expected answer and the checkable points, which the agent fills in
-through the same lesson tool. Before a case can count, it is calibrated: three isolated runs per arm with the skill
-as it stands, one arm given the request alone and the other the request with the rule stated outright. A case that
-mostly fails even when told the rule is broken; a case the current skill mostly passes already proves nothing; both
-are refused by code, and the rest wait for the owner's quoted yes before joining the benchmark, frozen. The band over
-repeated runs replaced a single pass-or-fail pair, which had let one flaky run refuse a sound case.
+text as the rule; and a placeholder for the expected answer, the checkable points and the fixtures, which the agent
+fills in through the same lesson tool. Before a case can count, it is calibrated: three isolated runs per arm with
+the skill as it stands, one arm given the request alone and the other the request with the rule stated outright. A
+case that mostly fails even when told the rule is broken; a case the current skill mostly passes already proves
+nothing; both are refused by code, and the rest wait for the owner's quoted yes before joining the benchmark, frozen.
 Two or three approved cases of one skill recombine, by code, into a reserved case: one request carrying the others'
 rules, held out so a trial can tell a learned rule from a memorised task. A trial with no chosen cases runs on the
 skill's own development and reserved cases. The agent still writes the oracle, which is the risk; calibration catches
 an internally broken case, and only the owner's spot-check catches a wrong reading of what he meant. This follows
 GDPevo's construction of held-out tests from atomic rules, with the owner's gate in place of its reviewer agents.
 
-The weekly digest curates the ledger from those counts: it offers for retirement an entry that has hurt more often
-than it helped, and for a merge two entries in one skill that say nearly the same thing. Retirement, like approval,
-happens only on the owner's quoted words; the counts come from recorded checks with evidence, never from the agent's
-opinion of its own rule.
+The lesson guidance is one text kept with the package and appended to the prompt of every role that learns, so the
+three learning agents cannot drift apart in how they treat a failure. The weekly digest lists the stored themes
+with their counts and states and offers for retirement an entry that has hurt more often than it helped. Retirement,
+like approval, happens only on the owner's quoted words; the counts come from measured checks, never from the
+agent's opinion of its own rule. Proposals addressed to another agent's method, and lessons whose cause lies in
+runtime code, are the next release: the design separates the right to propose from the right to write, and closes a
+runtime lesson only with a release whose commit names it and a later measured check.
 
 Each skill carries a track record (when it was last used, by which task, with what outcome) that the agent sees when
 it loads one, so "I have used this before" is a fact.
@@ -414,7 +441,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Durable outbox | A reply lost during an outage | Written to disk first, retried in order, stalls visible |
 | Announced routes | Two days on a fallback model unannounced | A missing route is announced; a changed client runs the self-test |
 | Truthful live status | A dead process shown idle; planned restarts counted as crashes | Status from process identity; unknowns shown as unknown |
-| Lesson approval | Agents changing their own rules | Owner's words only; a trial first where the skill has benchmark cases, the skipped trial recorded otherwise |
+| Lesson approval | Agents changing their own rules | Owner's words only; a trial first where the skill has benchmark cases, and where it has none the owner's explicit choice, never an exception handler's |
 | Incoming files | A 20 MB screenshot reported twice as an internal error | One size gate for every incoming file; the owner is told the size and the limit |
 | Owner tier | A coordinator's accept presented as the owner's approval | An owner-tier request records a decision for the owner at acceptance; nothing is applied until he answers |
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
@@ -552,6 +579,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-07 | Asked to operate the owner's machine, the agent could only answer that it had no tool that sees or touches the desktop | One desktop tool for every agent, granted per task by the owner's yes and released by his next message or his hand on the mouse |
 | 2026-11-08 | One misaligned red strip on a logo produced fourteen questions to the owner in three hours, six of them re-offering what he had refused, from a foreground that briefed every nudge to a worker and from the worker itself | Work that fits in the turn is done in the turn; the owner's answers of the last two days ride in the live evidence of every turn and worker as rulings; a question about a shape goes out as the picture with the candidates drawn on it |
 | 2026-11-08 | Twenty-five skill edits the owner had approved from the dashboard stayed on his list for a day: applying them depended on the agent running a trial no skill had cases for, then calling approve | The runtime settles a dashboard verdict in code the moment it arrives, as it settles a parked action: drop retires, apply runs the trial where the skill has cases and otherwise applies the edit and records why no trial ran; an edit on trial is the runtime's work, not the owner's, until its report returns |
+| 2026-11-10 | A month of lessons had produced nineteen ledger reminders and no rewritten rule, while one failure recurred 116 times as unread candidates; the agent proposed patches because the record asked for one failure and one edit | A proposal names the decision in the method that allowed the failure, anchored in the method file, and the edit rewrites it; stored themes open a method review at three observations in sixty days; a check counts only with a task, a receipt and the method version; "apply it" without a usable case applies nothing |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
@@ -573,6 +601,8 @@ office, where the decisions and contracts that no magistrate's word could overri
 | Proof | The recorded outcome of a check against exact bytes |
 | Delegation | A contract from one agent to another, tracked to acceptance |
 | Skill | A folder with a written method the agent loads when a task matches |
-| Lesson | A correction to a skill, recorded with its exact edit, trialled and applied or dropped by the owner |
+| Lesson | A claim about the decision in a method that allowed a failure, anchored in the method, with the observations it explains and the edit that removes it; trialled and applied or dropped by the owner |
+| Observation | A recorded failure: text, time, source and task; the evidence a lesson is built from |
+| Theme | A stored group of observations of one method, proposed by the runtime and confirmed by the owning agent; three in sixty days open a method review |
 | Ledger | The section at the end of a skill where approved additions live as tagged entries with helped and hurt counts |
 | Supervisor | The process that starts, watches and restarts the others |
