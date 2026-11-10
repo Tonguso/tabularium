@@ -305,15 +305,16 @@ def migrate(root, chat):
     from measured checks; the grouping is run once and shown as proposed membership. Safe to run twice."""
     relabelled = 0
     for key, d in learning._lessons(root, chat, ("applied", "verified", "candidate", "proposed", "retired", "expired", "rejected")):
-        checks = d.get("checks") or []
-        if not any(not c.get("judgement") and "task" not in c for c in checks):
+        checks = learning.checks_of(d)
+        if checks == d.get("checks") and not any(not c.get("judgement") and "task" not in c for c in checks):
             continue
 
         def change(x):
-            for c in x.get("checks", []):
+            x["checks"] = learning.checks_of(x)
+            for c in x["checks"]:
                 if "task" not in c:
                     c["judgement"] = True
-            measured = [c for c in x.get("checks", []) if not c.get("judgement")]
+            measured = [c for c in x["checks"] if not c.get("judgement")]
             x["helped"] = sum(1 for c in measured if c.get("worked"))
             x["hurt"] = sum(1 for c in measured if not c.get("worked"))
         learning._update(root, chat, key, change)

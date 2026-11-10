@@ -115,8 +115,11 @@ class Themes(unittest.TestCase):
         learning._update(self.root, 1, key, lambda d: d.update(checks=[{"worked": True, "evidence": "old style", "at": 1}], helped=1, hurt=0, status="verified"))
         for n in (1, 2):
             self.prose_only(n)
+        note = self.observe("An October lesson whose checks are one note", 8)      # model-written: checks is a string
+        learning._update(self.root, 1, note, lambda d: d.update(checks="Checked on the Tiro task: fine"))
         out = themes.migrate(self.root, 1)
-        self.assertEqual(out["relabelled"], 1)
+        self.assertEqual(out["relabelled"], 2)
+        self.assertEqual(learning.read(self.root, 1, note)["checks"], [{"worked": None, "evidence": "Checked on the Tiro task: fine", "judgement": True, "at": learning.read(self.root, 1, note)["checks"][0]["at"]}])
         d = learning.read(self.root, 1, key)
         self.assertTrue(d["checks"][0]["judgement"]); self.assertEqual((d["helped"], d["hurt"], d["status"]), (0, 0, "verified"))
         self.assertEqual(len(out["themes"]), 1)

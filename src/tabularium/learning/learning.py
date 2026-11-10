@@ -43,6 +43,14 @@ RECEIPT = re.compile(r'^(task|verification|message):(\d+)$')
 TASK_SOURCE = re.compile(r'[\\/]background[\\/](\d+)[\\/]')
 
 
+def checks_of(d):
+    """A lesson's checks as records. Early lessons (model-written, October 2026) hold `checks` as one string or as
+    bare strings; each is read as a judgement with that text as its evidence and no verdict."""
+    raw = d.get('checks')
+    items = raw if isinstance(raw, list) else ([raw] if raw else [])
+    return [c if isinstance(c, dict) else {'worked': None, 'evidence': str(c), 'judgement': True, 'at': d.get('_updated', 0)} for c in items]
+
+
 def ledger_entries(text):
     return [l for l in text.splitlines() if l.startswith("- [lesson-")]
 
@@ -252,7 +260,7 @@ def propose_fold(root, chat, method_path, current_text, new_text, keys, source='
         a = d.get('applied') or {}
         if d.get('status') not in ('applied', 'verified') or not a.get('entry') or Path(a.get('method_path', '')).resolve() != method:
             raise ValueError(f'{k} is not a ledger entry of {method.name}.')
-        if not any(not c.get('judgement') for c in d.get('checks', [])):
+        if not any(not c.get('judgement') for c in checks_of(d)):
             raise ValueError(f'{k} has no measured check; it can be retired, not folded.')
         if f'- [{k}]' not in text:
             raise ValueError(f'{k} is not in the ledger of {method.name}.')
@@ -481,12 +489,12 @@ def record_check(root, chat, key, worked, evidence, task=None, receipt=None, met
         entry = {'worked': bool(worked), 'evidence': evidence, 'at': time.time()}
         if not measured:
             entry['judgement'] = True
-            d.setdefault('checks', []).append(entry)
+            d['checks'] = checks_of(d) + [entry]
             return {'key': key, 'status': d['status'], 'helped': d.get('helped', 0), 'hurt': d.get('hurt', 0), 'judgement': True}
-        if any(c.get('task') == int(task) for c in d.get('checks', []) if not c.get('judgement')):
+        if any(c.get('task') == int(task) for c in checks_of(d) if not c.get('judgement')):
             raise ValueError(f'Task {task} is already counted for this lesson.')
         entry.update(task=int(task), receipt=receipt, method_sha256=method_sha)
-        d.setdefault('checks', []).append(entry)
+        d['checks'] = checks_of(d) + [entry]
         d['helped'] = d.get('helped', 0) + (1 if worked else 0)
         d['hurt'] = d.get('hurt', 0) + (0 if worked else 1)
         if worked:
