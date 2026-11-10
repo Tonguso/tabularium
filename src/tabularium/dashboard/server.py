@@ -140,6 +140,11 @@ def state():
             agent['lessons']=learning.proposals(ROOT/name,OWNER_CHAT_ID)
         except Exception as exc:
             agent['lessons']=[]; agent['errors'].append('Lesson register unreadable: '+str(exc)[:120])
+        try:   # method reviews (2026-11-10): themes the runtime proposed or the agent confirmed, with the review's state
+            from tabularium.learning import themes
+            agent['reviews']=themes.reviews(ROOT/name,OWNER_CHAT_ID,TASK_STORES.get(name)) if ROLES[name].learns else []
+        except Exception as exc:
+            agent['reviews']=[]; agent['errors'].append('Theme register unreadable: '+str(exc)[:120])
         try:   # questions waiting on Alex (2026-11-02: 19 of Cato's stood in the store, shown only inside Messaging).
                # Parked actions and background tasks' questions only: a foreground question is the conversation he is
                # already in, not a loose end (2026-11-08: the logo back-and-forth filled the list).

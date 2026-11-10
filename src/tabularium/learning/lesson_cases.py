@@ -83,11 +83,12 @@ def record(key, d, slot="case"):
     return dict(id=case_id(key, slot), version=c.get("version", 1), task_type=(d.get("task_types") or ["other"])[0],
                 request=c.get("request", ""), rule=c.get("rule", ""), split=c.get("split", "development"),
                 lesson_from=c.get("from", [key]), oracle=dict(basis=c.get("oracle_basis", ""), reviewed_by=reviewed, version=c.get("version", 1)),
-                requirements=c.get("requirements", []))
+                requirements=c.get("requirements", []), **({"fixtures": c["fixtures"]} if c.get("fixtures") else {}))
 
 
-def fill(root, chat, key, slot="case", request=None, oracle_basis=None, requirements=None):
-    """The agent's draft of the oracle and the checkable points. Validated as a benchmark case; status back to draft."""
+def fill(root, chat, key, slot="case", request=None, oracle_basis=None, requirements=None, fixtures=None):
+    """The agent's draft of the oracle, the checkable points and the fixtures the run needs (regression.validate_fixtures).
+    Validated as a benchmark case; status back to draft."""
     if slot not in SLOTS:
         raise ValueError("slot is case or reserved.")
 
@@ -103,6 +104,8 @@ def fill(root, chat, key, slot="case", request=None, oracle_basis=None, requirem
             c["oracle_basis"] = str(oracle_basis).strip()
         if requirements is not None:
             c["requirements"] = requirements
+        if fixtures is not None:
+            c["fixtures"] = fixtures
         if not c.get("request"):
             raise ValueError("The case needs a request: the task as the owner would ask it.")
         regression.validate_case(record(key, dict(d, **{slot: c}), slot))
@@ -144,7 +147,7 @@ def calibrate(root, chat, key, store, system_prompt, slot="case", max_steps=12, 
     for arm in ("floor", "ceiling"):
         request = case["request"] + ("" if arm == "floor" else "\n\nRule to apply, stated by the owner: " + case["rule"])
         trial = dict(lesson=key, cohort=str(folder), arm=arm, max_steps=max_steps, skill=str(skill), skill_sha=learning._sha(skill),
-                     system_prompt=prompt, overrides={str(method): str(skill)}, calibration=slot)
+                     system_prompt=prompt, overrides={str(method): str(skill)}, calibration=slot, fixtures=case.get("fixtures") or {})
         for n in range(1, max(1, int(runs)) + 1):
             row = store.start(chat, f"[Calibration {folder.name}/{arm}-{n}] " + request, "", extra={"trial": trial, "notify_telegram": False})
             calibration["runs"].append(dict(task=row["id"], arm=arm))

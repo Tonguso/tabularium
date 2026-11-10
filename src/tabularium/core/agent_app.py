@@ -305,6 +305,9 @@ class AgentApp(engine.AgentRuntime):
 
         # ── System prompt, part 1 ──
         self.SYSTEM_PROMPT = self.SKILL_FILE.read_text(encoding="utf-8") + cfg.telegram_prompt
+        if cfg.role.learns:                           # one lesson guidance for every role that learns (2026-11-10)
+            from tabularium.learning import learning as _learning
+            self.SYSTEM_PROMPT += "\n\n" + (Path(_learning.__file__).with_name("GUIDANCE.md")).read_text(encoding="utf-8")
 
         # ── Tools ──
         self.OUTLOOK_TOOLS_OPENAI = [openai_tool(t) for t in self.OUTLOOK_TOOLS_ANTHROPIC]
@@ -1139,6 +1142,10 @@ class AgentApp(engine.AgentRuntime):
     def _execute_tool_unguarded(self, name: str, inputs: dict, chat_id: int = None):
         if self._tool_scope is not None and name not in self._tool_scope:
             return Refused(f"Tool {name} is not available here.")
+        from tabularium.learning.trials import scripted
+        canned = scripted(self, name, inputs)                  # a trial fixture answers instead of the live tool
+        if canned is not None:
+            return canned
         if name in ("verify_requirement", "task_checkpoint") and self._preset_verification():
             if name == "verify_requirement" or "completion_items" in inputs:
                 return Refused("Worker-defined verification is not available here; the runtime owns the acceptance checks.")

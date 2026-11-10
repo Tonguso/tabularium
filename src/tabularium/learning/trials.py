@@ -103,7 +103,7 @@ def start(agent_root, chat, key, spec, store, system_prompt="Complete the suppli
                     trial = dict(lesson=key, cohort=str(folder), arm=arm, max_steps=steps,
                                  skill=str(skill), skill_sha=learning._sha(skill),
                                  system_prompt=skill_prompt(system_prompt, baseline, skill.read_text(encoding="utf-8")),
-                                 overrides={str(method): str(skill)})
+                                 overrides={str(method): str(skill)}, fixtures=case.get("fixtures") or {})
                     row = store.start(chat, f"[Evaluation {folder.name}/{len(record['runs'])}] " + case["request"],
                                       str(case.get("context", "")), extra={"trial": trial, "notify_telegram": False})
                     record["runs"].append(dict(task=row["id"], case=case["id"], attempt=attempt + 1, arm=arm))
@@ -135,6 +135,10 @@ def prepare_worker(context, folder):
             raise ValueError("Frozen trial skill changed.")
         os.environ[OVERRIDES_ENV] = json.dumps(trial["overrides"])
         os.environ[READS_ENV] = json.dumps([trial["skill"]])
+        for f in (trial.get("fixtures") or {}).get("files", []):      # declared inputs, inside the run's own folder
+            target = output / "inputs" / f["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f.get("content", ""), encoding="utf-8")
 
 
 def scope(runtime, context=None):
@@ -142,7 +146,9 @@ def scope(runtime, context=None):
     runtime._tool_scope = names - BLOCKED_TOOLS
     trial = (context or {}).get("trial")
     if trial:
-        runtime._tool_scope &= {"read_file", "write_file"}
+        fixtures = trial.get("fixtures") or {}
+        allowed = {"read_file", "write_file"} | {SCRIPTED[k] for k in fixtures if k in SCRIPTED}
+        runtime._tool_scope = names & allowed          # a scripted tool answers from the fixture, never live (scripted())
         runtime._trial = trial
         runtime.MAX_TOOL_ITERATIONS = trial["max_steps"]
     elif ((context or {}).get("eval") or {}).get("benchmark"):
@@ -158,8 +164,40 @@ def skill_prompt(prompt, baseline, candidate):
     return prompt + "\n\nSkill under evaluation:\n" + candidate
 
 
+SCRIPTED = {"delegate": "delegate", "verify": "execute_command", "search": "web_search"}   # fixture -> the tool it answers
+
+
 def worker_prompt(context):
-    return context['trial']['system_prompt']
+    prompt = context['trial']['system_prompt']
+    files = (context['trial'].get('fixtures') or {}).get('files') or []
+    if files:
+        base = Path(os.environ.get(TRIAL_DIR_ENV, '')) / 'inputs'
+        prompt += '\n\nInput files for this task (read them with read_file): ' + ', '.join(str(base / f['path']) for f in files)
+    return prompt
+
+
+def scripted(runtime, name, inputs):
+    """In a trial worker the declared fixtures answer the delegate, the verification command and the search with
+    canned results, so a method about them can be exercised without a side effect (2026-11-10). None outside a
+    trial, and for a tool the case declared no fixture for (the scope has already refused it)."""
+    trial = getattr(runtime, '_trial', None)
+    fixtures = (trial or {}).get('fixtures') or {}
+    if not trial or not fixtures:
+        return None
+    if name == 'delegate' and 'delegate' in fixtures:
+        d, action = fixtures['delegate'], inputs.get('action')
+        if action == 'submit':
+            return json.dumps({'request_id': 'scripted-1', 'status': 'submitted',
+                               'note': 'Scripted delegate (trial fixture): the result is ready; read it with action=result.'})
+        if action in ('result', 'status'):
+            return json.dumps({'request_id': inputs.get('request_id', 'scripted-1'), 'status': d.get('status', 'completed'), 'text': d['result']})
+        return json.dumps({'request_id': inputs.get('request_id', 'scripted-1'), 'status': 'recorded', 'note': f'Scripted delegate: {action} recorded.'})
+    if name == 'execute_command' and 'verify' in fixtures:
+        v = fixtures['verify']
+        return f"[Scripted verification (trial fixture)] exit code {int(v.get('exit_code', 0))}\n{v.get('output', '')}"
+    if name == 'web_search' and 'search' in fixtures:
+        return '\n\n'.join(f"{r.get('title', '')}\n{r.get('url', '')}\n{r.get('snippet', '')}" for r in fixtures['search']) or 'No results.'
+    return None
 
 
 

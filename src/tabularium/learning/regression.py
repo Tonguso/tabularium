@@ -50,7 +50,32 @@ def validate_case(case):
             path = Path(check.get("path", ""))
             if not check.get("path") or path.is_absolute() or ".." in path.parts or "expected" not in check:
                 raise ValueError("Artifact checks need a relative output path and expected value.")
+    validate_fixtures(case.get("fixtures"))
     return requirements
+
+
+FIXTURE_KINDS = ("files", "delegate", "verify", "search")
+
+
+def validate_fixtures(fixtures):
+    """What a case may ask the trial worker to provide without a side effect (2026-11-10): input files placed in the
+    run's folder, a scripted delegate result, a scripted verification command (exit code and output), scripted search
+    results. Nothing else; nothing live."""
+    if fixtures is None:
+        return {}
+    if not isinstance(fixtures, dict) or any(k not in FIXTURE_KINDS for k in fixtures):
+        raise ValueError("fixtures is an object with any of: " + ", ".join(FIXTURE_KINDS))
+    for f in fixtures.get("files", []):
+        path = Path(str(f.get("path", "")))
+        if not f.get("path") or path.is_absolute() or ".." in path.parts or not isinstance(f.get("content", ""), str):
+            raise ValueError("A file fixture needs a relative path and text content.")
+    if "delegate" in fixtures and not isinstance(fixtures["delegate"].get("result"), str):
+        raise ValueError("A delegate fixture needs the result text the delegate returns.")
+    if "verify" in fixtures and (type(fixtures["verify"].get("exit_code")) is not int or not isinstance(fixtures["verify"].get("output", ""), str)):
+        raise ValueError("A verify fixture needs an integer exit_code and text output.")
+    if "search" in fixtures and not (isinstance(fixtures["search"], list) and all(isinstance(r, dict) for r in fixtures["search"])):
+        raise ValueError("A search fixture is a list of results (title, url, snippet).")
+    return fixtures
 
 
 def fingerprint(cases):
