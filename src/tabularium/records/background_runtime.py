@@ -44,7 +44,7 @@ REMOTE_RETURNED = ("completed", "partial", "blocked", "timed_out", "cancelled", 
 # Work the runtime starts about the agent's work (a correction diagnosis, a lesson trial, an eval rerun). It runs in
 # its own lane so it never holds the slot ahead of Alex's own tasks (2026-10-21: a diagnosis blocked a Tiro fix
 # for half an hour), and it is not precedent for a skill's track record.
-META_PREFIXES = ("[Correction diagnosis]", "[Trial ", "[Eval ")
+META_PREFIXES = ("[Correction diagnosis]", "[Method review]", "[Trial ", "[Eval ")
 
 
 def meta(request):

@@ -420,6 +420,11 @@ class AgentRuntime(SharedHandlers):
                 corrections.flush(self)
             except Exception as exc:
                 print(f"[correction] flush error: {type(exc).__name__}: {exc}")
+            try:
+                from tabularium.learning import themes        # membership proposals and due method reviews (2026-11-10)
+                themes.flush(self)
+            except Exception as exc:
+                print(f"[themes] flush error: {type(exc).__name__}: {exc}")
             flag = self.AGENT_DIR / "task_state" / "memory_trial_requested"     # consolidation trial (2026-10-20)
             if flag.exists():
                 flag.unlink(missing_ok=True)
@@ -2452,19 +2457,24 @@ class AgentRuntime(SharedHandlers):
     def tool_remember(self, kind: str = "", content: str = "", source: str = "", quote: str = "", valid_from: str = "",
                       valid_to: str = "", supersedes: str = "", old: str = "", new: str = "", reason: str = "",
                       name: str = "", state: str = "", done: bool = False, pinned: bool = False,
-                      owner_asked: bool = False, method_path: str = "", chat_id: int = None) -> str:
+                      owner_asked: bool = False, method_path: str = "", cause: str = "", anchor: str = "",
+                      silent_at: str = "", explains: list = None, chat_id: int = None) -> str:
         """One memory writer (2026-10-08): a sourced fact, an unsourced note, an exact correction, or a working
         thread. Replaces record_fact / append_memory / reconcile_memory / work_thread, which overlapped and were
         picked by the shape of the sentence rather than by rule; delete_memory_section is now a maintenance script."""
         if kind == "lesson":
             # The lesson and its edit are one record (2026-11-01: 183 candidates, 40 drafts nobody showed Alex).
-            if not method_path or not (new or "").strip():
-                return Failed("A lesson is recorded together with its edit, in one step: method_path (the skill file under "
-                              "skills/, or SKILL.md for a habit of conversation), old (the exact current text to sharpen, "
-                              "or empty to add a ledger entry) and new (the new text in the skill's own voice). Without "
-                              "the edit nothing is recorded.")
+            if not method_path or not (new or "").strip() or not (cause or "").strip():
+                return Failed("A lesson is recorded together with its cause and its edit, in one step: cause (the decision in "
+                              "the method that allowed the failure) with anchor (the passage quoted exactly from the method, "
+                              "which old must then contain) or silent_at (where the method says nothing); explains (keys of "
+                              "the other open observations this cause accounts for); method_path (the skill file under "
+                              "skills/, or SKILL.md for a habit of conversation), old (the exact current text to rewrite, or "
+                              "empty, only where the method is silent, to add a ledger entry) and new (the new text in the "
+                              "skill's own voice). Without the cause and the edit nothing is recorded.")
             try:
-                shown = record_lesson(self.AGENT_DIR, chat_id, content, source or "foreground observation", method_path, old, new)
+                shown = record_lesson(self.AGENT_DIR, chat_id, content, source or "foreground observation", method_path, old, new,
+                                      cause={"claim": cause, "anchor": anchor, "silent_at": silent_at}, explains=explains or [])
             except ValueError as exc:
                 return Failed(str(exc))
             return ("Lesson registered for Alex's go as " + shown["key"] + ". It reaches him on the dashboard and in the "

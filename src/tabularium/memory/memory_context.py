@@ -199,11 +199,12 @@ def memory_tool_schema():
                     'are checked, the truth is not; supersedes=<fact id> replaces a prior sourced fact '
                     'and keeps its history. kind=note appends a dated unsourced note (never for '
                     "Alex's decisions or preferences: those need a source and quote). kind=lesson "
-                    'records a lesson together with the exact skill edit it proposes (source: message:<id> of the request that went wrong, or the task checkpoint path, so the benchmark case drafted with the lesson has its request; content: failure and '
-                    'correction in one line; method_path: the skill file, or SKILL.md for a habit of conversation; '
-                    'old: the current text to sharpen, or empty to add a ledger entry; new: the new text in the '
-                    "skill's own voice): nothing is recorded without the edit, and nothing changes until Alex "
-                    'approves it; the runtime shows him the edit. Use it whenever you find you would do something '
+                    'records a lesson: a claim about the decision in a method that allowed a failure, with the edit that removes it (source: message:<id> of the request that went wrong, or the task checkpoint path; content: the failure in one line; '
+                    'cause: the decision that allowed it; anchor: the passage quoted exactly from the method, which old must contain, or silent_at: where the method says nothing; explains: keys of the other open observations this cause accounts for, one instance being enough only when the source is a task record or his message; '
+                    'method_path: the skill file, or SKILL.md for a habit of conversation; '
+                    'old: the current text to rewrite, or empty, only where the method is silent, to add a ledger entry; new: the new text in the '
+                    "skill's own voice): nothing is recorded without the cause and the edit, and nothing changes until Alex "
+                    'approves it; the runtime shows him the edit. A reminder to remember something is not a lesson: the edit removes the condition that made the failure possible. Use it whenever you find you would do something '
                     'differently next time, in the foreground too. kind=thread keeps working memory: '
                     'name, state (position + next step), done, pinned, owner_asked=true when Alex '
                     'asked to track or drop it. old+new corrects one exact existing sentence and '
@@ -247,5 +248,9 @@ def memory_tool_schema():
                                      'pinned': {'type': 'boolean'},
                                      'owner_asked': {'type': 'boolean'},
                                      'method_path': {'type': 'string',
-                                                     'description': 'lesson: the skill file the edit changes'}},
+                                                     'description': 'lesson: the skill file the edit changes'},
+                                     'cause': {'type': 'string', 'description': 'lesson: the decision in the method that allowed the failure'},
+                                     'anchor': {'type': 'string', 'description': 'lesson: the passage quoted exactly from the method; old must contain it'},
+                                     'silent_at': {'type': 'string', 'description': 'lesson: where the method says nothing, when there is no anchor'},
+                                     'explains': {'type': 'array', 'items': {'type': 'string'}, 'description': 'lesson: keys of the other open observations this cause accounts for'}},
                       'required': []}}

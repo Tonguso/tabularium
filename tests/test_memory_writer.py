@@ -42,10 +42,12 @@ class Remember(unittest.TestCase):
         self.assertIn("needs both", remember(old="only old", chat_id=1))
         self.assertIn("team-speech", remember(kind="thread", name="team-speech", state="slides 21-39 to script", chat_id=1))
         # 2026-11-01: a lesson is recorded only together with its skill edit, and is then already proposed to Alex
-        self.assertIn("Without the edit nothing is recorded", remember(kind="lesson", content="test the fetch script on two names first", chat_id=1))
+        self.assertIn("Without the cause and the edit nothing is recorded", remember(kind="lesson", content="test the fetch script on two names first", chat_id=1))
         (self.root / "SKILL.md").write_text("# persona" + chr(10), encoding="utf-8")
-        self.assertIn("registered for Alex's go", remember(kind="lesson", content="test the fetch script on two names first",
-                                                            method_path=str(self.root / "SKILL.md"), new="Test the fetch script on two names first.", chat_id=1))
+        source = f"message:{self.agent._recall.note(1, 'Test it on two names first', 'telegram')}"
+        self.assertIn("registered for Alex's go", remember(kind="lesson", content="test the fetch script on two names first", source=source,
+                                                            method_path=str(self.root / "SKILL.md"), new="Test the fetch script on two names first.",
+                                                            cause="The persona file says nothing about testing scripts.", silent_at="scripts", chat_id=1))
         self.assertEqual(ProjectStore(self.root).manage(1, "list", "lesson")[0]["status"], "proposed")
 
     def test_unknown_kind_explains_itself(self):

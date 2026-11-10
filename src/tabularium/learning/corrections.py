@@ -37,13 +37,17 @@ the lesson register when he chooses. He does not have to explain the error; work
    task_state/actions/*.json: one file per tool call). Quote what you actually said or did.
 2. State what he expected instead, in his terms, and why the gap happened: the step or rule that produced it.
 3. Decide whose fault it is, once for the thread:
-   a) Your method: a skill, a habit, a brief, a check you skipped. Record it with its edit in one step (remember
-      kind=lesson: content is the failure and the correction in one line; method_path the skill file, or SKILL.md
-      for a habit of conversation; old the current text quoted exactly, or empty to add a ledger entry; new the
-      text in the skill's own voice). One sharpened rule that removes the fault, nothing more: skills are not for
-      patching (Alex 2026-10-22). A one-off misreading, wording he disliked once, or a rule that restates the
-      specific case is not a lesson: record nothing. The runtime shows every edit to Alex on the dashboard and
-      in a weekly message; you do not send it.
+   a) Your method: a skill, a habit, a brief, a check you skipped. Find the decision in the method that allowed
+      it: the rule, default or omission without which the failure could not have happened. Read the method file
+      and the open observations (project_record list kind=lesson) for the other instances it explains. Record it
+      with its cause and its edit in one step (remember kind=lesson: content the failure in one line; cause the
+      decision that allowed it; anchor the passage quoted exactly from the method, or silent_at where the method
+      says nothing; explains the keys of the other observations it accounts for; method_path the skill file, or
+      SKILL.md for a habit of conversation; old the anchored text quoted exactly, or empty only where the method is
+      silent; new the text in the skill's own voice). The edit removes the cause; a rule that must be remembered
+      means the method still permits the failure: skills are not for patching (Alex 2026-10-22). A one-off
+      misreading, wording he disliked once, or a rule that restates the specific case is not a lesson: record
+      nothing. The runtime shows every edit to Alex on the dashboard and in a weekly message; you do not send it.
    b) The runtime: something the system added, removed, blocked or sent that you do not control (engine, tools,
       the reply pipeline, the dashboard, task bookkeeping). Write {reports}\\<YYYY-MM-DD-HHMM>-<short-slug>.md with:
       his words and time, what happened, the evidence (file paths, task ids, log lines), and the file you suspect.
@@ -56,7 +60,10 @@ the lesson register when he chooses. He does not have to explain the error; work
 
 
 def is_diagnosis(request):
-    return str(request or "").startswith(PREFIX)
+    """Record-only runtime work about the agent's own method: a correction diagnosis or a theme's method review
+    (tabularium.learning.themes). Neither may ask the owner anything or claim a completed task."""
+    from tabularium.learning.themes import PREFIX as REVIEW
+    return str(request or "").startswith((PREFIX, REVIEW))
 
 
 def _pending_path(agent):

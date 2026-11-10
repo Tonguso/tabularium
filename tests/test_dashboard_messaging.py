@@ -119,11 +119,13 @@ class DashboardMessaging(unittest.TestCase):
         skill = a.AGENT_DIR / 'skills' / 'basket' / 'SKILL.md'
         skill.parent.mkdir(parents=True, exist_ok=True)
         skill.write_text('---\nname: basket\nmetadata:\n  version: "1.0.0"\n---\n\n## Rules\n- Read the archives.\n', encoding='utf-8')
-        key = learning.propose(a.AGENT_DIR, OWNER_CHAT_ID, 'Freeze membership first', 't1', 'basket_build')
-        learning.propose_change(a.AGENT_DIR, OWNER_CHAT_ID, key, skill, '- Read the archives.', '- Freeze the membership, then read the archives.')
-        raw = {'channel':'dashboard','message_id':-1,'date':time.time(),'text':f'Skill edit {key}: apply it.'}
+        source = f"message:{a._recall.note(OWNER_CHAT_ID, 'Freeze it first', 'telegram')}"
+        key = learning.propose(a.AGENT_DIR, OWNER_CHAT_ID, 'Freeze membership first', source, 'basket_build')
+        learning.propose_change(a.AGENT_DIR, OWNER_CHAT_ID, key, skill, '- Read the archives.', '- Freeze the membership, then read the archives.',
+                                {'claim': 'The rules read the archives before the membership is fixed.', 'anchor': '- Read the archives.'})
+        raw = {'channel':'dashboard','message_id':-1,'date':time.time(),'text':f'Skill edit {key}: apply it, no trial needed.'}
         self.assertTrue(a._settle_by_reply(decode(raw))[0])
-        self.assertIn('applied to SKILL.md', a.send_message.call_args[0][1])
+        self.assertIn('applied to SKILL.md, no trial', a.send_message.call_args[0][1])
         self.assertIn('Freeze the membership', skill.read_text(encoding='utf-8'))
         self.assertEqual(learning.proposals(a.AGENT_DIR, OWNER_CHAT_ID), [])
         self.assertEqual(a.conversations[OWNER_CHAT_ID][-1]['role'], 'assistant')          # Cato reads the outcome next turn

@@ -227,6 +227,10 @@ def main(args):
         from tabularium.channels.owner_telegram import OWNER_CHAT_ID
         root = _home()
         for name in [a for a in args[1:] if not a.startswith("--")] or ["coordinator"]:
+            if "--migrate" in args:       # 2026-11-10: checks without receipts become judgements; the grouping runs once
+                from tabularium.learning import themes
+                out = themes.migrate(root / name, OWNER_CHAT_ID)
+                print(f"== {name}: {out['relabelled']} lesson(s) relabelled, {len(out['themes'])} theme(s) proposed")
             gone = learning.expire(root / name, OWNER_CHAT_ID)
             print(f"== {name}: {len(gone)} candidate(s) expired")
             print(learning.digest(root / name, OWNER_CHAT_ID))

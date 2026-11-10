@@ -7,6 +7,9 @@ from tabularium.learning import learning
 from tabularium.records.project_store import ProjectStore
 
 SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\n## Membership\n- Read the archives for each name.\n'
+CAUSE = {"claim": "The method reads the archives before the membership is fixed, so a late change forces a rebuild.",
+         "anchor": "- Read the archives for each name."}
+SILENT = {"claim": "The method says nothing about when the membership is fixed.", "silent_at": "the Membership section"}
 
 
 class Lessons(unittest.TestCase):
@@ -20,30 +23,37 @@ class Lessons(unittest.TestCase):
         con.commit(); con.close()
         self.skill = self.root / "skills" / "basket" / "SKILL.md"
         self.skill.parent.mkdir(parents=True); self.skill.write_text(SKILL, encoding="utf-8")
-        self.key = learning.propose(self.root, 1, "Freeze the membership before building the workbook", "t1", "basket_build")
+        self.key = learning.propose(self.root, 1, "Freeze the membership before building the workbook", "message:7", "basket_build")
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def propose(self):
         return learning.propose_change(self.root, 1, self.key, self.skill, "- Read the archives for each name.",
-                                       "- Freeze the membership first; then read the archives once per name.")
+                                       "- Freeze the membership first; then read the archives once per name.", CAUSE)
+
+    def measured(self, task):
+        """A task in the records with a result, as a check's receipt."""
+        folder = self.root / "task_state" / "background" / str(task)
+        folder.mkdir(parents=True, exist_ok=True); (folder / "result.txt").write_text("done", encoding="utf-8")
+        return dict(task=task, receipt=f"task:{task}", method_sha=learning._sha(self.skill))
 
     def test_a_lesson_is_recorded_only_with_its_edit_and_is_then_already_proposed(self):
         # 2026-11-01: 183 candidates and 40 proposals nobody showed Alex; "those lessons never amounted to anything".
-        shown = learning.record(self.root, 1, "Freeze the membership list before building", "t2", self.skill,
-                                "- Read the archives for each name.", "- Freeze the membership first.")
+        shown = learning.record(self.root, 1, "Freeze the membership list before building", "message:7", self.skill,
+                                "- Read the archives for each name.", "- Freeze the membership first.", cause=CAUSE)
         self.assertEqual(learning.read(self.root, 1, shown["key"])["status"], "proposed")
         self.assertIn("REPLACE:", shown["show_owner"])
         before = len(learning._lessons(self.root, 1, learning.OPEN))
         with self.assertRaises(ValueError):
-            learning.record(self.root, 1, "A lesson with a misquoted edit", "t3", self.skill, "- Not in the file.", "- New rule.")
+            learning.record(self.root, 1, "A lesson with a misquoted edit", "message:7", self.skill, "- Not in the file.", "- New rule.", cause=CAUSE)
         self.assertEqual(len(learning._lessons(self.root, 1, learning.OPEN)), before)      # nothing recorded without a valid edit
 
     def test_a_habit_of_conversation_edits_the_persona_file(self):
         persona = self.root / "SKILL.md"; persona.write_text("# Cato\n\nAnswer in his register.\n", encoding="utf-8")
-        shown = learning.record(self.root, 1, "Asked Alex to confirm a plain instruction twice", "t4", persona, "",
-                                "Act on a plain instruction; ask only when two readings differ.")
+        shown = learning.record(self.root, 1, "Asked Alex to confirm a plain instruction twice", "message:7", persona, "",
+                                "Act on a plain instruction; ask only when two readings differ.",
+                                cause={"claim": "The persona file says nothing about plain instructions.", "silent_at": "instructions"})
         self.assertIn("ADD AT THE END", shown["show_owner"])
         self.assertEqual(learning.proposals(self.root, 1)[0]["skill"], "SKILL.md")
 
@@ -66,7 +76,7 @@ class Lessons(unittest.TestCase):
         self.assertIn("- Freeze the membership first; then read the archives once per name.", text)
         self.assertIn('version: "1.8.6"', text)
         self.assertIn("APPLIED", learning.hints(self.root, 1, "basket_build"))       # checked on the next task
-        self.assertEqual(learning.record_check(self.root, 1, self.key, True, "task 160: membership frozen first")["status"], "verified")
+        self.assertEqual(learning.record_check(self.root, 1, self.key, True, "task 160: membership frozen first", **self.measured(160))["status"], "verified")
         self.assertNotIn(self.key, learning.hints(self.root, 1, "basket_build"))
 
     def test_approval_needs_a_shown_proposal_and_owners_own_words(self):
@@ -88,25 +98,25 @@ class Lessons(unittest.TestCase):
 
     def test_a_recurrence_reopens_the_lesson(self):
         self.propose(); learning.approve(self.root, 1, self.key, 7, "yes, change the skill like that", skip_trial=True)
-        self.assertEqual(learning.record_check(self.root, 1, self.key, False, "task 161: rebuilt membership twice")["status"], "candidate")
+        self.assertEqual(learning.record_check(self.root, 1, self.key, False, "task 161: rebuilt membership twice", **self.measured(161))["status"], "candidate")
         self.assertIn("candidate, unapproved", learning.hints(self.root, 1, "basket_build"))
 
     def test_an_added_rule_is_one_ledger_entry_counted_by_checks_and_retired_on_his_words(self):
         """ACE-style ledger (2026-10-24): an addition is an entry, never a rewrite; checks count helped/hurt; a verified
         entry keeps being counted and the digest offers it for retirement once it hurts more than it helps."""
-        learning.propose_change(self.root, 1, self.key, self.skill, "", "Freeze the membership before building.")
+        learning.propose_change(self.root, 1, self.key, self.skill, "", "Freeze the membership before building.", SILENT)
         learning.approve(self.root, 1, self.key, 7, "yes, change the skill like that", skip_trial=True)
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("- Read the archives for each name.", text)                       # the prose is untouched
         self.assertIn(learning.LEDGER, text)
         self.assertIn(f"- [{self.key}] (", text)
         self.assertTrue(text.rstrip().endswith("Freeze the membership before building."))
-        out = learning.record_check(self.root, 1, self.key, True, "task 160: frozen first")
+        out = learning.record_check(self.root, 1, self.key, True, "task 160: frozen first", **self.measured(160))
         self.assertEqual((out["status"], out["helped"], out["hurt"]), ("verified", 1, 0))
-        out = learning.record_check(self.root, 1, self.key, False, "task 161: rebuilt twice")   # verified stays, counted
+        out = learning.record_check(self.root, 1, self.key, False, "task 161: rebuilt twice", **self.measured(161))   # verified stays, counted
         self.assertEqual((out["status"], out["helped"], out["hurt"]), ("verified", 1, 1))
         self.assertNotIn("RETIRE?", learning.digest(self.root, 1))
-        learning.record_check(self.root, 1, self.key, False, "task 162: rebuilt again")
+        learning.record_check(self.root, 1, self.key, False, "task 162: rebuilt again", **self.measured(162))
         self.assertIn(f"RETIRE? {self.key}: hurt 2, helped 1", learning.digest(self.root, 1))
         with self.assertRaises(ValueError):
             learning.retire(self.root, 1, self.key, 8, "yes, change the skill like that")   # assistant's words
@@ -129,18 +139,24 @@ class Lessons(unittest.TestCase):
         self.assertEqual(self.skill.read_text(encoding="utf-8"), SKILL)
 
     def test_his_dashboard_verdict_is_settled_by_the_runtime_not_by_the_agent(self):
-        """2026-11-08: 25 edits he had said "apply it" to stood on his list for a day. drop retires; apply applies at
-        once when the skill has no benchmark cases to trial on, and the record says so."""
+        """2026-11-08: 25 edits he had said "apply it" to stood on his list for a day. drop retires; apply, no trial
+        applies at once. apply on a skill with no benchmark cases applies nothing (2026-11-10): the edit stays on his
+        list with the reason and his two choices."""
         self.propose()
         out = learning.settle_go(self.root, 1, self.key, "apply it", 7, "yes, change the skill like that", store=None)
-        self.assertIn("applied to SKILL.md; no trial possible", out)
+        self.assertIn("not applied. No trial possible", out)
         d = learning.read(self.root, 1, self.key)
-        self.assertEqual(d["status"], "applied")
-        self.assertIn("no trial possible", d["trial_skipped"]["reason"])
+        self.assertEqual(d["status"], "proposed")
+        self.assertNotIn("Freeze the membership first", self.skill.read_text(encoding="utf-8"))
+        self.assertTrue(learning.proposals(self.root, 1)[0]["blocked"])
+        self.assertIn("NO TRIAL POSSIBLE", learning.proposals(self.root, 1)[0]["shown"])
+        out = learning.settle_go(self.root, 1, self.key, "apply it, no trial needed", 7, "yes, change the skill like that", store=None)
+        self.assertIn("applied to SKILL.md, no trial", out)
+        self.assertEqual(learning.read(self.root, 1, self.key)["status"], "applied")
         self.assertIn("Freeze the membership first", self.skill.read_text(encoding="utf-8"))
         self.assertEqual(learning.proposals(self.root, 1), [])
-        key2 = learning.propose(self.root, 1, "Another lesson", "t2", "basket_build")
-        learning.propose_change(self.root, 1, key2, self.skill, "", "- Say when the archives were read.")
+        key2 = learning.propose(self.root, 1, "Another lesson", "message:7", "basket_build")
+        learning.propose_change(self.root, 1, key2, self.skill, "", "- Say when the archives were read.", SILENT)
         self.assertIn("Dropped before it was applied", learning.settle_go(self.root, 1, key2, "drop it", 7, "yes, change the skill like that", store=None))
         self.assertEqual(learning.read(self.root, 1, key2)["status"], "retired")
         with self.assertRaises(ValueError):                                   # settled twice changes nothing
@@ -155,12 +171,13 @@ class Lessons(unittest.TestCase):
         self.assertIn("TRIAL DONE:\nvariant 3/4", learning.proposals(self.root, 1)[0]["shown"])
 
     def test_two_entries_saying_the_same_thing_are_offered_for_a_merge(self):
-        learning.propose_change(self.root, 1, self.key, self.skill, "", "Freeze the membership list before the build.")
+        learning.propose_change(self.root, 1, self.key, self.skill, "", "Freeze the membership list before the build.", SILENT)
         learning.approve(self.root, 1, self.key, 7, "yes, change the skill like that", skip_trial=True)
-        k2 = learning.propose(self.root, 1, "Freeze the membership list before building", "t2", "basket_build")
-        learning.propose_change(self.root, 1, k2, self.skill, "", "Freeze the membership list before building.")
+        k2 = learning.propose(self.root, 1, "Freeze the membership list before building", "message:7", "basket_build")
+        learning.propose_change(self.root, 1, k2, self.skill, "", "Freeze the membership list before building.", SILENT)
         learning.approve(self.root, 1, k2, 7, "yes, change the skill like that", skip_trial=True)
-        self.assertIn(f"MERGE? {self.key} and {k2}", learning.digest(self.root, 1))
+        merge = next(l for l in learning.digest(self.root, 1).splitlines() if l.startswith("- MERGE?"))
+        self.assertEqual({self.key, k2}, {w for w in merge.split() if w.startswith("lesson-")})
         self.assertEqual(self.skill.read_text(encoding="utf-8").count(learning.LEDGER), 1)
 
     def test_the_model_cannot_move_a_lesson_past_candidate(self):
@@ -187,10 +204,12 @@ class RememberRecordsTheEditOrNothing(unittest.TestCase):
                 agent = make_agent("coordinator", root)
             (root / "SKILL.md").write_text("# Cato\n", encoding="utf-8")
             out = agent.execute_tool("remember", {"kind": "lesson", "content": "I asked who the buyer was"}, 1)
-            self.assertIn("Without the edit nothing is recorded", str(out))
+            self.assertIn("Without the cause and the edit nothing is recorded", str(out))
             self.assertEqual(learning._lessons(root, 1, learning.OPEN), [])
-            out = agent.execute_tool("remember", {"kind": "lesson", "content": "I asked who the buyer was",
-                                                  "method_path": str(root / "SKILL.md"), "new": "Act on a plain instruction."}, 1)
+            source = f"message:{agent._recall.note(1, 'Just do it', 'telegram')}"
+            out = agent.execute_tool("remember", {"kind": "lesson", "content": "I asked who the buyer was", "source": source,
+                                                  "method_path": str(root / "SKILL.md"), "new": "Act on a plain instruction.",
+                                                  "cause": "The persona file says nothing about plain instructions.", "silent_at": "instructions"}, 1)
             self.assertIn("registered for Alex's go", str(out))
             self.assertEqual(learning.proposals(root, 1)[0]["skill"], "SKILL.md")
 

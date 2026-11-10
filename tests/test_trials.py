@@ -40,7 +40,7 @@ class Trials(unittest.TestCase):
         self.skill = self.root / 'skills/basket/SKILL.md'
         self.skill.parent.mkdir(parents=True)
         self.skill.write_text(SKILL, encoding='utf-8')
-        self.key = learning.propose(self.root, 1, 'Freeze membership', 't1', 'basket_build')
+        self.key = learning.propose(self.root, 1, 'Freeze membership', 'message:7', 'basket_build')
         self.propose()
         self.store = rt.TaskStore(self.root)
         self.spec = dict(development_cases=['dev'], heldout_cases=['held'], repetitions=2, max_steps=12)
@@ -53,7 +53,7 @@ class Trials(unittest.TestCase):
             os.environ.pop(name, None)
 
     def propose(self, text='Freeze membership.'):
-        learning.propose_change(self.root, 1, self.key, self.skill, '', text)
+        learning.propose_change(self.root, 1, self.key, self.skill, '', text, {'claim': 'The skill says nothing about it.', 'silent_at': 'the rules'})
 
     def start(self):
         return trials.start(self.root, 1, self.key, self.spec, self.store)
