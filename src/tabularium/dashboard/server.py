@@ -85,6 +85,10 @@ def state():
         transport=read_json(folder/'transport.json')
         agent=data['agents'].setdefault(name,{})
         agent['name']=name; agent['transport']=transport
+        if not (ROOT/name/'SKILL.md').exists():   # a slot this home has not set up: show how, not a stale heartbeat
+            from tabularium.cli import next_steps
+            agent.update(status='not set up',errors=[],setup={'command':f'tabularium --home {ROOT} init {name}','next':next_steps(ROOT,name)})
+            continue
         ui=read_json(folder/'ui_state.json')
         agent['controls_live']=ui.get('pid')==agent['pid'] and time.time()-ui.get('updated',0)<15
         prefs=read_json(ROOT/name/f'model_{OWNER_CHAT_ID}.json')

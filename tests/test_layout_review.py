@@ -132,6 +132,27 @@ class Launch(unittest.TestCase):
                 reloaded._dpapi()
         importlib.reload(module)
 
+    def test_dashboard_shows_a_slot_without_an_agent_folder_as_not_set_up(self):
+        import importlib
+        from unittest.mock import Mock
+        from tabularium.core.roster import AGENTS
+        with patch('tabularium.records.background_runtime.TaskStore', return_value=Mock()):
+            dashboard = importlib.import_module('tabularium.dashboard.server')
+        with tempfile.TemporaryDirectory() as home:
+            home = Path(home)
+            first, second = AGENTS[0], AGENTS[1]
+            (home / first).mkdir()
+            (home / first / 'SKILL.md').write_text('an agent', encoding='utf-8')
+            with patch.object(dashboard, 'ROOT', home), patch.object(dashboard, 'TASKS', Mock()), patch.object(dashboard, 'TASK_STORES', {}):
+                agents = dashboard.state()['agents']
+            self.assertNotIn('setup', agents[first])
+            self.assertEqual(agents[second]['status'], 'not set up')
+            self.assertEqual(agents[second]['errors'], [])
+            self.assertEqual(agents[second]['setup']['command'], f'tabularium --home {home} init {second}')
+            self.assertIn(str(home / second / 'SKILL.md'), agents[second]['setup']['next'])
+            from tabularium import cli
+            self.assertTrue(cli.init(home, [second]).endswith(agents[second]['setup']['next']))
+
 
 if __name__ == '__main__':
     unittest.main()

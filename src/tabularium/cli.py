@@ -43,9 +43,13 @@ def init(home, argv):
             written.append(str(target))
     (home / "logs").mkdir(exist_ok=True)
     lines = ["Written:"] + ["  " + w for w in written] if written else [f"Nothing to write: {folder} and the home files exist."]
-    lines += ["", f"Next: fill in {home / '.env'} (your Telegram user id, the bot token, one model key), edit",
-              f"{folder / 'SKILL.md'} so it describes you and the agent, then: tabularium run {slot}"]
-    return "\n".join(lines)
+    return "\n".join(lines + ["", "Next: " + next_steps(home, slot)])
+
+
+def next_steps(home, slot):
+    """What a slot needs after init; the dashboard shows the same sentence for a slot that has no SKILL.md yet."""
+    return (f"fill in {home / '.env'} (your Telegram user id, the bot token, one model key), edit "
+            f"{home / slot / 'SKILL.md'} so it describes you and the agent, then: tabularium --home {home} run {slot}")
 
 
 def worker(argv):
