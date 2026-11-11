@@ -1,18 +1,18 @@
-"""Lessons That Change Methods, step 2: observations, themes and method reviews (tabularium.learning.themes)."""
+"""Lessons That Change Methods, step 2: observations, dockets and method reviews (tabularium.learning.dockets)."""
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from tabularium.learning import learning, themes
+from tabularium.learning import learning, dockets
 from tabularium.records import background_runtime as rt
 
 SKILL = '---\nname: briefs\nmetadata:\n  version: "1.0.0"\n---\n\n## Acceptance\n- State what done looks like.\n'
 DAY = 86400
 
 
-class Themes(unittest.TestCase):
+class Dockets(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
         (self.root / "task_state").mkdir()
@@ -42,59 +42,59 @@ class Themes(unittest.TestCase):
     def test_the_runtime_proposes_membership_and_only_the_agent_confirms_or_reverses_it(self):
         keys = [self.prose_only(n) for n in range(3)]
         other = self.observe("Sent the workbook before the owner had seen the membership", 9)
-        touched = themes.propose_groups(self.root, 1)
+        touched = dockets.propose_groups(self.root, 1)
         self.assertEqual(len(touched), 1)
-        theme = themes.read(self.root, 1, touched[0])
-        self.assertEqual((theme["status"], theme["members"], sorted(theme["unreviewed"])), ("proposed", [], sorted(keys)))
-        self.assertNotIn(other, themes.members_of(theme))
-        with self.assertRaisesRegex(ValueError, "No such theme"):
-            themes.group(self.root, 1, "theme-nope", keys)
-        out = themes.group(self.root, 1, touched[0], keys[:2], method_path=self.skill)
-        theme = themes.read(self.root, 1, touched[0])
-        self.assertEqual((out["status"], theme["members"], theme["unreviewed"]), ("open", keys[:2], [keys[2]]))
-        self.assertEqual(theme["method_path"], str(self.skill))
-        with self.assertRaisesRegex(ValueError, "belongs to theme"):          # one observation, one theme
-            themes.group(self.root, 1, "", [keys[0]])
-        before = themes.observed_at(self.root, 1, keys[0])
-        out = themes.ungroup(self.root, 1, touched[0], [keys[0]], note="a different failure: the brief had no acceptance at all")
+        docket = dockets.read(self.root, 1, touched[0])
+        self.assertEqual((docket["status"], docket["members"], sorted(docket["unreviewed"])), ("proposed", [], sorted(keys)))
+        self.assertNotIn(other, dockets.members_of(docket))
+        with self.assertRaisesRegex(ValueError, "No such docket"):
+            dockets.group(self.root, 1, "docket-nope", keys)
+        out = dockets.group(self.root, 1, touched[0], keys[:2], method_path=self.skill)
+        docket = dockets.read(self.root, 1, touched[0])
+        self.assertEqual((out["status"], docket["members"], docket["unreviewed"]), ("open", keys[:2], [keys[2]]))
+        self.assertEqual(docket["method_path"], str(self.skill))
+        with self.assertRaisesRegex(ValueError, "belongs to docket"):          # one observation, one docket
+            dockets.group(self.root, 1, "", [keys[0]])
+        before = dockets.observed_at(self.root, 1, keys[0])
+        out = dockets.ungroup(self.root, 1, touched[0], [keys[0]], note="a different failure: the brief had no acceptance at all")
         self.assertEqual((out["members"], out["unreviewed"]), (1, 1))
         self.assertEqual(learning.read(self.root, 1, keys[0])["status"], "candidate")     # untouched, with its time
-        self.assertEqual(themes.observed_at(self.root, 1, keys[0]), before)
-        self.assertNotIn(keys[0], themes.grouped(self.root, 1))
+        self.assertEqual(dockets.observed_at(self.root, 1, keys[0]), before)
+        self.assertNotIn(keys[0], dockets.grouped(self.root, 1))
         state = learning.read(self.root, 1, keys[0])["review"]                            # judged: never proposed again
-        self.assertEqual((state["theme"], state["verdict"]), (touched[0], "excluded"))
+        self.assertEqual((state["docket"], state["verdict"]), (touched[0], "excluded"))
         self.assertIn("different failure", state["note"])
-        self.assertEqual(themes.propose_groups(self.root, 1), [])
-        self.assertNotIn(keys[0], themes.members_of(themes.read(self.root, 1, touched[0])))
+        self.assertEqual(dockets.propose_groups(self.root, 1), [])
+        self.assertNotIn(keys[0], dockets.members_of(dockets.read(self.root, 1, touched[0])))
         self.assertEqual(learning.read(self.root, 1, keys[1])["review"]["verdict"], "member")
         self.assertEqual(learning.read(self.root, 1, keys[2])["review"]["verdict"], "proposed")
-        themes.ungroup(self.root, 1, touched[0], keys[1:])
-        self.assertEqual(themes.read(self.root, 1, touched[0])["status"], "closed")       # emptied: closed, not deleted
+        dockets.ungroup(self.root, 1, touched[0], keys[1:])
+        self.assertEqual(dockets.read(self.root, 1, touched[0])["status"], "closed")       # emptied: closed, not deleted
 
     def test_three_observations_in_sixty_days_open_one_method_review_in_the_runtime_lane(self):
         now = 1_800_000_000
         old = self.prose_only(0, at=now - 70 * DAY)
         recent = [self.prose_only(n, at=now - n * DAY) for n in (1, 2)]
-        themes.propose_groups(self.root, 1, now)
-        self.assertEqual(themes.flush(self.agent, now), [])                                 # two recent: below the threshold
+        dockets.propose_groups(self.root, 1, now)
+        self.assertEqual(dockets.flush(self.agent, now), [])                                 # two recent: below the threshold
         third = self.prose_only(3, at=now - 30 * DAY)
-        started = themes.flush(self.agent, now)
+        started = dockets.flush(self.agent, now)
         self.assertEqual(len(started), 1)
         task = self.store.get(started[0])
-        self.assertTrue(task["request"].startswith(themes.PREFIX))
+        self.assertTrue(task["request"].startswith(dockets.PREFIX))
         self.assertTrue(rt.meta(task["request"]))                                            # the runtime lane
         from tabularium.learning.corrections import is_diagnosis
         self.assertTrue(is_diagnosis(task["request"]))                                       # record-only: no questions
         for k in (old, *recent, third):
             self.assertIn(k, task["request"])
-        key = next(k for k, d in themes.themes(self.root, 1) if d.get("review_task") == started[0])
-        theme = themes.read(self.root, 1, key)
-        self.assertEqual(theme["status"], "review")
-        self.assertEqual(themes.flush(self.agent, now), [])                                 # never queued twice
+        key = next(k for k, d in dockets.dockets(self.root, 1) if d.get("review_task") == started[0])
+        docket = dockets.read(self.root, 1, key)
+        self.assertEqual(docket["status"], "review")
+        self.assertEqual(dockets.flush(self.agent, now), [])                                 # never queued twice
         fourth = self.prose_only(4, at=now - 5 * DAY)                                        # attaches, unreviewed; no new line
-        self.assertEqual(themes.flush(self.agent, now), [])
-        theme = themes.read(self.root, 1, key)
-        self.assertIn(fourth, theme["unreviewed"])
+        self.assertEqual(dockets.flush(self.agent, now), [])
+        docket = dockets.read(self.root, 1, key)
+        self.assertIn(fourth, docket["unreviewed"])
         digest = learning.digest(self.root, 1)
         self.assertIn(f"x5 {key}", digest); self.assertIn("method review open", digest)
         self.assertNotIn(fourth, digest)
@@ -102,30 +102,30 @@ class Themes(unittest.TestCase):
         self.assertEqual(learning.read(self.root, 1, old)["status"], "candidate")
         # A second round needs three observations proposed since the last review started, not a recount.
         self.store.control(1, started[0], "cancel", "settled for the test")
-        self.assertEqual(themes.flush(self.agent, now + 60), [])                            # one new (the fourth): no round
-        themes.ungroup(self.root, 1, key, [fourth], note="unrelated")
+        self.assertEqual(dockets.flush(self.agent, now + 60), [])                            # one new (the fourth): no round
+        dockets.ungroup(self.root, 1, key, [fourth], note="unrelated")
         for n in (5, 6):
             self.prose_only(n, at=now - n * DAY)
-        self.assertEqual(themes.flush(self.agent, now + 120), [])                           # two new, one excluded: no round
+        self.assertEqual(dockets.flush(self.agent, now + 120), [])                           # two new, one excluded: no round
         self.prose_only(7, at=now - 7 * DAY)
-        again = themes.flush(self.agent, now + 180)
+        again = dockets.flush(self.agent, now + 180)
         self.assertEqual(len(again), 1)
-        self.assertEqual(len(themes.read(self.root, 1, key)["reviews"]), 2)
-        self.assertEqual(themes.flush(self.agent, now + 240), [])
+        self.assertEqual(len(dockets.read(self.root, 1, key)["reviews"]), 2)
+        self.assertEqual(dockets.flush(self.agent, now + 240), [])
 
     def test_an_applied_proposal_that_explains_the_members_closes_the_theme(self):
         keys = [self.prose_only(n) for n in range(3)]
-        themes.propose_groups(self.root, 1)
-        key = themes.themes(self.root, 1)[0][0]
-        themes.group(self.root, 1, key, keys, method_path=self.skill)
+        dockets.propose_groups(self.root, 1)
+        key = dockets.dockets(self.root, 1)[0][0]
+        dockets.group(self.root, 1, key, keys, method_path=self.skill)
         learning.propose_change(self.root, 1, keys[0], self.skill, "- State what done looks like.",
                                 "- State done as a check a script can run: a file, a value, a command's exit code.",
                                 {"claim": "The acceptance rule allows prose, so a worker cannot verify its own result.",
                                  "anchor": "- State what done looks like."}, explains=keys[1:])
         learning.approve(self.root, 1, keys[0], 7, "yes", skip_trial=True)
-        theme = themes.read(self.root, 1, key)
-        self.assertEqual((theme["status"], theme["closed"]["by"]), ("closed", keys[0]))
-        self.assertEqual([r["key"] for r in themes.reviews(self.root, 1)], [])
+        docket = dockets.read(self.root, 1, key)
+        self.assertEqual((docket["status"], docket["closed"]["by"]), ("closed", keys[0]))
+        self.assertEqual([r["key"] for r in dockets.reviews(self.root, 1)], [])
 
     def test_migration_relabels_unreceipted_checks_and_proposes_the_grouping_once(self):
         key = self.prose_only(0)
@@ -136,24 +136,24 @@ class Themes(unittest.TestCase):
             self.prose_only(n)
         note = self.observe("An October lesson whose checks are one note", 8)      # model-written: checks is a string
         learning._update(self.root, 1, note, lambda d: d.update(checks="Checked on the Tiro task: fine"))
-        out = themes.migrate(self.root, 1)
+        out = dockets.migrate(self.root, 1)
         self.assertEqual(out["relabelled"], 2)
         self.assertEqual(learning.read(self.root, 1, note)["checks"], [{"worked": None, "evidence": "Checked on the Tiro task: fine", "judgement": True, "at": learning.read(self.root, 1, note)["checks"][0]["at"]}])
         d = learning.read(self.root, 1, key)
         self.assertTrue(d["checks"][0]["judgement"]); self.assertEqual((d["helped"], d["hurt"], d["status"]), (0, 0, "verified"))
-        self.assertEqual(len(out["themes"]), 1)
-        self.assertEqual(themes.migrate(self.root, 1), {"relabelled": 0, "marked": 0, "themes": []})      # idempotent
-        theme = out["themes"][0]
-        members = themes.members_of(themes.read(self.root, 1, theme))
-        themes.ungroup(self.root, 1, theme, members[:1], note="old-style exclusion")
+        self.assertEqual(len(out["dockets"]), 1)
+        self.assertEqual(dockets.migrate(self.root, 1), {"relabelled": 0, "marked": 0, "dockets": []})      # idempotent
+        docket = out["dockets"][0]
+        members = dockets.members_of(dockets.read(self.root, 1, docket))
+        dockets.ungroup(self.root, 1, docket, members[:1], note="old-style exclusion")
         for k in members:                                                                    # records from before review states
             learning._update(self.root, 1, k, lambda d: d.pop("review", None))
-        t = themes.read(self.root, 1, theme); t["unreviewed"] = members; themes._save(self.root, 1, theme, t)
-        out = themes.migrate(self.root, 1)
-        self.assertEqual((out["marked"], out["themes"]), (len(members), []))
+        t = dockets.read(self.root, 1, docket); t["unreviewed"] = members; dockets._save(self.root, 1, docket, t)
+        out = dockets.migrate(self.root, 1)
+        self.assertEqual((out["marked"], out["dockets"]), (len(members), []))
         self.assertEqual(learning.read(self.root, 1, members[0])["review"]["verdict"], "excluded")
         self.assertEqual(learning.read(self.root, 1, members[1])["review"]["verdict"], "proposed")
-        self.assertNotIn(members[0], themes.read(self.root, 1, theme)["unreviewed"])
+        self.assertNotIn(members[0], dockets.read(self.root, 1, docket)["unreviewed"])
 
 
 if __name__ == "__main__":

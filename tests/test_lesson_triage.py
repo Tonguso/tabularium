@@ -28,7 +28,7 @@ class Triage(unittest.TestCase):
             learning.propose(self.root, self.chat, "Always cite the filing date when quoting a 10-K figure", f"task {i}")
         learning.propose(self.root, self.chat, "Check the basket weights sum to one before sending", "task 9")
         text = learning.digest(self.root, self.chat)
-        self.assertIn("4 candidates in 2 themes", text)
+        self.assertIn("4 candidates in 2 dockets", text)
         lines = text.splitlines()
         self.assertTrue(lines[1].startswith("- x3 "), lines)
         self.assertIn("filing date", lines[1])

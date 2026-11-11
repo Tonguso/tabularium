@@ -11,7 +11,7 @@
     python agent_control.py start_all
         Start the supervisor if nothing is running; otherwise request a restart of every agent (what start_all.bat does).
     python agent_control.py lessons [agent ...]
-        Lesson triage: expire candidates untouched for 30 days, print the digest (proposals first, then themes by repeats).
+        Lesson triage: expire candidates untouched for 30 days, print the digest (proposals first, then dockets by repeats).
     python agent_control.py eval <agent> [--interactions] [--k N] [--sample N]
         Evaluate reviewed synthetic cases with independent artifact/state checks. Default: static artifacts on
         background workers. --interactions: disposable processes, controlled follow-ups/restart/delegation,
@@ -228,9 +228,9 @@ def main(args):
         root = _home()
         for name in [a for a in args[1:] if not a.startswith("--")] or ["coordinator"]:
             if "--migrate" in args:       # 2026-11-10: checks without receipts become judgements; the grouping runs once
-                from tabularium.learning import themes
-                out = themes.migrate(root / name, OWNER_CHAT_ID)
-                print(f"== {name}: {out['relabelled']} lesson(s) relabelled, {len(out['themes'])} theme(s) proposed")
+                from tabularium.learning import dockets
+                out = dockets.migrate(root / name, OWNER_CHAT_ID)
+                print(f"== {name}: {out['relabelled']} lesson(s) relabelled, {len(out['dockets'])} docket(s) proposed")
             gone = learning.expire(root / name, OWNER_CHAT_ID)
             print(f"== {name}: {len(gone)} candidate(s) expired")
             print(learning.digest(root / name, OWNER_CHAT_ID))

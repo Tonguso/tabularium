@@ -128,7 +128,7 @@ The white paper is the full account. The short version, with the figures from it
 - [Working together](docs/WHITEPAPER.md#5-working-together): delegation by contract, waiting without a slot,
   acceptance and the owner's view, privacy by role.
 - [Learning](docs/WHITEPAPER.md#8-learning): an observation becomes a lesson when the agent names the decision in
-  the method that allowed it; themes and method reviews, the owner's verdict, trial, applied, measured.
+  the method that allowed it; dockets and method reviews, the owner's verdict, trial, applied, measured.
 - [Safety rails](docs/WHITEPAPER.md#9-safety-rails): what each one stops and how.
 
 The larger mechanisms each have a design note with the failure that motivated it and the measurement before and

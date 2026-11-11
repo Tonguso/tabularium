@@ -16,8 +16,8 @@ One flow for every lesson: record, show, apply on Alex's go, measure.
    (lesson action=case with its fixtures, then calibrate).
 3. Measure: on the next real task where the failure could recur, lesson(action='checked', key, worked, evidence,
    task, receipt, method_sha). A check without those three is a judgement and counts nothing.
-4. Themes: the runtime proposes membership for observations that look alike and opens a method review at three in
+4. Dockets: the runtime proposes membership for observations that look alike and opens a method review at three in
    sixty days. Confirm or reverse membership (lesson action=group / ungroup) and answer the review with one cause and
-   one edit for the theme. Fold (lesson action=fold) absorbs ledger entries with measured checks into the prose.
+   one edit for the docket. Fold (lesson action=fold) absorbs ledger entries with measured checks into the prose.
 Skills are yours to change this way; runtime code is not: for a lesson that needs a code change, write the runtime
 report and leave the edit to the coding agents.

@@ -339,7 +339,7 @@ principle: a failure is an observation, and a lesson is a claim about the decisi
 The edit that closes a lesson removes that decision; a rule that must be remembered is a sign that the method still
 permits the failure.
 
-The first month of the loop had produced the opposite. The coordinator's register held 144 candidates in 23 themes
+The first month of the loop had produced the opposite. The coordinator's register held 144 candidates in 23 dockets
 and 19 applied edits; every applied edit was a line appended to a skill's ledger and none rewrote a rule, while one
 failure (briefs whose acceptance was stated in prose, so no script could verify the result) had recurred 116 times
 and was still a candidate. The record was the unit of thought: one failure, one edit, appended because appending
@@ -348,7 +348,7 @@ accepts rather than what the agent is told.
 
 1. **Observation.** A failure noticed by the agent, by a worker's checkpoint or by the owner's correction is recorded
    as an observation: text, time, source and task. Observations are evidence; they are never merged away, and an
-   observation that belongs to a theme never expires.
+   observation that belongs to a docket never expires.
 2. **Cause.** To propose an edit, the agent names the cause: a claim about the decision in the method that allowed
    the failure, with an anchor the runtime checks, a passage quoted exactly from the method file, which the edit
    must then rewrite, or the statement that the method is silent at a named place, the only case in which a line may
@@ -356,11 +356,11 @@ accepts rather than what the agent is told.
    receipt (the owner's message or a task record); a claim with neither a receipt nor a second instance stays an
    observation. The runtime checks the anchor and the observations; the claim itself is the owner's to judge
    against the instances it cites, as every edit is.
-3. **Themes and method review.** The runtime proposes which observations belong together, from the same similarity
-   measure the digest used, and stores the theme; only the owning agent confirms or reverses membership, so a wrong
+3. **Dockets and method review.** The runtime proposes which observations belong together, from the same similarity
+   measure the digest used, and stores the docket; only the owning agent confirms or reverses membership, so a wrong
    merge is undone without loss. Three observations within sixty days open a method review: one task in the runtime
-   lane, keyed by the theme so it is never queued twice, that asks the agent for one cause and one edit for the theme
-   as a whole. Later observations attach to the theme as unreviewed members instead of becoming new digest lines.
+   lane, keyed by the docket so it is never queued twice, that asks the agent for one cause and one edit for the docket
+   as a whole. Later observations attach to the docket as unreviewed members instead of becoming new digest lines.
 4. **The owner's verdict.** The runtime, not the agent, puts every proposal in front of the owner with its cause,
    its anchor and the observations it explains: on the "Waiting on you" page at any time, and in a weekly message.
    A verdict from the page is settled by the runtime on arrival. Drop retires the edit; apply starts the trial where
@@ -408,7 +408,7 @@ an internally broken case, and only the owner's spot-check catches a wrong readi
 GDPevo's construction of held-out tests from atomic rules, with the owner's gate in place of its reviewer agents.
 
 The lesson guidance is one text kept with the package and appended to the prompt of every role that learns, so the
-three learning agents cannot drift apart in how they treat a failure. The weekly digest lists the stored themes
+three learning agents cannot drift apart in how they treat a failure. The weekly digest lists the stored dockets
 with their counts and states and offers for retirement an entry that has hurt more often than it helped. Retirement,
 like approval, happens only on the owner's quoted words; the counts come from measured checks, never from the
 agent's opinion of its own rule. Proposals addressed to another agent's method, and lessons whose cause lies in
@@ -579,7 +579,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-07 | Asked to operate the owner's machine, the agent could only answer that it had no tool that sees or touches the desktop | One desktop tool for every agent, granted per task by the owner's yes and released by his next message or his hand on the mouse |
 | 2026-11-08 | One misaligned red strip on a logo produced fourteen questions to the owner in three hours, six of them re-offering what he had refused, from a foreground that briefed every nudge to a worker and from the worker itself | Work that fits in the turn is done in the turn; the owner's answers of the last two days ride in the live evidence of every turn and worker as rulings; a question about a shape goes out as the picture with the candidates drawn on it |
 | 2026-11-08 | Twenty-five skill edits the owner had approved from the dashboard stayed on his list for a day: applying them depended on the agent running a trial no skill had cases for, then calling approve | The runtime settles a dashboard verdict in code the moment it arrives, as it settles a parked action: drop retires, apply runs the trial where the skill has cases and otherwise applies the edit and records why no trial ran; an edit on trial is the runtime's work, not the owner's, until its report returns |
-| 2026-11-10 | A month of lessons had produced nineteen ledger reminders and no rewritten rule, while one failure recurred 116 times as unread candidates; the agent proposed patches because the record asked for one failure and one edit | A proposal names the decision in the method that allowed the failure, anchored in the method file, and the edit rewrites it; stored themes open a method review at three observations in sixty days; a check counts only with a task, a receipt and the method version; "apply it" without a usable case applies nothing |
+| 2026-11-10 | A month of lessons had produced nineteen ledger reminders and no rewritten rule, while one failure recurred 116 times as unread candidates; the agent proposed patches because the record asked for one failure and one edit | A proposal names the decision in the method that allowed the failure, anchored in the method file, and the edit rewrites it; stored dockets open a method review at three observations in sixty days; a check counts only with a task, a receipt and the method version; "apply it" without a usable case applies nothing |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
@@ -603,6 +603,6 @@ office, where the decisions and contracts that no magistrate's word could overri
 | Skill | A folder with a written method the agent loads when a task matches |
 | Lesson | A claim about the decision in a method that allowed a failure, anchored in the method, with the observations it explains and the edit that removes it; trialled and applied or dropped by the owner |
 | Observation | A recorded failure: text, time, source and task; the evidence a lesson is built from |
-| Theme | A stored group of observations of one method, proposed by the runtime and confirmed by the owning agent; three in sixty days open a method review |
+| Docket | A stored group of observations of one method, proposed by the runtime and confirmed by the owning agent; three in sixty days open a method review |
 | Ledger | The section at the end of a skill where approved additions live as tagged entries with helped and hurt counts |
 | Supervisor | The process that starts, watches and restarts the others |

@@ -421,10 +421,10 @@ class AgentRuntime(SharedHandlers):
             except Exception as exc:
                 print(f"[correction] flush error: {type(exc).__name__}: {exc}")
             try:
-                from tabularium.learning import themes        # membership proposals and due method reviews (2026-11-10)
-                themes.flush(self)
+                from tabularium.learning import dockets       # membership proposals and due method reviews (2026-11-10)
+                dockets.flush(self)
             except Exception as exc:
-                print(f"[themes] flush error: {type(exc).__name__}: {exc}")
+                print(f"[dockets] flush error: {type(exc).__name__}: {exc}")
             flag = self.AGENT_DIR / "task_state" / "memory_trial_requested"     # consolidation trial (2026-10-20)
             if flag.exists():
                 flag.unlink(missing_ok=True)

@@ -60,9 +60,9 @@ the lesson register when he chooses. He does not have to explain the error; work
 
 
 def is_diagnosis(request):
-    """Record-only runtime work about the agent's own method: a correction diagnosis or a theme's method review
-    (tabularium.learning.themes). Neither may ask the owner anything or claim a completed task."""
-    from tabularium.learning.themes import PREFIX as REVIEW
+    """Record-only runtime work about the agent's own method: a correction diagnosis or a docket's method review
+    (tabularium.learning.dockets). Neither may ask the owner anything or claim a completed task."""
+    from tabularium.learning.dockets import PREFIX as REVIEW
     return str(request or "").startswith((PREFIX, REVIEW))
 
 
