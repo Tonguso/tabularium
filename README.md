@@ -158,8 +158,7 @@ The code is one package, `src/tabularium/`; an installation's agents and records
 
 Outside the package: `coordinator/`, `librarian/`, `engineer/`, `private/` are the reference cast's folders (skills and
 routing; no memory or records), so the repository root is itself a valid home for development. `tests/` is the
-offline suite that a release runs, `docs/` the white paper, its figures and the design notes, `tools/` the scripts
-that built this layout.
+offline suite that a release runs, `docs/` the white paper, its figures and the design notes.
 
 A home folder holds, per agent, `<slot>/SKILL.md`, `memory.md`, `agent.toml`, `skills/`, `routing.json` and the
 agent's records under `task_state/`; and for the installation `.env`, `POLICY.md`, `logs/` and the dashboard's state
