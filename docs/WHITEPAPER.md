@@ -1,6 +1,6 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.5 (draft), 10 November 2026
+Version 0.5 (draft), 11 November 2026
 
 ## Abstract
 
@@ -358,9 +358,14 @@ accepts rather than what the agent is told.
    against the instances it cites, as every edit is.
 3. **Dockets and method review.** The runtime proposes which observations belong together, from the same similarity
    measure the digest used, and stores the docket; only the owning agent confirms or reverses membership, so a wrong
-   merge is undone without loss. Three observations within sixty days open a method review: one task in the runtime
-   lane, keyed by the docket so it is never queued twice, that asks the agent for one cause and one edit for the docket
-   as a whole. Later observations attach to the docket as unreviewed members instead of becoming new digest lines.
+   merge is undone without loss. Each observation carries its own review state (proposed, member or excluded) on its
+   record, and the runtime proposes membership only for observations with none, so an observation the agent has
+   excluded is never offered to the same docket again. Three observations within sixty days open a method review:
+   one task in the runtime lane, keyed by the docket so it is never queued twice, that asks the agent for one cause
+   and one edit for the docket as a whole. Later observations attach to the docket as unreviewed members instead of
+   becoming new digest lines, and the docket is reviewed again only after three observations have been proposed to
+   it since the last review began and that review has settled. The first version counted members instead and
+   re-proposed whatever the agent had removed, so one docket was reviewed ten times in an hour.
 4. **The owner's verdict.** The runtime, not the agent, puts every proposal in front of the owner with its cause,
    its anchor and the observations it explains: on the "Waiting on you" page at any time, and in a weekly message.
    A verdict from the page is settled by the runtime on arrival. Drop retires the edit; apply starts the trial where
@@ -580,6 +585,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-08 | One misaligned red strip on a logo produced fourteen questions to the owner in three hours, six of them re-offering what he had refused, from a foreground that briefed every nudge to a worker and from the worker itself | Work that fits in the turn is done in the turn; the owner's answers of the last two days ride in the live evidence of every turn and worker as rulings; a question about a shape goes out as the picture with the candidates drawn on it |
 | 2026-11-08 | Twenty-five skill edits the owner had approved from the dashboard stayed on his list for a day: applying them depended on the agent running a trial no skill had cases for, then calling approve | The runtime settles a dashboard verdict in code the moment it arrives, as it settles a parked action: drop retires, apply runs the trial where the skill has cases and otherwise applies the edit and records why no trial ran; an edit on trial is the runtime's work, not the owner's, until its report returns |
 | 2026-11-10 | A month of lessons had produced nineteen ledger reminders and no rewritten rule, while one failure recurred 116 times as unread candidates; the agent proposed patches because the record asked for one failure and one edit | A proposal names the decision in the method that allowed the failure, anchored in the method file, and the edit rewrites it; stored dockets open a method review at three observations in sixty days; a check counts only with a task, a receipt and the method version; "apply it" without a usable case applies nothing |
+| 2026-11-11 | The first method reviews ran in a loop: the runtime re-proposed every observation the agent had excluded, each minute, and each re-proposal re-opened the review, so one docket was reviewed ten times and another fifty, all reaching the same proposal | Each observation records one review state; the runtime proposes only unjudged observations; a docket is reviewed again only after three new proposals since the last review began |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
@@ -603,6 +609,7 @@ office, where the decisions and contracts that no magistrate's word could overri
 | Skill | A folder with a written method the agent loads when a task matches |
 | Lesson | A claim about the decision in a method that allowed a failure, anchored in the method, with the observations it explains and the edit that removes it; trialled and applied or dropped by the owner |
 | Observation | A recorded failure: text, time, source and task; the evidence a lesson is built from |
-| Docket | A stored group of observations of one method, proposed by the runtime and confirmed by the owning agent; three in sixty days open a method review |
+| Docket | A stored group of observations of one method, proposed by the runtime and confirmed by the owning agent; three in sixty days open a method review, and three new proposals since the last review open another |
+| Review state | The verdict an observation carries about a docket: proposed by the runtime, confirmed as a member, or excluded by the owning agent; a judged observation is never proposed again |
 | Ledger | The section at the end of a skill where approved additions live as tagged entries with helped and hurt counts |
 | Supervisor | The process that starts, watches and restarts the others |
