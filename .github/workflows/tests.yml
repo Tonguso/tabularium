@@ -9,8 +9,8 @@ jobs:
   offline-suites:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install
@@ -18,4 +18,12 @@ jobs:
           pip install -r requirements.txt
           pip install -e . --no-deps
       - name: Test suite
-        run: python -X utf8 -m pytest tests -q -p no:cacheprovider
+        shell: bash
+        run: |
+          set -o pipefail
+          python -X utf8 -m pytest tests -q -p no:cacheprovider -rfE 2>&1 | tee pytest.log
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          { echo '```'; grep -E "^(FAILED|ERROR) |^E  |passed|failed|error" pytest.log | tail -80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
