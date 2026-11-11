@@ -395,9 +395,9 @@ accepts rather than what the agent is told.
 
 ![Figure 4. The life of a lesson](figures/fig4-lesson.svg)
 
-*Figure 4. The life of a lesson. An observation becomes a lesson when the agent names its cause in the method; the
-owner rules on the edit, the runtime applies or trials it, and measured checks on later tasks decide whether it
-stays.*
+*Figure 4. The life of a lesson. Observations gather in a docket; three in sixty days open a method review, and the
+lesson it proposes names its cause in the method. The owner rules on the edit, the runtime trials or applies it, and
+measured checks on later tasks decide whether it stays.*
 
 Every lesson also carries its own benchmark case. When a lesson is recorded, the runtime drafts a case from it: the
 request of the task it came from, or the owner's message when the lesson names it, as the input; the proposed edit's

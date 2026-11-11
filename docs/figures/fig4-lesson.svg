@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 350" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#2d3142">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 466" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#2d3142">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
     <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
@@ -6,69 +6,88 @@
   <style>
     .box{fill:#fff;stroke:#2d3142;stroke-width:1.5}
     .store{fill:#f3f4f6;stroke:#2d3142;stroke-width:1.5}
-    .owner{fill:#fff;stroke:#c2410c;stroke-width:1.5}
+    .focal{fill:#fff;stroke:#c2410c;stroke-width:1.5}
     .t{font-weight:700}
     .s{fill:#6b7280;font-size:11px}
+    .cap{fill:#6b7280;font-size:11px;font-style:italic}
     .l{stroke:#6b7280;stroke-width:1.5;fill:none;marker-end:url(#a)}
     .acc{stroke:#c2410c;stroke-width:1.5;fill:none;marker-end:url(#b)}
-    .lab{fill:#6b7280;font-size:11px}
   </style>
 
-  <!-- top row -->
-  <rect x="20" y="60" width="140" height="70" rx="6" class="box"/>
-  <text x="90" y="86" text-anchor="middle" class="t">Correction</text>
-  <text x="90" y="104" text-anchor="middle" class="s">the owner's words,</text>
-  <text x="90" y="118" text-anchor="middle" class="s">or a failed check</text>
+  <!-- row 1: from a failure to the owner's verdict -->
+  <rect x="20" y="70" width="150" height="80" rx="6" class="box"/>
+  <text x="95" y="96" text-anchor="middle" class="t">Observation</text>
+  <text x="95" y="114" text-anchor="middle" class="s">a failure noticed by the agent,</text>
+  <text x="95" y="130" text-anchor="middle" class="s">a checkpoint or the owner</text>
 
-  <rect x="200" y="60" width="170" height="70" rx="6" class="store"/>
-  <text x="285" y="86" text-anchor="middle" class="t">Proposed, with its edit</text>
-  <text x="285" y="104" text-anchor="middle" class="s">exact replacement or one</text>
-  <text x="285" y="118" text-anchor="middle" class="s">ledger entry; a case drafted</text>
+  <rect x="200" y="70" width="170" height="80" rx="6" class="store"/>
+  <text x="285" y="96" text-anchor="middle" class="t">Docket</text>
+  <text x="285" y="114" text-anchor="middle" class="s">the runtime proposes members,</text>
+  <text x="285" y="130" text-anchor="middle" class="s">the agent confirms or excludes</text>
 
-  <rect x="410" y="60" width="170" height="70" rx="6" class="owner"/>
-  <text x="495" y="86" text-anchor="middle" class="t">Owner's verdict</text>
-  <text x="495" y="104" text-anchor="middle" class="s">dashboard or weekly message,</text>
-  <text x="495" y="118" text-anchor="middle" class="s">settled by the runtime on arrival</text>
+  <rect x="390" y="70" width="180" height="80" rx="6" class="box"/>
+  <text x="480" y="96" text-anchor="middle" class="t">Lesson proposed</text>
+  <text x="480" y="114" text-anchor="middle" class="s">the cause, anchored in the</text>
+  <text x="480" y="130" text-anchor="middle" class="s">method; the edit that removes it</text>
 
-  <!-- right column -->
-  <rect x="720" y="20" width="220" height="56" rx="6" class="store"/>
-  <text x="830" y="42" text-anchor="middle" class="t">Trial</text>
-  <text x="830" y="60" text-anchor="middle" class="s">frozen skills, benchmark cases, file checks</text>
+  <rect x="610" y="70" width="150" height="80" rx="6" class="focal"/>
+  <text x="685" y="96" text-anchor="middle" class="t">Owner's verdict</text>
+  <text x="685" y="114" text-anchor="middle" class="s">on the dashboard or in the</text>
+  <text x="685" y="130" text-anchor="middle" class="s">weekly message</text>
 
-  <rect x="720" y="124" width="220" height="56" rx="6" class="box"/>
-  <text x="830" y="146" text-anchor="middle" class="t">Applied</text>
-  <text x="830" y="164" text-anchor="middle" class="s">exactly the edit shown; version bumped</text>
+  <!-- row 2 -->
+  <rect x="390" y="210" width="180" height="70" rx="6" class="box"/>
+  <text x="480" y="238" text-anchor="middle" class="t">Retired</text>
+  <text x="480" y="258" text-anchor="middle" class="s">dropped on the owner's words</text>
 
-  <rect x="720" y="220" width="220" height="56" rx="6" class="box"/>
-  <text x="830" y="242" text-anchor="middle" class="t">Checked on the next real task</text>
-  <text x="830" y="260" text-anchor="middle" class="s">helped or hurt, counted on the entry</text>
+  <rect x="610" y="210" width="150" height="70" rx="6" class="store"/>
+  <text x="685" y="238" text-anchor="middle" class="t">Trial</text>
+  <text x="685" y="256" text-anchor="middle" class="s">frozen arms, benchmark</text>
+  <text x="685" y="270" text-anchor="middle" class="s">cases, file checks only</text>
 
-  <!-- bottom row -->
-  <rect x="410" y="220" width="170" height="56" rx="6" class="store"/>
-  <text x="495" y="242" text-anchor="middle" class="t">Verified</text>
-  <text x="495" y="260" text-anchor="middle" class="s">stays in the ledger, keeps counting</text>
+  <!-- row 3 -->
+  <rect x="390" y="340" width="180" height="70" rx="6" class="box"/>
+  <text x="480" y="364" text-anchor="middle" class="t">Checked on later tasks</text>
+  <text x="480" y="382" text-anchor="middle" class="s">helped or hurt, counted only with</text>
+  <text x="480" y="398" text-anchor="middle" class="s">a task, a receipt and the version</text>
 
-  <rect x="200" y="220" width="170" height="56" rx="6" class="box"/>
-  <text x="285" y="242" text-anchor="middle" class="t">Retired</text>
-  <text x="285" y="260" text-anchor="middle" class="s">dropped, or removed on his words</text>
+  <rect x="610" y="340" width="150" height="70" rx="6" class="store"/>
+  <text x="685" y="368" text-anchor="middle" class="t">Applied</text>
+  <text x="685" y="386" text-anchor="middle" class="s">exactly the edit shown</text>
 
-  <!-- flows -->
-  <path d="M160,95 L200,95" class="l"/>
-  <path d="M370,95 L410,95" class="l"/>
-  <path d="M580,80 L600,80 L600,48 L720,48" class="acc"/>
-  <text x="660" y="64" text-anchor="middle" class="lab" fill="#c2410c">apply, trial possible</text>
-  <path d="M580,110 L600,110 L600,152 L720,152" class="acc"/>
-  <text x="660" y="168" text-anchor="middle" class="lab" fill="#c2410c">apply, no cases:</text>
-  <text x="660" y="181" text-anchor="middle" class="lab" fill="#c2410c">reason kept</text>
-  <path d="M830,76 L830,124" class="l"/>
-  <text x="822" y="104" text-anchor="end" class="lab">report to the owner, then his yes</text>
-  <path d="M830,180 L830,220" class="l"/>
-  <path d="M720,248 L580,248" class="l"/>
-  <text x="650" y="242" text-anchor="middle" class="lab">worked</text>
-  <path d="M495,130 L495,196 L285,196 L285,220" class="acc"/>
-  <text x="390" y="190" text-anchor="middle" class="lab" fill="#c2410c">drop</text>
-  <path d="M760,276 L760,300 L285,300 L285,130" class="l"/>
-  <text x="522" y="316" text-anchor="middle" class="lab">recurred: back to candidate, then re-proposed with a sharper edit</text>
+  <!-- flows, row 1 -->
+  <path d="M170,110 L200,110" class="l"/>
+  <path d="M370,110 L390,110" class="l"/>
+  <text x="285" y="172" text-anchor="middle" class="s">three in sixty days open a method review:</text>
+  <text x="285" y="186" text-anchor="middle" class="s">one cause, one edit, for the docket as a whole</text>
+  <path d="M570,110 L610,110" class="l"/>
+  <!-- one instance with a receipt skips the docket -->
+  <path d="M95,70 L95,44 L480,44 L480,70" class="l"/>
+  <text x="285" y="38" text-anchor="middle" class="s">one instance with a receipt (the owner's message or a task record)</text>
 
-  <text x="20" y="342" class="s">The agent never edits the skill for a lesson; the runtime applies the owner's decision. An unanswered candidate expires after thirty days unless it repeats.</text>
+  <!-- drop -->
+  <path d="M610,135 L590,135 L590,245 L570,245" class="l"/>
+  <text x="596" y="196" class="s">drop</text>
+
+  <!-- apply with cases: trial, then the owner's yes -->
+  <path d="M685,150 L685,210" class="acc"/>
+  <text x="694" y="184" class="s" fill="#c2410c">apply, with cases</text>
+  <path d="M685,280 L685,340" class="l"/>
+  <text x="694" y="314" class="s">then the owner's yes</text>
+
+  <!-- apply with no case: the owner's choice, around the trial -->
+  <path d="M760,110 L830,110 L830,375 L760,375" class="acc"/>
+  <text x="836" y="236" class="s" fill="#c2410c">apply,</text>
+  <text x="836" y="250" class="s" fill="#c2410c">no case</text>
+  <text x="836" y="264" class="s" fill="#c2410c">to trial</text>
+
+  <!-- applied, then checked -->
+  <path d="M610,375 L570,375" class="l"/>
+
+  <!-- measured recurrence returns it to an observation -->
+  <path d="M390,375 L95,375 L95,150" class="l"/>
+  <text x="245" y="368" text-anchor="middle" class="s">a measured recurrence: back to an observation</text>
+  <text x="480" y="428" text-anchor="middle" class="s">helped: the entry stays and keeps being counted</text>
+
+  <text x="450" y="454" text-anchor="middle" class="cap">The agent never edits a method for a lesson; the runtime applies the owner's decision. An observation that belongs to a docket never expires.</text>
 </svg>
