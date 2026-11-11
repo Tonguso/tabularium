@@ -192,7 +192,9 @@ def read_view(root):
 # One tool contract for every agent; callers receive separate dictionaries.
 def memory_tool_schema():
     return {'name': 'remember',
-     'description': 'Your one memory writer. '
+     'description': 'Your one memory writer. Memory is for what you would want to know next time: what Alex '
+                    'decided and prefers, where a matter stands, what worked and what did not. You judge what is '
+                    'worth keeping; the rules here are about how a record is made, not what to record. '
                     'kind=user_decision|user_preference|assistant_proposal|observation|inference saves '
                     'a SOURCED fact: content + source (message:<archive id> from search_conversations, '
                     'or a saved task_state actions JSON path) + exact quote; the speaker and the quote '

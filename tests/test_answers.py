@@ -97,7 +97,10 @@ class Answers(unittest.TestCase):
         self.assertNotEqual(result.decision_id, pending)
         questions = {d["question"]: d["id"] for d in store.decisions(CHAT, 0)}
         self.assertEqual(questions["Discuss Kabuki now?"], result.decision_id)
-        self.assertIn("Keep the overlays unmasked?", questions)
+        # His message moved past the earlier conversation question: out of the evidence, still in the record (2026-11-11).
+        from tabularium.records.task_decisions import lapsed
+        self.assertNotIn("Keep the overlays unmasked?", questions)
+        self.assertEqual([d["question"] for d in lapsed(store, CHAT)], ["Keep the overlays unmasked?"])
 
     def test_one_reply_covers_original_and_correction_but_not_unrelated_request(self):
         turn=[(101,'Save result.json with ready'),(102,'Change that to revised'),(103,'Also tell me the weather')]

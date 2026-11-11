@@ -22,6 +22,7 @@ TOOL = {
 
 
 RULING_SECONDS = 48 * 3600
+LAPSED_SECONDS = 7 * 24 * 3600
 
 
 def pending(store, chat, task=None, kind=None):
@@ -40,6 +41,41 @@ def pending(store, chat, task=None, kind=None):
     finally:
         db.close()
     return rows
+
+
+def lapse(store, chat, before, keep=()):
+    """A conversation question (task 0) lives until the owner's next message in the chat. When that message arrives
+    and does not identify the question (a reply to it, or the dashboard's decision id), the question lapses: it
+    leaves the per-turn evidence, stays in the record, and a later quoted answer still settles it. A task's question
+    never lapses; the task waits on it. (2026-11-11: 99 pending conversation questions, 60 older than three days,
+    rode every turn as 36,000 characters of evidence, most of them answered in the conversation long before.)"""
+    keep = [int(k) for k in keep if k]
+    db = sqlite3.connect(store.database, timeout=30)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        sql = ("UPDATE decisions SET state='lapsed',updated=? WHERE chat=? AND task=0 AND kind='question' "
+               "AND state='pending' AND created<?")
+        args = [time.time(), chat, float(before)]
+        if keep:
+            sql += " AND id NOT IN (" + ",".join("?" * len(keep)) + ")"
+            args += keep
+        changed = db.execute(sql, args).rowcount
+        db.commit()
+        return changed
+    finally:
+        db.close()
+
+
+def lapsed(store, chat, since=None):
+    """Conversation questions the owner has moved past without answering, newest last; `since` limits by creation."""
+    db = sqlite3.connect(store.database, timeout=30)
+    db.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in db.execute(
+            "SELECT * FROM decisions WHERE chat=? AND task=0 AND kind='question' AND state='lapsed' AND created>? ORDER BY id",
+            (chat, float(since or 0)))]
+    finally:
+        db.close()
 
 
 def ask(store, chat, ident, question):
@@ -148,8 +184,8 @@ def bind_messages(store, decision, message_ids):
 
 
 def by_message(store, chat, message_id):
-    """The pending decision that Telegram message `message_id` asked, or None."""
-    for row in pending(store, chat):
+    """The decision that Telegram message `message_id` asked, pending or lapsed, or None."""
+    for row in pending(store, chat) + lapsed(store, chat):
         if int(message_id) in json.loads(row.get("message_ids") or "[]"):
             return row
     return None
@@ -257,9 +293,13 @@ def answer_user(store, chat, decision, answer, source_id, quote):
         raise ValueError("Exact user quote not found in this chat.")
     if not genuine_source(store, chat, row[2]):
         raise ValueError("The quote must come from the user's conversation, not a worker brief or synthetic context.")
-    decision_row = next((d for d in store.decisions(chat) if d["id"] == decision), None)
+    ledger = sqlite3.connect(store.database, timeout=30)
+    try:
+        decision_row = ledger.execute("SELECT created FROM decisions WHERE id=? AND chat=?", (decision, chat)).fetchone()
+    finally:
+        ledger.close()
     if decision_row:
-        if not row[3] or datetime.fromisoformat(row[3]).timestamp() + 60 < decision_row["created"]:
+        if not row[3] or datetime.fromisoformat(row[3]).timestamp() + 60 < decision_row[0]:
             raise ValueError("The quoted answer predates this decision.")
     return answer_record(store, chat, decision, answer, json.dumps(
         {"source_id": source_id, "quote": quote}, ensure_ascii=False))
@@ -278,7 +318,7 @@ def answer_record(store, chat, decision, answer, source):
             raise ValueError("Unknown decision in this chat.")
         if row["state"] in ("answered", "delivered") and row["answer"] == answer and row["source"] == source:
             return dict(row)
-        if row["state"] != "pending":
+        if row["state"] != "pending" and not (row["task"] == 0 and row["state"] == "lapsed"):
             raise ValueError("Decision is no longer pending.")
         if row["kind"] == "action":
             raise ValueError("A parked action runs only on Alex's own yes to it, not through task_decision.")
@@ -532,7 +572,8 @@ def context(store, chat, task=None):
     finally:
         db.close()
     decisions = store.decisions(chat, task)
-    if not ids and not decisions and not outcomes and not rulings:
+    unanswered = len(lapsed(store, chat, since=time.time() - LAPSED_SECONDS)) if task is None else 0
+    if not ids and not decisions and not outcomes and not rulings and not unanswered:
         return ""
     for outcome in outcomes:
         outcome['answer'] = outcome['answer'][:1500] if outcome['answer'] else 'Outcome unknown.'
@@ -543,6 +584,10 @@ def context(store, chat, task=None):
         evidence['owner_rulings'] = {'note': "Alex's answers in this chat over the last two days, newest first. They bind "
                                              "every later question here and in every worker: never offer again what he refused.",
                                      'answers': rulings}
+    if unanswered:
+        evidence['questions_not_answered'] = {'count': unanswered, 'note': "Conversation questions of the last week that Alex "
+                                              "moved past without answering; not shown here (task_decision list has them). "
+                                              "Ask one again only when its matter is live, never as a reminder."}
     return "[Live task evidence; historical assistant claims are not current status]\n" + json.dumps(evidence, ensure_ascii=False)
 
 
@@ -551,7 +596,7 @@ def execute(agent, chat, inputs):
         action = inputs["action"]
         store = agent._background
         if action == "list":
-            result = store.decisions(chat)
+            result = store.decisions(chat) + lapsed(store, chat, since=time.time() - LAPSED_SECONDS)
         elif action == "ask":
             ident = int(inputs.get("task_id") or agent.BACKGROUND_TASK_ID or 0)
             if agent.BACKGROUND_TASK_ID and ident != int(agent.BACKGROUND_TASK_ID):
@@ -646,6 +691,8 @@ def verify_reply(agent, messages, chat, result):
             result.decision_id = 0
         if getattr(result, "question", ""):
             declare_question(agent._background, chat, result, task)
+    if not agent.BACKGROUND_TASK_ID:
+        _lapse_conversation_questions(agent, chat, int(getattr(result, "decision_id", 0) or 0))
     mismatches = []
     own = int(agent.BACKGROUND_TASK_ID or 0)
     for claim in claims:
@@ -666,6 +713,31 @@ def verify_reply(agent, messages, chat, result):
         messages[-1]["content"] = result
         agent.save_conversation(chat)
     return result
+
+
+def _lapse_conversation_questions(agent, chat, declared):
+    """The owner's message this turn answered closes the earlier conversation questions it did not identify: the
+    one this reply declares, one he replied to, one the dashboard named."""
+    inbox = agent._inbox
+    if not hasattr(inbox, "turn_sources") or not inbox.answering():
+        return
+    try:
+        sources = inbox.turn_sources(chat)
+        if not sources:
+            return
+        before = min(float(s.get("date") or time.time()) for s in sources)
+        keep = {declared}
+        for s in sources:
+            ref = (s.get("reply_to_message") or {}).get("message_id")
+            if ref:
+                row = by_message(agent._background, chat, ref)
+                if row:
+                    keep.add(row["id"])
+            if s.get("decision_id"):
+                keep.add(int(s["decision_id"]))
+        lapse(agent._background, chat, before, keep)
+    except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
+        print(f"[decision] lapse: {type(exc).__name__}: {exc}")
 
 
 def migrate_questions(store):

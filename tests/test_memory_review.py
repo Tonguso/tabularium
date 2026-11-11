@@ -67,6 +67,41 @@ class Review(unittest.TestCase):
             self.assertEqual(saved["candidates"], result["candidates"])
             self.assertIsNone(saved["shown_at"])
 
+    def test_a_later_message_that_changed_a_sourced_fact_is_a_candidate(self):
+        fact = ('## Sourced facts\n\n### Fact dddddddddddddddd\n```json\n' + json.dumps({
+            "content": "Email goes out through the new Outlook app", "kind": "user_decision",
+            "evidence": {"source": "message:10", "said_at": "2026-11-01T10:00:00+00:00", "quote": "use the new outlook app"}}) + '\n```\n')
+        text = MEMORY.replace("## Sourced facts\n", fact, 1)
+
+        class Recall:
+            def search(self, chat, query="", speaker="", date_from="", limit=5, **_):
+                assert speaker == "user" and date_from == "2026-11-01"
+                return {"matches": [{"id": 12, "said_at": "2026-11-03T09:00:00", "excerpt": "改做thunderbird"},
+                                    {"id": 9, "said_at": "2026-10-30T09:00:00", "excerpt": "outlook again"}]}
+
+        asked = []
+
+        def examiner(prompt, schema):
+            asked.append(prompt)
+            return json.dumps({"changed": True, "message_id": 12, "quote": "改做thunderbird", "note": "method replaced"})
+
+        r = mr.review(text, "2026-11-10", chat=1, recall=Recall(), examiner=examiner)
+        self.assertEqual([(f["id"], f["later_id"], f["quote"]) for f in r["changed_facts"]], [("dddddddddddddddd", 12, "改做thunderbird")])
+        self.assertIn("message 12", asked[0]); self.assertNotIn("message 9", asked[0])     # only later messages are shown
+        self.assertEqual(r["candidates"], 1 + len(r["duplicates"]) + len(r["expired_facts"]) + len(r["stale_active"]))
+        self.assertIn("supersedes=<fact id>", mr.report_markdown(r))
+        # A verdict naming a message that was not shown counts nothing; an examiner failure is reported, not silent.
+        r = mr.review(text, "2026-11-10", chat=1, recall=Recall(), examiner=lambda p, s: json.dumps({"changed": True, "message_id": 9, "quote": "", "note": ""}))
+        self.assertEqual(r["changed_facts"], [])
+
+        def broken(prompt, schema):
+            raise RuntimeError("model unavailable")
+        r = mr.review(text, "2026-11-10", chat=1, recall=Recall(), examiner=broken)
+        self.assertEqual((r["changed_facts"], r["error"]), ([], "RuntimeError: model unavailable"))
+        self.assertIn("stopped early", mr.report_markdown(r))
+        # Without the record and the examiner the review reads the file alone, as before.
+        self.assertEqual(mr.review(text, "2026-11-10")["changed_facts"], [])
+
     def test_clean_memory_has_no_candidates(self):
         r = mr.review("# Memory\n\n## Alex\n- one thing\n- a completely different thing about work\n", today="2026-10-11")
         self.assertEqual(r["candidates"], 0)

@@ -15,7 +15,7 @@ import os, sys, tempfile, json
 from pathlib import Path
 ROOT, a = Path(sys.argv[1]), sys.argv[2]
 agent_dir = ROOT / a
-tmp = Path(tempfile.mkdtemp(prefix=f"smoke_{a}_"))
+tmp = Path(tempfile.mkdtemp(prefix=f"smoke_{a}_")).resolve()      # the runtime resolves its home; compare like with like
 (tmp / "SKILL.md").write_text("Test identity", encoding="utf-8")
 (tmp / "memory.md").write_text("Test core\n<!-- MEMORY-DETAIL-BELOW -->\ndetail", encoding="utf-8")
 style = Path("skills/talk-like-a-human-being/runtime-core.md")

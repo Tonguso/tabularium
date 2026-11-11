@@ -116,9 +116,9 @@ reply. The path is the same for all four agents.
    reaches the inbox as one update per photo and is treated as one message: one turn, one reply, one queue notice.
 3. The request is built from the saved history plus what is true now, attached to the latest message on the wire
    copy only: the core memory read fresh from the file, this turn's notes, live task status scoped to the request,
-   pending questions, the owner's answers to this chat's questions over the last two days (rulings that bind every
-   later question, from any turn or worker), and a runtime note if the owner has corrected the agent twice in the
-   current thread.
+   the questions still open, the owner's answers to this chat's questions over the last two days (rulings that bind
+   every later question, from any turn or worker), and a runtime note if the owner has corrected the agent twice in
+   the current thread.
 4. The model works: tool calls are executed by the runtime, and each one leaves a receipt on disk before and after
    it runs. Tool outputs above a size are archived to files the model can read back, not kept in context.
 5. The model returns a reply envelope: the reply text, what it claims (work started, question asked, request
@@ -158,7 +158,12 @@ that asked it, and later the answer, its source message and the owner's quoted w
 ("30 names or 50?") is answered by the owner's next message, or by a reply to the question's message, which binds
 directly. A parked action (send this email, run this command) stores the exact inputs and runs only on a yes, whenever
 it comes; a late yes is still a yes, and a restart forgets nothing. One pending question per task is enforced by a
-unique index. Stale decisions are annotated when the task finished, was superseded, or the topic moved on.
+unique index. A task's question waits as long as the task does. A conversation question lives until the owner's next
+message in the chat: that message answers it, by quote or by replying to it, or the question lapses, leaving the
+per-turn evidence while staying in the record, where a late quoted answer still settles it. Before this rule nothing
+closed a conversation question; after five weeks the coordinator carried 99 of them into every turn, 60 older than
+three days, as 36,000 characters of evidence that Anthropic's note on agent memory (November 2026) would predict to
+lower adherence rather than raise it.
 
 ### 4.3 Requirements and proof
 
@@ -323,7 +328,13 @@ the runtime checks. Two checks run weekly. A memory exam takes a few durable thi
 instructions about one deliverable), has a separate model turn each into a question, asks the agent with only its
 memory to go on, and records the score; it is shown on the dashboard with the missed questions. A memory review
 proposes tidy-ups as a candidate copy, which is applied only after the exam passes on both the current and the
-candidate version and the owner agrees, and only onto the version it was built from.
+candidate version and the owner agrees, and only onto the version it was built from. The review also reads every
+current sourced fact against the owner's later messages on the same words, and a separate model says whether he
+changed it, naming his message and his words; a changed fact is a candidate like a duplicate. This is the offline
+consolidation that Anthropic's note on agent memory calls dreaming, done where the framework already has what it
+needs: every fact carries the message it came from, so the record can be read forward from there. The first need for
+it was found by the coordinator itself: the memory file had carried two current email methods for two days, the
+second of which the owner had set in his own message.
 
 Core memory also keeps the standing matters of the owner's life (a purchase in progress, an open negotiation), each
 with its current state and a few keywords. A message that names one of them arrives with that matter's newest
@@ -585,6 +596,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-08 | One misaligned red strip on a logo produced fourteen questions to the owner in three hours, six of them re-offering what he had refused, from a foreground that briefed every nudge to a worker and from the worker itself | Work that fits in the turn is done in the turn; the owner's answers of the last two days ride in the live evidence of every turn and worker as rulings; a question about a shape goes out as the picture with the candidates drawn on it |
 | 2026-11-08 | Twenty-five skill edits the owner had approved from the dashboard stayed on his list for a day: applying them depended on the agent running a trial no skill had cases for, then calling approve | The runtime settles a dashboard verdict in code the moment it arrives, as it settles a parked action: drop retires, apply runs the trial where the skill has cases and otherwise applies the edit and records why no trial ran; an edit on trial is the runtime's work, not the owner's, until its report returns |
 | 2026-11-10 | A month of lessons had produced nineteen ledger reminders and no rewritten rule, while one failure recurred 116 times as unread candidates; the agent proposed patches because the record asked for one failure and one edit | A proposal names the decision in the method that allowed the failure, anchored in the method file, and the edit rewrites it; stored dockets open a method review at three observations in sixty days; a check counts only with a task, a receipt and the method version; "apply it" without a usable case applies nothing |
+| 2026-11-11 | Ninety-nine conversation questions, most long answered in the chat, rode every turn as evidence, and the memory file held two "current" email methods, one superseded by the owner's own message | A conversation question lapses when the owner's next message moves past it; the weekly review reads each sourced fact against his later messages |
 | 2026-11-11 | The first method reviews ran in a loop: the runtime re-proposed every observation the agent had excluded, each minute, and each re-proposal re-opened the review, so one docket was reviewed ten times and another fifty, all reaching the same proposal | Each observation records one review state; the runtime proposes only unjudged observations; a docket is reviewed again only after three new proposals since the last review began |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed

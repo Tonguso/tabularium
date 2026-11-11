@@ -1608,9 +1608,13 @@ class AgentApp(engine.AgentRuntime):
 
     def run_memory_review(self):
         """Report clean-up candidates in memory.md; the agent proposes them to Alex on his next turn."""
-        from tabularium.memory import memory_review
-        result = memory_review.run(self.AGENT_DIR)
-        print(f"[memory_review] {result['candidates']} candidate(s); core {result['core_lines']} of {result['total_lines']} lines")
+        from tabularium.channels.owner_telegram import OWNER_CHAT_ID
+        from tabularium.memory import memory_review, memory_exam
+        examiner = ((lambda prompt, schema: memory_exam.examiner_call(self, prompt, schema))
+                    if getattr(self, "anthropic_client", None) is not None else None)
+        result = memory_review.run(self.AGENT_DIR, chat=OWNER_CHAT_ID, recall=self._recall, examiner=examiner)
+        print(f"[memory_review] {result['candidates']} candidate(s); core {result['core_lines']} of {result['total_lines']} lines; "
+              f"{len(result.get('changed_facts', []))} fact(s) his later messages changed" + (f"; stopped early: {result['error']}" if result.get('error') else ""))
         return result
 
     def memory_review_note(self) -> str:
@@ -1626,7 +1630,8 @@ class AgentApp(engine.AgentRuntime):
         self.atomic_json(path, result)
         return (f"\n\n[Weekly memory review: {result['candidates']} candidate clean-up(s) in {path.with_suffix('.md')} "
                 f"({len(result['duplicates'])} near-duplicate bullets, {len(result['expired_facts'])} expired facts, "
-                f"{len(result['stale_active'])} ACTIVE sections without a recent date). When convenient, read it and propose "
+                f"{len(result['stale_active'])} ACTIVE sections without a recent date, {len(result.get('changed_facts', []))} "
+                f"sourced facts his later messages changed). When convenient, read it and propose "
                 "the edits to Alex in one short message; change nothing until he agrees. Clean-ups go through "
                 "remember(kind=consolidate): gather the edits, state=trial, show him the exam before/after, apply on his go.]")
 

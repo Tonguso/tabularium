@@ -8,7 +8,10 @@ Candidates:
   historical sections, where repetition is expected;
 - expired facts: sourced facts whose valid_to has passed but which still sit in the current section;
 - stale ACTIVE sections: a heading marked ACTIVE whose text carries no date in the last STALE_ACTIVE_DAYS days;
-- core size: the lines above the detail marker, which every turn pays for.
+- core size: the lines above the detail marker, which every turn pays for;
+- changed facts (2026-11-11, after Anthropic's note on agent memory): every current sourced fact is read against
+  Alex's later messages, and the examiner model says whether he changed it. The record outranks the note. The
+  memory file had carried two "current" email methods for two days, one of them superseded by his own message.
 Output: task_state/memory_review.md (the report) and task_state/memory_review.json (counts, for the dashboard and
 for the one-time note the agent receives on his next turn)."""
 import json
@@ -19,6 +22,22 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 DUP_THRESHOLD = 0.6
+MAX_FACT_CHECKS = 60
+FACT = re.compile(r"(?ms)^### Fact ([0-9a-f]+)\n```json\n(.*?)\n```")
+CHANGE_PROMPT = """A fact recorded about Alex, and messages he sent later that share words with it.
+
+Recorded from his message of {said_at}: "{quote}"
+Fact: {content}
+
+Later messages from Alex:
+{later}
+
+Did a later message change, revoke or replace what the fact records (a new decision, a changed preference, a method he
+swapped for another)? A message that repeats the fact, applies it, or talks about the same subject without changing it is
+not a change. Answer changed=true only where his own words say so, with that message's id and the exact words."""
+CHANGE_SCHEMA = {"type": "object", "properties": {"changed": {"type": "boolean"}, "message_id": {"type": "integer"},
+                                                  "quote": {"type": "string"}, "note": {"type": "string"}},
+                 "required": ["changed", "message_id", "quote", "note"], "additionalProperties": False}
 STALE_ACTIVE_DAYS = 45
 MAX_DUPLICATES = 20
 MIN_BULLET = 30
@@ -107,19 +126,71 @@ def stale_active(text, today, days=STALE_ACTIVE_DAYS):
     return out
 
 
+def sourced_facts(text):
+    """Current facts that came from one of Alex's messages: id, content, the source message id, when, his words."""
+    out = []
+    for m in FACT.finditer(current_facts(text)):
+        try:
+            record = json.loads(m.group(2))
+        except ValueError:
+            continue
+        evidence = record.get("evidence") or {}
+        source = str(evidence.get("source") or record.get("source") or "")
+        if not source.startswith("message:"):
+            continue
+        try:
+            ident = int(source.split(":", 1)[1])
+        except ValueError:
+            continue
+        out.append({"id": m.group(1), "content": str(record.get("content", ""))[:600], "source_id": ident,
+                    "said_at": str(evidence.get("said_at") or "")[:19], "quote": str(evidence.get("quote") or "")[:300]})
+    return out
+
+
+def changed_facts(text, chat, recall, examiner, limit=MAX_FACT_CHECKS):
+    """Each current sourced fact against Alex's later messages on the same words. The examiner reads them and says
+    whether he changed the fact; its verdict must name one of the messages shown. Stops at the first examiner
+    failure and reports it, so a model outage never reads as "nothing changed"."""
+    out, error = [], ""
+    for fact in sourced_facts(text)[:limit]:
+        try:
+            found = recall.search(chat, query=fact["content"], speaker="user", date_from=fact["said_at"][:10], limit=5)
+        except ValueError:
+            continue
+        later = [m for m in found.get("matches", []) if int(m.get("id") or 0) > fact["source_id"]]
+        if not later:
+            continue
+        shown = "\n".join(f"- message {m['id']} ({str(m.get('said_at', ''))[:16]}): {str(m.get('excerpt', ''))[:500]}" for m in later)
+        try:
+            verdict = json.loads(examiner(CHANGE_PROMPT.format(said_at=fact["said_at"][:10], quote=fact["quote"],
+                                                               content=fact["content"], later=shown), CHANGE_SCHEMA) or "")
+        except ValueError:
+            continue
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"[:200]
+            break
+        if verdict.get("changed") and verdict.get("message_id") in {int(m["id"]) for m in later}:
+            out.append({"id": fact["id"], "content": fact["content"][:200], "source_id": fact["source_id"],
+                        "said_at": fact["said_at"][:10], "later_id": int(verdict["message_id"]),
+                        "quote": str(verdict.get("quote", ""))[:300], "note": str(verdict.get("note", ""))[:200]})
+    return out, error
+
+
 def core_size(text):
     head = text.split(MARKER)[0] if MARKER in text else text
     return len(head.splitlines())
 
 
-def review(text, today=None):
+def review(text, today=None, chat=None, recall=None, examiner=None):
     today = today or datetime.now().strftime("%Y-%m-%d")
     dups = duplicates(text)
     facts = expired_facts(text, today)
     stale = stale_active(text, today)
+    changed, error = changed_facts(text, chat, recall, examiner) if recall is not None and examiner is not None else ([], "")
     return {"time": time.time(), "today": today, "duplicates": dups, "expired_facts": facts, "stale_active": stale,
+            "changed_facts": changed, "error": error,
             "core_lines": core_size(text), "total_lines": len(text.splitlines()),
-            "candidates": len(dups) + len(facts) + len(stale), "shown_at": None}
+            "candidates": len(dups) + len(facts) + len(stale) + len(changed), "shown_at": None}
 
 
 def report_markdown(result, path_hint=""):
@@ -140,17 +211,26 @@ def report_markdown(result, path_hint=""):
         lines += [f"## Sections marked ACTIVE with no date in the last {STALE_ACTIVE_DAYS} days (still active, or retire?)", ""]
         lines += [f"- line {s['line']}: {s['heading']} (newest date {s['newest_date']}, {s['lines']} lines)" for s in result["stale_active"]]
         lines.append("")
+    if result.get("changed_facts"):
+        lines += ["## Facts his later messages changed (supersede each on his word: remember with supersedes=<fact id>)", ""]
+        for f in result["changed_facts"]:
+            lines += [f"- Fact {f['id']} ({f['said_at']}): {f['content']}",
+                      f"        message {f['later_id']}: \"{f['quote']}\" {f['note']}".rstrip()]
+        lines.append("")
+    if result.get("error"):
+        lines += [f"The check of sourced facts against later messages stopped early: {result['error']}", ""]
     if not result["candidates"]:
         lines.append("Nothing to propose this week.")
     return "\n".join(lines) + "\n"
 
 
-def run(agent_dir, today=None):
-    """Review <agent_dir>/memory.md and write the report and the json summary under task_state. Returns the summary."""
+def run(agent_dir, today=None, chat=None, recall=None, examiner=None):
+    """Review <agent_dir>/memory.md and write the report and the json summary under task_state. Returns the summary.
+    With `chat`, `recall` and `examiner`, the sourced facts are also read against Alex's later messages."""
     agent_dir = Path(agent_dir)
     memory = agent_dir / "memory.md"
     text = memory.read_text(encoding="utf-8-sig") if memory.exists() else ""
-    result = review(text, today)
+    result = review(text, today, chat=chat, recall=recall, examiner=examiner)
     state = agent_dir / "task_state"
     state.mkdir(parents=True, exist_ok=True)
     (state / "memory_review.md").write_text(report_markdown(result), encoding="utf-8")

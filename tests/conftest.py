@@ -4,6 +4,13 @@ The tests import `tabularium` from src/ whether or not the package is installed,
 checkout that an environment file (a .pth) may have put on the path: any path entry that carries a flat-layout
 `engine.py` or an `agent_core` package is removed first.
 """
+import tempfile
+from pathlib import Path
+
+# Temp folders are canonical paths. The runtime resolves every path it is given (its home, a file to write), so a test
+# that builds its expectation from the raw temp path must see the same spelling. GitHub's Windows runner hands out an
+# 8.3 alias (C:\Users\RUNNER~1\...) and three tests compared it with the resolved form (2026-11-11).
+tempfile.tempdir = str(Path(tempfile.gettempdir()).resolve())
 import os
 import sys
 from pathlib import Path

@@ -32,6 +32,46 @@ class QuestionBinding(unittest.TestCase):
             self.assertEqual(td.by_message(a._background, 1, 900)['question'], 'Which font?')
             self.assertEqual(len(a._background.decisions(1)), 2)
 
+    def turn(self, a, message_id, text, date, reply_to=None):
+        """Alex's message `message_id` is the one this turn answers, as the inbox records it."""
+        payload = {'message_id': message_id, 'date': date, 'text': text}
+        if reply_to:
+            payload['reply_to_message'] = {'message_id': reply_to}
+        with a._inbox.db() as db:
+            db.execute('INSERT INTO jobs(chat,message,handler,payload,status,created) VALUES (?,?,?,?,?,?)',
+                       (1, message_id, 'handle_message', json.dumps(payload), 'running', date))
+        a._inbox.local.message_id = message_id
+        a._inbox.local.turn_messages = [(message_id, text)]
+
+    def test_conversation_question_lapses_when_owner_moves_on_and_stays_answerable(self):
+        a = self.agent()
+        asked = a._background.ask(1, 0, 'Shall I draft the memo?')
+        td.bind_messages(a._background, asked['id'], [900])
+        task = a._background.start(1, 'Make a report')['id']
+        kept = a._background.ask(1, task, 'Choose A or B')
+        # His next message is about something else: the conversation question leaves the evidence, the task's stays.
+        self.turn(a, 901, 'Book the flight', date=asked['created'] + 60)
+        td.verify_reply(a, [], 1, Reply('Booked.'))
+        self.assertEqual([d['id'] for d in a._background.decisions(1)], [kept['id']])
+        evidence = td.context(a._background, 1)
+        self.assertNotIn('draft the memo', evidence)
+        self.assertIn('"questions_not_answered": {"count": 1', evidence)
+        self.assertEqual([d['id'] for d in td.lapsed(a._background, 1)], [asked['id']])
+        self.assertEqual([d['id'] for d in json.loads(td.execute(a, 1, dict(action='list')))], [kept['id'], asked['id']])
+        # A reply to the question's own message keeps it pending even when the agent does not settle it this turn.
+        again = a._background.ask(1, 0, 'Which font?')
+        td.bind_messages(a._background, again['id'], [902])
+        self.turn(a, 903, 'Why?', date=again['created'] + 60, reply_to=902)
+        td.verify_reply(a, [], 1, Reply('Because it reads better.'))
+        self.assertEqual([d['id'] for d in a._background.decisions(1)], [kept['id'], again['id']])
+        # The question this reply declares is new, so it stays; a lapsed question still takes his late quoted answer.
+        self.turn(a, 904, 'Fine', date=again['created'] + 120)
+        r = td.verify_reply(a, [], 1, Reply('And the colour?', question='And the colour?'))
+        self.assertEqual([d['id'] for d in a._background.decisions(1)], [kept['id'], r.decision_id])
+        row = td.answer_record(a._background, 1, asked['id'], 'yes, draft it', json.dumps({'message_id': 905, 'quote': 'draft it'}))
+        self.assertEqual(row['state'], 'answered')
+        self.assertEqual([d['id'] for d in td.lapsed(a._background, 1)], [again['id']])     # 'Fine' moved past it too
+
     def test_reply_is_a_candidate_not_an_answer_or_continuation(self):
         for name in AGENTS:
             a = self.agent(name)
