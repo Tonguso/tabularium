@@ -205,7 +205,7 @@ Version 0.4 (in progress). It runs daily, and it is not yet a drop-in product:
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md): a failing test first, records over guesses, a concept budget, one release a
-day. Security concerns: [SECURITY.md](SECURITY.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+day. Security concerns: [SECURITY.md](SECURITY.md).
 
 ## Citation
 
