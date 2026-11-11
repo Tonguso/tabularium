@@ -189,7 +189,7 @@ To cite the software, see `CITATION.cff`.
 
 ## Status
 
-Version 0.4 (in progress). It runs daily, and it is not yet a drop-in product:
+Version 0.5. It runs daily, and it is not yet a drop-in product:
 
 - Windows first. The supervisor's process adoption, Outlook access and the desktop tool assume Windows; the engine,
   Telegram, SQLite and the command-line entry point do not. Cross-platform support is the next piece of work.

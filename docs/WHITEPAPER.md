@@ -1,6 +1,6 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.5 (draft), 11 November 2026
+Version 0.5, 11 November 2026
 
 ## Abstract
 

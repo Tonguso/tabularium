@@ -1,6 +1,6 @@
 [project]
 name = "tabularium"
-version = "0.4.0.dev0"
+version = "0.5.0"
 description = "An owner-judged agent framework: the records decide, not anyone's word."
 readme = "README.md"
 license = { file = "LICENSE" }
