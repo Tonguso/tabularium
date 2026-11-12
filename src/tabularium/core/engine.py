@@ -384,7 +384,7 @@ class AgentRuntime(SharedHandlers):
     def _selftest_worker(self):
         """Daily self-test, plus the weekly memory review and memory exam (2026-10-11). A weekly check runs when its
         task_state/<name>.json is older than a week or missing, or when task_state/<name>_requested exists
-        (python agent_control.py review|exam)."""
+        (tabularium review|exam)."""
         time.sleep(self.SELFTEST_FIRST_DELAY)
         last_selftest = 0
         while True:

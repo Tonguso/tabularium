@@ -393,7 +393,7 @@ def route_gap(agent_root):
     if last.get("route") == current:
         return None
     return (f"- BENCHMARK? the primary model is now {current}; the last benchmark run ({runs[-1].stem}) was on "
-            f"{last.get('route') or 'an unrecorded model'}. Run: python agent_control.py eval {Path(agent_root).name}")
+            f"{last.get('route') or 'an unrecorded model'}. Run: tabularium eval {Path(agent_root).name}")
 
 
 def previous_runs(agent_root, limit=5):

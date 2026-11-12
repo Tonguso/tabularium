@@ -13,7 +13,7 @@ Two decisions were wrong. One diagnosis per message: a burst of corrections in o
 corrections now collect in task_state/corrections_pending.json and one diagnosis starts when the thread has been
 quiet for QUIET_SECONDS, with every correction in it. And the diagnosis spoke to him: now it never does. Nothing it
 produces is delivered (notify_telegram=False) and it cannot ask (task_decisions.finish): the proposed edit waits in
-the lesson register, and he reads the digest when he wants to (python agent_control.py lessons; or asks the agent)."""
+the lesson register, and he reads the digest when he wants to (tabularium lessons; or asks the agent)."""
 import json
 import time
 
