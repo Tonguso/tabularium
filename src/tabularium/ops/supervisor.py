@@ -258,6 +258,10 @@ def start(child):
     child.python_pid = None
     (ROOT/child.name/'task_state/drain').unlink(missing_ok=True)
     env = child_env(AGENT_LAUNCH_ID=child.instance)
+    src = release.snapshot(release.current(ROOT), ROOT)        # the released commit's export, never the working tree
+    if src is not None:
+        others = [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p and p not in (str(src), str(release.PACKAGE.parent))]
+        env["PYTHONPATH"] = os.pathsep.join([str(src), *others])
     try:
         child.proc = subprocess.Popen(command(child.name), cwd=str(ROOT), stdout=out, stderr=subprocess.STDOUT,
                                       stdin=subprocess.DEVNULL, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -323,7 +327,13 @@ def release_allows_start(name, request, root):
     came back after the fleet outage started nothing for the four minutes Alex watched."""
     if not request or name not in request.get('components', []) or request.get('status') == 'complete':
         return True
-    if request.get('status') not in ('draining', 'complete') or not release.same_source(request.get('tested'), release.identity()):
+    if request.get('status') not in ('draining', 'complete'):
+        return False
+    try:                                   # the tested release must be exportable; the working tree may have moved on
+        if release.REPO is not None and release.snapshot(request.get('tested'), root) is None:
+            return False
+    except (RuntimeError, OSError) as exc:
+        print(f'[supervisor] cannot export the tested release: {type(exc).__name__}: {exc}')
         return False
     from tabularium.records.worker_lease import busy
     return not any(busy(path) for path in (root/name/'task_state/background').glob('*/worker.lock'))

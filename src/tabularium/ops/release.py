@@ -5,16 +5,27 @@ which code, prompts and skills a task actually ran on. Now each worker attempt r
 and a restart refuses to switch the agents to uncommitted changes, so every running release is a commit.
 """
 from tabularium.paths import PACKAGE, child_env, home as _home
+import io
+import json
 import os
+import shutil
 import subprocess
+import tarfile
 from pathlib import Path
+
+MARKER = "RELEASE.json"           # written beside the package in a snapshot: the release identity it was exported as
+SNAPSHOTS = ".release"            # <home>/.release/<commit>/src/tabularium
+KEEP_SNAPSHOTS = 2
 
 ROOT = _home()
 
 
 def repo(start=PACKAGE):
-    """The Git checkout that holds the package, else None: an installed package has no release of its own, and a home
-    that is a Git repository of its own data is not the code's version."""
+    """The Git checkout that holds the package, else None: an installed package has no release of its own, a home
+    that is a Git repository of its own data is not the code's version, and a snapshot (RELEASE.json beside the
+    package) is the export of a commit, whatever checkout it sits under."""
+    if (start / MARKER).exists():
+        return None
     for folder in (start, *start.parents):
         if (folder / ".git").exists():
             return folder
@@ -66,6 +77,8 @@ def identity(checkout=None):
     digest = hashlib.sha256()
     repo = Path(checkout) if checkout else REPO
     if repo is None:
+        if (PACKAGE / MARKER).exists():                       # a snapshot carries the identity it was exported as
+            return json.loads((PACKAGE / MARKER).read_text(encoding="utf-8"))
         for path in sorted(p for p in PACKAGE.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
             if path.suffix in ('.py', '.bat', '.json', '.js', '.html', '.css'):
                 digest.update(path.relative_to(PACKAGE).as_posix().encode() + b'\0')
@@ -82,6 +95,58 @@ def identity(checkout=None):
         digest.update(name.encode()+b'\0')
         digest.update((repo/name).read_bytes())
     return {'commit': commit(repo), 'digest': digest.hexdigest()}
+
+
+def archive(commit_id):
+    """The committed tree as a tar from git: the working tree's edits are never in it."""
+    out = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", commit_id, "src/tabularium"],
+                         capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if out.returncode:
+        raise RuntimeError("git archive failed: " + out.stderr.decode("utf-8", errors="replace").strip()[:300])
+    return out.stdout
+
+
+def snapshot(target, root=None):
+    """The exported package of release `target` (commit and digest), under <home>/.release/<commit>/src: what every
+    component and worker runs. Exported once, from the commit, with the identity written beside the package; the
+    export of the same release is reused; snapshots beyond KEEP_SNAPSHOTS go. None without a checkout (an installed
+    package runs itself). Until 2026-11-12 every process imported the package from the working tree, so an edit on
+    disk reached running agents through their lazy imports and every new worker before any test or commit (the
+    themes->dockets rename on disk broke the docket loop in all four agents for two hours)."""
+    if REPO is None or not target or not target.get("commit"):
+        return None
+    base = Path(root or ROOT) / SNAPSHOTS / target["commit"]
+    marker = base / "src" / "tabularium" / MARKER
+    try:
+        if json.loads(marker.read_text(encoding="utf-8")) == target:
+            return base / "src"
+    except (OSError, ValueError):
+        pass
+    tmp = base.with_name(base.name + ".tmp")
+    shutil.rmtree(tmp, ignore_errors=True)
+    with tarfile.open(fileobj=io.BytesIO(archive(target["commit"]))) as tar:
+        tar.extractall(tmp, filter="data")
+    (tmp / "src" / "tabularium" / MARKER).write_text(json.dumps(target), encoding="utf-8")
+    shutil.rmtree(base, ignore_errors=True)
+    os.replace(tmp, base)
+    kept = sorted((p for p in base.parent.iterdir() if p.is_dir() and not p.name.endswith(".tmp")),
+                  key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in kept[KEEP_SNAPSHOTS:]:
+        shutil.rmtree(old, ignore_errors=True)
+    return base / "src"
+
+
+def current(root=None):
+    """The release a fresh component runs: the tested one while a release is in flight or was the last to complete,
+    else the checkout's commit as it stands. A crash restart therefore never runs untested code."""
+    path = Path(root or ROOT) / "dashboard" / "restart_status.json"
+    try:
+        request = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        request = {}
+    if request.get("tested") and request.get("status") in ("draining", "complete"):
+        return request["tested"]
+    return identity()
 
 
 def same_source(a, b):

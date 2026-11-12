@@ -443,7 +443,8 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Declared work | "I will do X", then nothing happens | A promise with no activation record is sent back to the model |
 | Declared answers | Several messages sent, one answered | A reply that leaves out a message is sent back once |
 | Typed outcomes | A tool's "no" read as "done" | Refused and Failed are distinct types the code can see |
-| Taint | Outside content instructing the agent to send mail or run a command | After reading outside content, sending and destructive commands become parked actions |
+| Taint | Outside content instructing the agent to send mail or run a command | After reading outside content, sending and every command become parked actions |
+| Boundary | An agent reading another's memory, or writing a skill or the shell profile past the owner | Every tool that takes a path is held to the agent's own folder and its declared work roots; memory and skills change only through their own gates |
 | Parked actions | A confirmation lost to a timeout or restart | The exact action is stored and runs only on the owner's yes |
 | Desktop grant | An agent driving the owner's screen unasked, or into a password field | The desktop is taken per task on the owner's yes; the grant ends on his next message, after thirty minutes, or when he moves the mouse; a credential or payment window refuses input |
 | Task lifecycle | Tasks silently changing state | Named operations checked against one table |
@@ -463,11 +464,14 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
 | Checkpoints and receipts | A crash losing work | Every tool call is a receipt; progress is checkpointed |
 | Drain restart | Restarting mid-task or onto broken code | Waits for work, runs all tests, refuses uncommitted code |
+| Snapshot | An edit on disk reaching running agents before any test | Every component and worker runs an export of the released commit, never the working tree; a crash restart runs the last release |
 | Privacy by role | Maintainers reading private conversations | The private agent's records are closed; only tool records |
 
-**Known gaps.** Command screening is a pattern list, not isolation; a real sandbox with desktop integrations behind
+**Known gaps.** A command is held after outside content was read, but a command in a clean turn runs with the
+owner's rights; the boundary holds the file tools, not the shell. A real sandbox with desktop integrations behind
 narrow host-side tools is the next large piece. A declared check proves that a test ran against those bytes, not that
-the test was a good one.
+the test was a good one. The supervisor itself still runs from the working tree; it is the process that exports
+the snapshots and hands itself off after a release.
 
 ## 10. Operations
 
@@ -485,7 +489,12 @@ Tabularium is run like software, which is uncommon for agent systems.
 | Incident reviews | What went wrong, what each actor could see, which design choice allowed it | After each failure the owner noticed |
 | Release record | Which commit each task ran on | Every task |
 
-Restarts drain current work, run the test suite, and refuse uncommitted code. The code has three authors, a human
+Restarts drain current work, run the test suite, and refuse uncommitted code. What then runs is not the working
+tree but an export of the tested commit, kept under the home folder with its identity written beside the package;
+every component and every worker it starts imports from there, so an edit on disk reaches nothing until it is
+committed, tested and released, and a crash restart runs the last release. Until 12 November every process
+imported from the working tree, and a rename on disk broke a loop in all four agents for two hours before its
+release. The code has three authors, a human
 owner and two coding agents, each recording every change in one operations log and never reverting another's change
 until the owner confirms. The two coding agents work concurrently on purpose: each has caught real mistakes of the
 other. A concept budget (a change that adds a named thing removes one) keeps the vocabulary in check. A rule of
@@ -597,6 +606,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-08 | Twenty-five skill edits the owner had approved from the dashboard stayed on his list for a day: applying them depended on the agent running a trial no skill had cases for, then calling approve | The runtime settles a dashboard verdict in code the moment it arrives, as it settles a parked action: drop retires, apply runs the trial where the skill has cases and otherwise applies the edit and records why no trial ran; an edit on trial is the runtime's work, not the owner's, until its report returns |
 | 2026-11-10 | A month of lessons had produced nineteen ledger reminders and no rewritten rule, while one failure recurred 116 times as unread candidates; the agent proposed patches because the record asked for one failure and one edit | A proposal names the decision in the method that allowed the failure, anchored in the method file, and the edit rewrites it; stored dockets open a method review at three observations in sixty days; a check counts only with a task, a receipt and the method version; "apply it" without a usable case applies nothing |
 | 2026-11-11 | Ninety-nine conversation questions, most long answered in the chat, rode every turn as evidence, and the memory file held two "current" email methods, one superseded by the owner's own message | A conversation question lapses when the owner's next message moves past it; the weekly review reads each sourced fact against his later messages |
+| 2026-11-12 | The owner's "Ok" to a wording question ran a deletion parked eleven hours earlier, because a bare yes bound to the one parked action whatever had been asked since; the same day's review found that any command ran after outside content unless a pattern called it dangerous, that file tools took any path, and that every process imported the working tree | A bare yes binds only to the newest ask; after outside content every command is parked; one boundary for every path a tool takes; every process runs an export of the released commit |
 | 2026-11-11 | The first method reviews ran in a loop: the runtime re-proposed every observation the agent had excluded, each minute, and each re-proposal re-opened the review, so one docket was reviewed ten times and another fifty, all reaching the same proposal | Each observation records one review state; the runtime proposes only unjudged observations; a docket is reviewed again only after three new proposals since the last review began |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed

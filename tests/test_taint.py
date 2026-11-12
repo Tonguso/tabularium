@@ -74,11 +74,11 @@ class Taint(unittest.TestCase):
         self.assertIsInstance(out, Refused); self.assertIn("checkpoint", out)
         self.assertEqual(len(self.sent), 1)
 
-    def test_only_dangerous_commands_are_held(self):
+    def test_every_command_is_held_after_a_fetch(self):
+        self.assertIsNone(taint.check(self.agent, 1, "execute_command", {"command": "Get-ChildItem D:\\Agents"}))   # clean turn
         self.agent.execute_tool("web_fetch", {"url": "https://x"}, 1)
-        self.assertIsNone(taint.check(self.agent, 1, "execute_command", {"command": "Get-ChildItem D:\\Agents"}))
-        held = taint.check(self.agent, 1, "execute_command", {"command": "Remove-Item -Recurse D:\\Baskets"})
-        self.assertIsInstance(held, Refused)
+        for command in ("Get-ChildItem D:\\Agents", "Remove-Item -Recurse D:\\Baskets"):               # harmless or not
+            self.assertIsInstance(taint.check(self.agent, 1, "execute_command", {"command": command}), Refused)
         self.assertIsNone(taint.check(self.agent, 1, "write_file", {"path": "x"}))       # not guarded
 
 

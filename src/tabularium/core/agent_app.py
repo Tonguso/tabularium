@@ -86,6 +86,8 @@ class Config:
     tts_voice: str = ""                         # OpenAI TTS voice
     tts_instructions: str = ""
     background_refusals: bool = False           # Cato: workers refuse polling other agents' task_state and delivering early
+    work_roots: tuple = ()                      # folders outside its own the agent may read and write (agent.toml); never
+                                                # another agent's folder or the home's own files (tabularium.core.boundary)
     outlook_browser_tools: bool = True          # Tacitus: neither
     tool_allow: frozenset = frozenset()         # Tacitus: only these tools, remember last
     tools_after: tuple = ()                     # ((after_name, schema), ...) insertions into the base list
@@ -1103,7 +1105,7 @@ class AgentApp(engine.AgentRuntime):
             # still holding the stdout pipe keeps communicate() blocked. On 2026-09-29 a runaway multiprocessing sweep
             # held Cato inside one "60-second" call for sixteen minutes while the machine swapped itself to death.
             proc = subprocess.Popen(
-                ["powershell", "-NonInteractive", "-Command", command],
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],   # never the user's profile script
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
@@ -1176,6 +1178,10 @@ class AgentApp(engine.AgentRuntime):
             fenced = write_refusal(inputs.get("path", ""))
             if fenced:
                 return fenced
+        from tabularium.core import boundary
+        held = boundary.check(self, name, inputs)            # one boundary for every path a tool takes
+        if held:
+            return held
         held = taint.check(self, chat_id, name, inputs)      # external content read this turn: outward actions need Alex
         if held:
             return held

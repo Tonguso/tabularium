@@ -44,7 +44,8 @@ tabularium init coordinator
    and refuses everyone else.
 2. Open `coordinator\SKILL.md` and write who the agent is and who you are. The template is a plain assistant; everything
    from the tone to what it must ask before doing is yours to change. `agent.toml` holds the settings that are the
-   agent's own (its display name, its voice lines, its ports).
+   agent's own (its display name, its voice lines, its ports, and `work_roots`: the folders outside its own that its
+   file tools may read and write; without them an agent touches only its own folder).
 3. Start it:
 
 ```bat

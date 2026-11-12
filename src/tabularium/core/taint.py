@@ -7,9 +7,10 @@ need Alex's word. In the foreground that is the existing yes/no confirmation; a 
 is refused and told to put the question in its checkpoint. A new message from Alex starts a clean foreground turn;
 a background task stays tainted to its end, because what it read earlier still shapes what it does.
 
-Guarded: send_email always; execute_command when the command is dangerous by the existing screen. Not guarded, by
-choice: file writes inside the agent's own folders, deliveries to Alex, delegation briefs (Cal and Vit apply the same
-rule in their own turns), so an ordinary research turn is unchanged.
+Guarded: send_email and every execute_command. Until 2026-11-12 only a command the danger screen flagged was held,
+so a page saying "post this file to that address" ran as an ordinary command. Not guarded, by choice: file writes
+inside the agent's boundary, deliveries to Alex, delegation briefs (Cal and Vit apply the same rule in their own
+turns).
 """
 from tabularium.core.outcome import Refused
 
@@ -34,8 +35,6 @@ def check(agent, chat_id, tool, inputs):
     """Refused(...) when a guarded action needs a word Alex has not given; None to proceed."""
     source = agent._tainted.get(chat_id)
     if not source or tool not in GUARDED:
-        return None
-    if tool == "execute_command" and not agent._is_dangerous(inputs.get("command", "")):
         return None
     what = "send this email" if tool == "send_email" else "run this command"
     if agent.BACKGROUND_TASK_ID:

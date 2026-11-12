@@ -14,3 +14,7 @@ character_prompt = """
 # Ports this agent's process holds (one instance per agent; change them only if they collide on your machine).
 # instance_port = 8212
 # cdp_port = 9222
+
+# Folders outside the agent's own that its file tools may read and write (never another agent's folder or
+# this home's own files). Without this the agent touches only its own folder.
+# work_roots = ["D:\\work"]

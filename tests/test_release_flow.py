@@ -21,6 +21,8 @@ class ReleaseFlow(unittest.TestCase):
         p=patch.object(release,'identity',return_value=self.target,create=True);p.start();self.addCleanup(p.stop)
         p=patch.object(release,'uncommitted',return_value=[]);p.start();self.addCleanup(p.stop)
         p=patch.object(release,'LOADED',self.target,create=True);p.start();self.addCleanup(p.stop)
+        self.snapshot=self.root/'.release/tested/src'
+        p=patch.object(release,'snapshot',side_effect=lambda target,root=None: self.snapshot if target==self.target else None);p.start();self.addCleanup(p.stop)
     def request(self):
         return agent_control.request_restart(root=self.root)
     def record(self):
@@ -59,6 +61,22 @@ class ReleaseFlow(unittest.TestCase):
         # 2026-10-29 14:36: the supervisor came back on df40fc0 with the last release complete on 64c3f7d and started nothing.
         r=self.stage_tested();r['status']='complete';r['tested']={'commit':'older','digest':'older'}
         self.assertTrue(supervisor.release_allows_start('coordinator',r,self.root))
+    def test_a_start_runs_the_tested_snapshot_whatever_the_working_tree_says(self):
+        # 2026-11-12: the working tree is where code is edited; a fresh process runs the export of the tested commit.
+        r=self.stage_tested()
+        with patch.object(release,'identity',return_value={'commit':'edited','digest':'edited'}):
+            self.assertTrue(supervisor.release_allows_start('coordinator',r,self.root))
+        r['tested']={'commit':'unknown','digest':'none'}
+        self.assertFalse(supervisor.release_allows_start('coordinator',r,self.root))        # nothing to export: no start
+        seen={}
+        class Proc:
+            pid=4242
+        with patch.object(release,'current',return_value=self.target), patch.object(supervisor,'process_created',return_value=0), \
+             patch('subprocess.Popen',side_effect=lambda argv,**kw: seen.update(argv=argv,env=kw['env']) or Proc()):
+            supervisor.start(self.children[0])
+        path=seen['env']['PYTHONPATH'].split(os.pathsep)
+        self.assertEqual(path[0],str(self.snapshot))
+        self.assertNotIn(str(release.PACKAGE.parent),path)
     def test_source_change_after_testing_blocks_every_start(self):
         r=self.stage_tested();self.target['digest']='changed'
         # The persisted tested identity remains abc.
