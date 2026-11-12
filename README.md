@@ -13,7 +13,7 @@ waiting for. The framework's one rule: no part of the system believes what anoth
 claim of work started, a question asked, a file delivered or a check passed is a record the runtime wrote and can
 read back, or it did not happen.
 
-It is the code behind a working system: four agents, five weeks of daily use, 680 offline tests. The design and the
+It is the code behind a working system: four agents, five weeks of daily use, 676 offline tests. The design and the
 failures that produced it are in the white paper: [docs/WHITEPAPER.md](docs/WHITEPAPER.md).
 
 ![One agent process and what surrounds it](docs/figures/fig1-machine.svg)
@@ -74,8 +74,9 @@ agent is in [examples/minimal](examples/minimal/README.md).
 - **Owner-judged learning.** Agents turn your corrections into exact skill edits and change nothing until you say so.
   Your verdict from the dashboard settles at once; an approved rule becomes one tagged entry in the skill's ledger,
   counted helped or hurt on later tasks.
-- **Memory that is tested.** One readable memory file per agent, writes that must quote you, a weekly exam, and
-  tidy-ups applied only after the exam passes on both versions.
+- **Memory that is tested.** One readable memory file per agent, writes that must quote you, a weekly exam, a
+  weekly review that reads every sourced fact against what you said later, and tidy-ups applied only after the exam
+  passes on both versions.
 - **Operations like software.** A supervisor, self-tests, weekly scorecards, per-task traces, a regression
   benchmark, and releases only onto tested, committed code.
 
