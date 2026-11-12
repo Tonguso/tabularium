@@ -141,6 +141,34 @@ class Agent(unittest.TestCase):
         self.assertEqual(ran, ["Remove-Item -Recurse D:\\Baskets\\old"])
         self.assertEqual(task_decisions.pending(second._background, CHAT, kind="action"), [])
 
+    def test_a_bare_yes_runs_the_parked_action_only_when_it_was_the_last_thing_asked(self):
+        agent = self.agent()
+        agent.get_auto_mode = lambda chat: False
+        agent.execute_tool("execute_command", {"command": "Remove-Item -Recurse D:\\Baskets\\old"}, CHAT)
+        agent.outbox().flush(CHAT)                                  # the ask is delivered
+        parked = task_decisions.pending(agent._background, CHAT, kind="action")[0]
+        self.assertEqual(agent.outbox().last_sent(CHAT)[0], parked["id"])
+        # The agent then asks something else in prose. A bare "ok" answers that, not the deletion.
+        agent.send_message(CHAT, "Shall I start on the slides?")
+        agent.outbox().flush(CHAT)
+        ran = []
+        class Proc:
+            pid, returncode = 1, 0
+            def communicate(self, timeout=None):
+                return b"removed", b""
+        with patch("tabularium.core.agent_app.subprocess.Popen", side_effect=lambda argv, **kw: ran.append(argv[-1]) or Proc()):
+            self.assertEqual(agent._settle_by_reply(message("ok")), (False, ""))
+            self.assertEqual(task_decisions.pending(agent._background, CHAT, kind="action")[0]["id"], parked["id"])
+            self.assertEqual(ran, [])
+            # A reply to the ask itself still runs it, however late; the chat gets one line, the record the output.
+            sent = []
+            agent.send_message = lambda chat, text, **kw: sent.append(str(text)) or True
+            asked = json.loads(parked["message_ids"])
+            self.assertEqual(agent._settle_by_reply(message("yes", reply_to=asked[0])), (True, ""))
+        self.assertEqual(ran, ["Remove-Item -Recurse D:\\Baskets\\old"])
+        self.assertEqual(sent, ["Ran it, exit 0: removed"])
+        self.assertEqual(task_decisions.pending(agent._background, CHAT, kind="action"), [])
+
     def test_a_plain_yes_is_ambiguous_when_two_actions_wait(self):
         agent = self.agent()
         for n in (1, 2):

@@ -5,6 +5,7 @@ runs only when he says yes (tests/test_task_lifecycle.py covers late and post-re
 import contextlib, io, tempfile, time, unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 from tabularium.core import taint
 from tabularium.records import task_decisions
 from tabularium.core.outcome import Refused
@@ -22,7 +23,14 @@ class Taint(unittest.TestCase):
         self.sent = []
         self.agent.tool_send_email = lambda **kw: self.sent.append(kw) or '{"status": "submitted"}'
         self.asked = []
-        self.agent.send_message = lambda chat, text, reply_to=None: self.asked.append(str(text)) or True
+        self.agent.bot = Mock()
+        self.agent.bot.send_message.side_effect = lambda *a, **k: SimpleNamespace(message_id=len(self.asked))
+        def send(chat, text, reply_to=None):
+            self.asked.append(str(text))
+            self.agent.outbox().put(chat, [str(text)], decision=getattr(text, "decision_id", 0))
+            self.agent.outbox().flush(chat)                 # delivered: a bare yes answers the newest message sent
+            return True
+        self.agent.send_message = send
 
     def tearDown(self):
         self.tmp.cleanup()

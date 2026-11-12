@@ -97,6 +97,14 @@ class Outbox:
             db.close()
         return self.flush(chat) if channel == 'telegram' else []
 
+    def last_sent(self, chat):
+        """(decision, message_id) of the newest message delivered to `chat`: what the owner is answering when he
+        sends a bare word. (0, None) when nothing was sent."""
+        with closing(self._db()) as db:
+            row = db.execute("SELECT decision, message_id FROM outbox WHERE chat=? AND status='sent' ORDER BY id DESC LIMIT 1",
+                             (chat,)).fetchone()
+        return (int(row["decision"] or 0), row["message_id"]) if row else (0, None)
+
     def pending(self, chat=None):
         with closing(self._db()) as db:
             q, args = "SELECT * FROM outbox WHERE status='pending'", []

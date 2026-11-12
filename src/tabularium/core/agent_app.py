@@ -986,6 +986,25 @@ class AgentApp(engine.AgentRuntime):
         return Refused(f"Not done yet: parked for Alex's yes as decision #{row['id']}. He has the exact action; his "
                        "yes runs it exactly as parked. Do not retry it or ask again; tell him it waits for his yes.")
 
+    @staticmethod
+    def _action_brief(tool, outcome):
+        """One line for the chat about a parked action's run; the record keeps the whole output (2026-11-12: a
+        4,000-character PowerShell error dump reached Alex's phone as the answer to "Ok")."""
+        if not outcome.startswith("Tool returned: "):
+            return outcome[:600]
+        body = outcome[len("Tool returned: "):]
+        try:
+            data = json.loads(body)
+        except ValueError:
+            return "Done. " + body[:300]
+        if isinstance(data, dict) and "exit" in data:
+            first = (data.get("stdout") or "").strip().splitlines()
+            line = ("Ran it, exit " + str(data.get("exit")) + ("." if not first else ": " + first[0][:200]))
+            if data.get("stderr", "").strip():
+                line += " Errors: " + data["stderr"].strip().splitlines()[0][:200]
+            return line
+        return "Done. " + body[:300]
+
     def _settle_by_reply(self, message):
         """Alex's reply identifies a candidate question. Exact actions can be approved directly by a plain
         yes/no, when exactly one action is parked. Returns (handled, note): handled means the message was a verdict on
@@ -1014,8 +1033,11 @@ class AgentApp(engine.AgentRuntime):
             self.send_message(chat, 'That question is no longer pending. No action was repeated; refresh Messaging.')
             return True, ''
         if decision is None and ref is None and getattr(message, 'channel', '') != 'dashboard' and td.verdict(text) is not None:
+            # A bare yes answers the last thing asked. It binds to the one parked action only when that action's ask is
+            # the newest message this agent sent to the chat; a reply to the ask, or the dashboard's button, settles
+            # it at any time (2026-11-12 16:32: "Ok" to a wording question ran a deletion parked eleven hours earlier).
             actions = td.pending(self._background, chat, kind="action")
-            decision = actions[0] if len(actions) == 1 else None
+            decision = actions[0] if len(actions) == 1 and self.outbox().last_sent(chat)[0] == actions[0]["id"] else None
         if decision is None:
             return False, ""
         source = json.dumps({"message_id": message.message_id, "quote": text[:500]}, ensure_ascii=False)
@@ -1044,7 +1066,7 @@ class AgentApp(engine.AgentRuntime):
             if yes and action["tool"] == "desktop" and outcome.startswith("Tool returned"):
                 # A desktop grant is for the work that follows: his yes is the message that starts that turn.
                 return False, f"\n[Parked action #{decision['id']} (desktop take): Alex said yes. {outcome}]"
-            self.send_message(chat, outcome)
+            self.send_message(chat, self._action_brief(action["tool"], outcome))
             # The agent sees what happened on its next turn.
             self.conversations.setdefault(chat, self.load_memory_context())
             self.conversations[chat] += [{"role": "user", "content": f"{self._ts(message)} {text}"},
