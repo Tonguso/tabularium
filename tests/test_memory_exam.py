@@ -12,9 +12,11 @@ from tabularium.memory.conversation_recall import ConversationRecall
 def seed(recall, rows):
     from contextlib import closing
     with closing(recall.connect()) as db, db:
-        for i, (speaker, text, said_at) in enumerate(rows, 1):
+        for i, row in enumerate(rows, 1):
+            speaker, text, said_at = row[:3]
+            source = row[3] if len(row) > 3 else "test"
             db.execute("INSERT INTO messages(id,fingerprint,chat,speaker,said_at,date_kind,text,source,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                       (i, f"f{i}", "1", speaker, said_at, "exact", text, "test", 0))
+                       (i, f"f{i}", "1", speaker, said_at, "exact", text, source, 0))
 
 
 class Sources(unittest.TestCase):
@@ -26,9 +28,10 @@ class Sources(unittest.TestCase):
                           ("user", "/tasks", "2026-10-09 10:02"),
                           ("assistant", "Noted: Tokyo next week, back Friday. Anything to prepare?", "2026-10-09 10:03"),
                           ("user", "ok", "2026-10-09 10:04"),
-                          ("user", "The new report file lives on the shared drive under workflow, not in the old reports folder.", "2026-09-01 10:00")])
+                          ("user", "The new report file lives on the shared drive under workflow, not in the old reports folder.", "2026-09-01 10:00"),
+                          ("user", "Skill edit lesson-76fc66a3c072e255: drop it. Keep the rest as they are for now.", "2026-10-09 10:05", "dashboard")])
             picked = me.pick_sources(recall, 1, now=datetime(2026, 10, 11, 12, 0))
-            self.assertEqual([p["id"] for p in picked], [1])            # statement in range; question, command, short, old, assistant excluded
+            self.assertEqual([p["id"] for p in picked], [1])            # statement in range; question, command, short, old, assistant, dashboard verdict excluded
 
 
 class Exam(unittest.TestCase):

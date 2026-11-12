@@ -3,7 +3,7 @@
 Why: TaskStore used to infer delegation, budget and worker rights from its folder name, and the agent list was typed in
 eight files; the operations view listed Cato and Tacitus only, so Cal and Vit never appeared in it. Now tabularium.core.roster
 is the one table and every other file imports it."""
-import ast, unittest
+import ast, tempfile, unittest
 from pathlib import Path
 from tabularium.core.roster import AGENTS, ROLES, Role
 from tabularium.records import background_runtime as rt
@@ -15,7 +15,8 @@ class Roster(unittest.TestCase):
     def test_roles_are_explicit_not_inferred_from_the_folder(self):
         store = rt.TaskStore(ROOT / "librarian")                       # no role passed: Cato's default, whatever the folder says
         self.assertEqual(store.role, ROLES["coordinator"])
-        store = rt.TaskStore(ROOT / "anything", ROLES["librarian"])
+        with tempfile.TemporaryDirectory() as tmp:                      # never a folder inside the repository
+            store = rt.TaskStore(Path(tmp) / "anything", ROLES["librarian"])
         self.assertEqual((store.role.delegates, store.role.owner_budget, store.role.request_table, store.worker_limit()),
                          (False, False, "research_requests", 2))
         self.assertEqual(ROLES["engineer"].env_var, "ENGINEER_BACKGROUND_TASK")

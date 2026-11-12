@@ -76,9 +76,12 @@ def pick_sources(recall, chat, days=EXAM_DAYS, n=EXAM_POOL, seed=None, now=None)
     commands or questions, of a sensible length. A random sample of n, seeded by the week so a rerun asks the same."""
     now = now or datetime.now()
     since = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+    # A verdict the runtime recorded from the dashboard's buttons ("Skill edit <key>: drop it.") is an instruction
+    # about one item, never a fact to remember; it is known by its source, not its wording (2026-11-09: the exam
+    # asked "what should Alex do with skill edit lesson-76fc…" and scored the agent wrong for not knowing).
     with closing(recall.connect()) as db:
-        rows = db.execute("SELECT id, text, said_at FROM messages WHERE chat=? AND speaker='user' AND said_at>=? ORDER BY id",
-                          (str(chat), since)).fetchall()
+        rows = db.execute("SELECT id, text, said_at FROM messages WHERE chat=? AND speaker='user' AND said_at>=? "
+                          "AND source<>'dashboard' ORDER BY id", (str(chat), since)).fetchall()
     good = []
     for r in rows:
         text = (r["text"] or "").strip()

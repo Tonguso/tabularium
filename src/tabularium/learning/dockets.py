@@ -50,10 +50,6 @@ Ask no question: nobody will answer it. Declare task_outcome completed.
 """
 
 
-def is_review(request):
-    return str(request or "").startswith(PREFIX)
-
-
 def _connect(root):
     return learning.ProjectStore(Path(root).resolve()).connect()
 

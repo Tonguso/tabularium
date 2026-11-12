@@ -296,7 +296,7 @@ class Handler(BaseHTTPRequestHandler):
             else:self.send_error(404)
         except (ValueError,FileNotFoundError):self.send({'error':'Requested item is unavailable.'},code=400)
         except Exception as exc:
-            print('[dashboard]',type(exc).__name__);self.send({'error':'Status is temporarily unavailable; try again.'},code=503)
+            print('[dashboard]',type(exc).__name__,url.path,str(exc)[:200]);self.send({'error':'Status is temporarily unavailable; try again.'},code=503)
     def do_POST(self):
         upload = urlsplit(self.path).path == '/api/attachments'
         if not self.allowed(True,media=upload):self.send_error(403);return

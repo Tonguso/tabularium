@@ -38,6 +38,16 @@ class Transitions(unittest.TestCase):
         self.assertEqual(self.store.get(self.task)["status"], "finished")
         self.assertEqual(self.store.decisions(CHAT), [])
 
+    def test_a_cancelled_run_takes_its_undelivered_steers_with_it(self):
+        put(self.store, self.task, "running")
+        self.store.control(CHAT, self.task, "steer", "Also add the Japan names")
+        self.assertEqual([c["text"] for c in self.store.pending_controls(self.task)], ["Also add the Japan names"])
+        self.store.control(CHAT, self.task, "cancel")
+        self.assertEqual(self.store.pending_controls(self.task), [])
+        put(self.store, self.task, "cancelled")                          # the worker returned after the cancel
+        self.store.control(CHAT, self.task, "resume", "Start again with the Korea names only")
+        self.assertEqual([c["text"] for c in self.store.pending_controls(self.task)], ["Start again with the Korea names only"])
+
     def test_reopening_a_finished_task_is_its_own_operation(self):
         put(self.store, self.task, "finished")
         self.store.control(CHAT, self.task, "resume", "Add the Japan names")

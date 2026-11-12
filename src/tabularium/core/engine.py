@@ -1265,7 +1265,7 @@ class AgentRuntime(SharedHandlers):
         self.atomic_json(request, dict(path=path, checks=checks, claims=claims, recalculate=recalculate,
                                   render=render, date_from=date_from, date_to=date_to))
         try:
-            proc = subprocess.Popen([sys.executable, str(self.AGENT_DIR / "scripts" / "review_output.py"), str(request)],
+            proc = subprocess.Popen([sys.executable, "-m", "tabularium.records.review_output", str(request)],
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             try:

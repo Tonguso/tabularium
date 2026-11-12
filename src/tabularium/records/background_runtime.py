@@ -283,6 +283,10 @@ class TaskStore:
                 db.execute("INSERT INTO controls(task,text) VALUES (?,?)", (int(ident), text))
             elif action == "cancel":
                 db.execute("UPDATE decisions SET state='cancelled',updated=? WHERE task=? AND state='pending'", (time.time(), int(ident)))
+                # A steer not yet delivered dies with the run it was for; a later resume starts from the request and its
+                # own instruction, not from instructions written for the cancelled run (2026-11-12: ten such steers waited
+                # on Cato's cancelled tasks, and a worker takes every undelivered control at start).
+                db.execute("UPDATE controls SET applied=1 WHERE task=? AND applied=0", (int(ident),))
                 # Cancel means "I no longer want this", whatever state it is in (2026-10-12). Before, a task that had
                 # already stopped (needs_attention, interrupted, needs_answer, capped, infeasible) was returned
                 # unchanged without an error: Cato told Alex "killed" twice while task 143 stayed open and was
