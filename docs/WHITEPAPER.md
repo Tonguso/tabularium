@@ -1,6 +1,6 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.5, 11 November 2026
+Version 0.6, 13 November 2026
 
 ## Abstract
 
@@ -157,7 +157,11 @@ Everything an agent asks the owner is a decision: one durable row with the quest
 that asked it, and later the answer, its source message and the owner's quoted words. Two kinds exist. A question
 ("30 names or 50?") is answered by the owner's next message, or by a reply to the question's message, which binds
 directly. A parked action (send this email, run this command) stores the exact inputs and runs only on a yes, whenever
-it comes; a late yes is still a yes, and a restart forgets nothing. One pending question per task is enforced by a
+it comes; a late yes is still a yes, and a restart forgets nothing. The runtime parks, never the agent: the danger
+screen, taint after outside content and the desktop grant each park the action they stop, beside any question already
+pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
+describe the result as the system's caution; the one way an agent attaches an exact action to a decision is in answer
+to a worker's pending question, and that ask reads as the question and the command. One pending question per task is enforced by a
 unique index. A task's question waits as long as the task does. A conversation question lives until the owner's next
 message in the chat: that message answers it, by quote or by replying to it, or the question lapses, leaving the
 per-turn evidence while staying in the record, where a late quoted answer still settles it. Before this rule nothing
@@ -445,7 +449,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Typed outcomes | A tool's "no" read as "done" | Refused and Failed are distinct types the code can see |
 | Taint | Outside content instructing the agent to send mail or run a command | After reading outside content, sending and every command become parked actions |
 | Boundary | An agent reading another's memory, or writing a skill or the shell profile past the owner | Every tool that takes a path is held to the agent's own folder and its declared work roots; memory and skills change only through their own gates |
-| Parked actions | A confirmation lost to a timeout or restart | The exact action is stored and runs only on the owner's yes |
+| Parked actions | A confirmation lost to a timeout or restart; an agent parking a read it was free to run and blaming the system | The exact action is stored and runs only on the owner's yes; only the rails park, an agent has no tool to |
 | Desktop grant | An agent driving the owner's screen unasked, or into a password field | The desktop is taken per task on the owner's yes; the grant ends on his next message, after thirty minutes, or when he moves the mouse; a credential or payment window refuses input |
 | Task lifecycle | Tasks silently changing state | Named operations checked against one table |
 | Status from records | An agent claiming work is running when it is not | Live task status is attached to every turn; contradictions are logged |
@@ -608,6 +612,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-11 | Ninety-nine conversation questions, most long answered in the chat, rode every turn as evidence, and the memory file held two "current" email methods, one superseded by the owner's own message | A conversation question lapses when the owner's next message moves past it; the weekly review reads each sourced fact against his later messages |
 | 2026-11-12 | The owner's "Ok" to a wording question ran a deletion parked eleven hours earlier, because a bare yes bound to the one parked action whatever had been asked since; the same day's review found that any command ran after outside content unless a pattern called it dangerous, that file tools took any path, and that every process imported the working tree | A bare yes binds only to the newest ask; after outside content every command is parked; one boundary for every path a tool takes; every process runs an export of the released commit |
 | 2026-11-11 | The first method reviews ran in a loop: the runtime re-proposed every observation the agent had excluded, each minute, and each re-proposal re-opened the review, so one docket was reviewed ten times and another fifty, all reaching the same proposal | Each observation records one review state; the runtime proposes only unjudged observations; a docket is reviewed again only after three new proposals since the last review began |
+| 2026-11-13 | Told to go on with a report, the coordinator parked its own read of the file for approval through a tool door meant for actions answering a worker's question, and told the owner the system had held it | The agent has no way to park its own action: the rails park, beside a pending question if one is waiting, and a prepared action is asked as the question and the command |
+| 2026-11-13 | Mail went out through the owner's desktop mail client as the owner, in plain text that arrived as a wall of symbols | Each agent has its own mailbox, named by its own key; the agent's text is rendered as the message's HTML with a plain copy; one send per receipt |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
