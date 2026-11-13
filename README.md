@@ -114,6 +114,7 @@ agent is three values; the rest are optional.
 | `LIBRARIAN_…`, `ENGINEER_…`, `PRIVATE_TELEGRAM_BOT_TOKEN` | per agent | Tokens for the other slots |
 | `TAVILY_API_KEY`, `ANYSEARCH_API_KEY` | no | Web search providers, tried in the order set on the dashboard |
 | `ELEVENLABS_API_KEY` | no | Spoken replies to voice notes |
+| `COORDINATOR_AGENTMAIL_API_KEY` (one per agent, by slot name) | no | The agent's own mailbox: an AgentMail inbox key bound to one inbox, made in the AgentMail console. Without it the agent has no email tools |
 | `EDGAR_IDENTITY` | no | Name and e-mail that SEC EDGAR requires of every client |
 | `KNOWLEDGE_BASE_DIR` | no | The librarian's writable knowledge-base folder |
 
