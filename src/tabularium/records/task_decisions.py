@@ -9,7 +9,7 @@ from tabularium.records.worker_lease import busy
 from tabularium.records import lifecycle
 TOOL = {
     "name": "task_decision",
-    "description": "Persist a task's question BEFORE asking it; list unanswered decisions; answer using an exact user quote. When Alex's current message is the answer, give decision_id and the quote and leave source_id out; otherwise give source_id from search_conversations. A Telegram reply identifies a candidate question only. Record an answer only when his words actually resolve it; clarification and unrelated instructions leave it pending. Answer queues continuation atomically. Never substitute an assistant suggestion for the user's decision. For an exact action answering an existing question, prepare with its decision_id, tool and inputs: this reuses that decision and requests exact approval. For a genuinely unrelated action use decision_id=0 explicitly. Prepare does not execute or approve anything. Parked actions are approved only by his own yes.",
+    "description": "Persist a task's question BEFORE asking it; list unanswered decisions; answer using an exact user quote. When Alex's current message is the answer, give decision_id and the quote and leave source_id out; otherwise give source_id from search_conversations. A Telegram reply identifies a candidate question only. Record an answer only when his words actually resolve it; clarification and unrelated instructions leave it pending. Answer queues continuation atomically. Never substitute an assistant suggestion for the user's decision. For an exact action answering a worker's pending question, prepare with its decision_id, tool and inputs: this reuses that decision and requests exact approval. Prepare does not execute or approve anything, and it is never a way to ask approval for your own action: run that action; the runtime parks it by itself if it needs Alex's word. Parked actions are approved only by his own yes.",
     "input_schema": {"type": "object", "properties": {
         "action": {"type": "string", "enum": ["list", "ask", "answer", "prepare"]},
         "task_id": {"type": "integer"}, "question": {"type": "string"},
@@ -138,9 +138,6 @@ def park_action(store, chat, tool, inputs, question, decision_id=None, task=0):
     action = json.dumps({"tool": tool, "inputs": inputs}, ensure_ascii=False)
     try:
         db.execute("BEGIN IMMEDIATE")
-        if decision_id is None and db.execute(
-                "SELECT 1 FROM decisions WHERE chat=? AND state='pending'", (chat,)).fetchone():
-            raise ValueError("Use task_decision prepare with the originating decision_id, or decision_id=0 for an unrelated action.")
         if decision_id:
             row = db.execute("SELECT * FROM decisions WHERE id=? AND chat=?", (decision_id, chat)).fetchone()
             if not row or row['state'] != 'pending':
@@ -606,6 +603,11 @@ def execute(agent, chat, inputs):
             if agent.BACKGROUND_TASK_ID:
                 raise ValueError("The foreground prepares exact actions against the worker's decision_id.")
             tool, values = inputs["tool"], inputs["inputs"]
+            decision_id = int(inputs.get("decision_id") or 0)
+            if not decision_id:
+                # 2026-11-13: the coordinator parked a read-only command this way and told Alex the system had held it.
+                raise ValueError("Prepare attaches an exact action to a worker's pending question. An action of your own "
+                                 "is run, not prepared: the runtime parks it by itself if it needs Alex's word.")
             schemas = {(t.get('function') or t)['name']: (t.get('function') or t)
                        for t in agent.get_tools('anthropic')}
             if tool not in ('send_email', 'execute_command') or tool not in schemas:
@@ -615,8 +617,11 @@ def execute(agent, chat, inputs):
                 raise ValueError("Unknown action inputs.")
             if any(k not in values for k in schema.get('required', [])):
                 raise ValueError("Missing required action inputs.")
-            return agent._park(chat, tool, values, "Approve this exact action:\n" + json.dumps(
-                {"tool": tool, "inputs": values}, ensure_ascii=False), decision_id=int(inputs['decision_id']))
+            question = next((d["question"] for d in store.decisions(chat) if d["id"] == decision_id), "")
+            summary = (f"`{values.get('command', '')[:600]}`" if tool == "execute_command"
+                       else f"to {values.get('to', '')}: {values.get('subject', '')}")
+            return agent._park(chat, tool, values, f"{question[:300]}\n\nThe exact {'command' if tool == 'execute_command' else 'email'}:\n{summary}",
+                               decision_id=decision_id)
         elif action == "answer":
             if agent.BACKGROUND_TASK_ID:
                 raise ValueError("The foreground agent records user answers.")

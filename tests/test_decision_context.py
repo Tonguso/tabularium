@@ -34,14 +34,6 @@ class DecisionContext(unittest.TestCase):
             date=1793047939, text=text, reply_to_message=SimpleNamespace(message_id=reply))
         return agent._settle_by_reply(message)
 
-    def test_pending_task_cannot_spawn_a_disconnected_approval(self):
-        agent = self.agent()
-        decision = self.question(agent)
-        out = agent._park(1, 'send_email', {'to': 'test@example.test'}, 'Send?')
-        self.assertIsInstance(out, Refused)
-        self.assertIn('decision_id', str(out))
-        self.assertEqual([r['id'] for r in td.pending(agent._background, 1)], [decision['id']])
-
     def test_one_decision_authorizes_exact_action_after_restart_and_resumes_once(self):
         agent = self.agent()
         decision = self.question(agent)
@@ -119,9 +111,34 @@ class DecisionContext(unittest.TestCase):
         self.say(agent)
         self.assertEqual(ran, [])
 
+    def test_an_agent_never_parks_its_own_action_and_the_rails_park_beside_a_pending_question(self):
+        agent = self.agent()
+        out = td.execute(agent, 1, dict(action='prepare', decision_id=0, tool='execute_command', inputs={'command': 'whoami'}))
+        self.assertIsInstance(out, Failed)
+        self.assertIn('run, not prepared', out)
+        self.assertEqual(td.pending(agent._background, 1), [])
+        # A worker's question is pending; a rail (the danger screen) still parks the foreground's own command.
+        self.question(agent)
+        sent = []
+        agent.send_message = lambda chat, text, **kw: sent.append(str(text)) or True
+        agent._park(1, 'execute_command', {'command': 'Remove-Item -Recurse D:\\x'}, 'This looks destructive:\n`Remove-Item -Recurse D:\\x`')
+        self.assertEqual([d['kind'] for d in td.pending(agent._background, 1)], ['question', 'action'])
+        self.assertIn('Reply *yes*', sent[-1])
+
+    def test_a_prepared_action_is_asked_as_the_question_and_the_command(self):
+        agent = self.agent()
+        decision = self.question(agent)
+        sent = []
+        agent.send_message = lambda chat, text, **kw: sent.append(str(text)) or True
+        td.execute(agent, 1, dict(action='prepare', decision_id=decision['id'], tool='execute_command',
+                                  inputs={'command': 'Remove-Item D:\\renders'}))
+        self.assertIn('Delete the rendered images?\n\nThe exact command:\n`Remove-Item D:\\renders`', sent[-1])
+        self.assertNotIn('{"tool"', sent[-1])
+
     def test_preparation_cannot_widen_agent_scope_or_overwrite_an_action(self):
         agent = self.agent('private')
-        out = td.execute(agent, 1, dict(action='prepare', decision_id=0,
+        decision = self.question(agent)
+        out = td.execute(agent, 1, dict(action='prepare', decision_id=decision['id'],
             tool='execute_command', inputs={'command': 'whoami'}))
         self.assertIsInstance(out, Failed)
         agent = self.agent('coordinator')
