@@ -37,6 +37,7 @@ from tabularium.core import engine
 from tabularium.memory.memory_context import memory_tool_schema, WorkingMemory
 from tabularium.memory.memory_store import locked as _memory_locked, memory_lock
 from tabularium.records.action_evidence import verify_artifact, EmailReceipts
+from tabularium.tools.agentmail import AgentMail
 from tabularium.records import verification
 from tabularium.records.background_runtime import TaskStore, TaskStopped
 from tabularium.memory.conversation_recall import ConversationRecall
@@ -88,7 +89,7 @@ class Config:
     background_refusals: bool = False           # Cato: workers refuse polling other agents' task_state and delivering early
     work_roots: tuple = ()                      # folders outside its own the agent may read and write (agent.toml); never
                                                 # another agent's folder or the home's own files (tabularium.core.boundary)
-    outlook_browser_tools: bool = True          # Tacitus: neither
+    email_browser_tools: bool = True            # Tacitus: neither
     tool_allow: frozenset = frozenset()         # Tacitus: only these tools, remember last
     tools_after: tuple = ()                     # ((after_name, schema), ...) insertions into the base list
     tools_remove: frozenset = frozenset()
@@ -111,7 +112,7 @@ PROJECT_RECORD_TOOL = {"name":"project_record","description":"Persistent project
 # Shared "Operational reliability" block (Cato, Cal, Vit). Tacitus supplies his own tail. The four {slots} are the
 # lines that differed between the three files; everything else was identical.
 OPS_BLOCK = """Operational reliability:
-- Before substantial work, inspect capability_check for relevant prerequisites. For mail probe outlook;
+- Before substantial work, inspect capability_check for relevant prerequisites. For mail probe email;
   for authenticated reading probe the actual site headlessly and inspect member content. Configuration,
   saved cookies and past API responses never prove current access. Do not open login/setup windows as
   a probe. Preserve checkpoints when blocked and report the precise capability and evidence.
@@ -236,7 +237,7 @@ class AgentApp(engine.AgentRuntime):
         self._background = TaskStore(self.AGENT_DIR, cfg.role, cfg.display)
         self._background.answering = lambda: self._inbox.answering()
         self._tool_scope = None   # None: every tool; a set: only those (tool_scope)
-        self._email_receipts = EmailReceipts(self.AGENT_DIR / "task_state" / "email_receipts", cfg.display)
+        self._email_receipts = EmailReceipts(self.AGENT_DIR / "task_state" / "email_receipts")
 
         # Refuse to start twice. Two processes polling the same bot token both call getUpdates, and Telegram answers
         # one of them with 409 Conflict -- which can take the poller down and looks exactly like the agent "closing on
@@ -267,18 +268,11 @@ class AgentApp(engine.AgentRuntime):
             self.tavily_client = TavilyClient(api_key=self.TAVILY_API_KEY)
         print("Search order: " + _search_order.order_label(bool(self.TAVILY_API_KEY), bool(os.environ.get("ANYSEARCH_API_KEY"))))
 
-        # Outlook COM setup
-        try:
-            import pythoncom
-            import win32com.client as win32
-            self.OUTLOOK_AVAILABLE = True
-            print("Outlook COM: available")
-        except ImportError:
-            pythoncom = win32 = None
-            self.OUTLOOK_AVAILABLE = False
-            print("Outlook COM: not available (pywin32 not installed)")
-        self.pythoncom = pythoncom if self.OUTLOOK_AVAILABLE else None
-        self.win32 = win32 if self.OUTLOOK_AVAILABLE else None
+        # The agent's own mailbox (tabularium.tools.agentmail): an AgentMail key bound to one inbox, one per agent.
+        mail_key = os.environ.get(f"{cfg.name.upper()}_AGENTMAIL_API_KEY", "")
+        self._mail = AgentMail(mail_key) if mail_key else None
+        self.EMAIL_AVAILABLE = bool(mail_key)
+        print("Email: " + ("AgentMail inbox" if mail_key else f"none ({cfg.name.upper()}_AGENTMAIL_API_KEY not set)"))
 
         # Playwright setup
         try:
@@ -312,7 +306,7 @@ class AgentApp(engine.AgentRuntime):
             self.SYSTEM_PROMPT += "\n\n" + (Path(_learning.__file__).with_name("GUIDANCE.md")).read_text(encoding="utf-8")
 
         # ── Tools ──
-        self.OUTLOOK_TOOLS_OPENAI = [openai_tool(t) for t in self.OUTLOOK_TOOLS_ANTHROPIC]
+        self.EMAIL_TOOLS_OPENAI = [openai_tool(t) for t in self.EMAIL_TOOLS_ANTHROPIC]
         self.BROWSER_TOOLS_OPENAI = [openai_tool(t) for t in self.BROWSER_TOOLS_ANTHROPIC]
         self.BASE_TOOLS_ANTHROPIC = self.build_tools()
         self.BASE_TOOLS_OPENAI = [openai_tool(t) for t in self.BASE_TOOLS_ANTHROPIC if "input_schema" in t]
@@ -728,8 +722,8 @@ class AgentApp(engine.AgentRuntime):
             PROJECT_RECORD_TOOL,
             CHECKPOINT_TOOL,
             verification.TOOL,
-            {"name":"capability_check","description":"Inspect local capability evidence before substantial tasks. overview reports configuration and recent model responses without paid requests; outlook probes running classic Outlook COM with a 12s bound, no opening setup/sending; browser with url checks the real page using existing headless navigation. A loaded page is not proof of authentication or membership. PDF/voice need actual artifact/request verification.",
-             "input_schema":{"type":"object","properties":{"probe":{"type":"string","enum":["overview","outlook","browser"]},"url":{"type":"string"}},"required":[]}},
+            {"name":"capability_check","description":"Inspect local capability evidence before substantial tasks. overview reports configuration and recent model responses without paid requests; email reports whether this agent has a mailbox key, without sending; browser with url checks the real page using existing headless navigation. A loaded page is not proof of authentication or membership. PDF/voice need actual artifact/request verification.",
+             "input_schema":{"type":"object","properties":{"probe":{"type":"string","enum":["overview","email","browser"]},"url":{"type":"string"}},"required":[]}},
             {"name":"specialist_review",
              "description":"Stateless research/quant/critic/delivery review through the paid Anthropic advisor API. role delivery is the cold read of a delegate's delivery before accept: pass delivery_id from result, the completion condition as question, and the result text with the numbered completion items as evidence; accept refuses report-only verdicts without it. Alex approved relevant private/work evidence transfer; never include credentials. No persona/history/tools inherited. Supply original question, dated evidence excerpts with IDs and contrary evidence. Max three calls per turn and 24k characters. Use selectively, in background for long tasks. Findings are advisory, not verified outcomes or user approval.",
              "input_schema":{"type":"object","properties":{
@@ -789,23 +783,23 @@ class AgentApp(engine.AgentRuntime):
         return tools
 
     def _all_tools(self, provider: str) -> list:
-        if not self.config.outlook_browser_tools:
+        if not self.config.email_browser_tools:
             if provider == "anthropic":
                 tools = [self.TAVILY_SEARCH_TOOL_ANTHROPIC] + self.BASE_TOOLS_ANTHROPIC
                 tools[-1] = {**tools[-1], "cache_control": dict(self.CACHE_CONTROL)}
                 return tools
             return [self.TAVILY_SEARCH_TOOL_OPENAI] + self.BASE_TOOLS_OPENAI
-        outlook = self.OUTLOOK_TOOLS_ANTHROPIC if self.OUTLOOK_AVAILABLE else []
-        outlook_oa = self.OUTLOOK_TOOLS_OPENAI if self.OUTLOOK_AVAILABLE else []
+        email = self.EMAIL_TOOLS_ANTHROPIC if self.EMAIL_AVAILABLE else []
+        email_oa = self.EMAIL_TOOLS_OPENAI if self.EMAIL_AVAILABLE else []
         browser = self.BROWSER_TOOLS_ANTHROPIC if self.PLAYWRIGHT_AVAILABLE else []
         browser_oa = self.BROWSER_TOOLS_OPENAI if self.PLAYWRIGHT_AVAILABLE else []
         if provider == "anthropic":
             search = self.TAVILY_SEARCH_TOOL_ANTHROPIC   # the agents' own web_search tool; the engine order decides where it goes
-            tools = [search] + self.BASE_TOOLS_ANTHROPIC + outlook + browser
+            tools = [search] + self.BASE_TOOLS_ANTHROPIC + email + browser
             # Cache the tools list — last tool gets the cache_control marker
             tools[-1] = {**tools[-1], "cache_control": dict(self.CACHE_CONTROL)}
             return tools
-        return [self.TAVILY_SEARCH_TOOL_OPENAI] + self.BASE_TOOLS_OPENAI + outlook_oa + browser_oa
+        return [self.TAVILY_SEARCH_TOOL_OPENAI] + self.BASE_TOOLS_OPENAI + email_oa + browser_oa
 
     # ── Formatting ───────────────────────────────────────────────────────────────
 
@@ -1291,9 +1285,7 @@ class AgentApp(engine.AgentRuntime):
         elif name == "verify_artifact":
             return json.dumps(verify_artifact(**inputs), ensure_ascii=False)
         elif name == "email_status":
-            return self._with_deadline(lambda: self.tool_email_status(**inputs), self.OUTLOOK_TIMEOUT, None, "email_status")
-        elif name == "list_email_accounts":
-            return self.tool_list_email_accounts()
+            return self.tool_email_status(**inputs)
         elif name == "read_memory":
             return self.tool_read_memory(**inputs)
         elif name == "skill":
@@ -1336,10 +1328,9 @@ class AgentApp(engine.AgentRuntime):
         elif name == "web_search":
             return self.tool_web_search(chat_id=chat_id, **inputs)
         elif name == "read_email":
-            return self._cap_result(self._with_deadline(lambda: self.tool_read_email(**inputs), self.OUTLOOK_TIMEOUT,
-                                                        self._kill_headless_outlook, "read_email"), limit=40000)
+            return self._cap_result(self.tool_read_email(**inputs), limit=40000)
         elif name == "send_email":
-            return self._with_deadline(lambda: self.tool_send_email(**inputs), self.OUTLOOK_TIMEOUT, None, "send_email")
+            return self.tool_send_email(**inputs)
         elif name == "browser_close":
             if not self.PLAYWRIGHT_AVAILABLE:
                 return "Playwright not installed."

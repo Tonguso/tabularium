@@ -105,44 +105,36 @@ class AgentRuntime(SharedHandlers):
     _TIER_ORDER  = ["haiku", "sonnet", "opus", "fable"]
     _TIER_LATEST = {"haiku": "claude-haiku-4-5", "sonnet": "claude-sonnet-5-5",
                     "opus": "claude-opus-5-5",  "fable": "claude-fable-5-1"}
-    OUTLOOK_TOOLS_ANTHROPIC = [
-        {
-            "name": "list_email_accounts",
-            "description": "List all Outlook email accounts available to send from.",
-            "input_schema": {"type": "object", "properties": {}, "required": []},
-        },
+    EMAIL_TOOLS_ANTHROPIC = [
         {
             "name": "read_email",
             "description": (
-                "Read emails from Alex's Outlook. Searches ALL connected accounts by default "
-                "(owner@example.com, owner@example.com, work@example.com) and merges "
-                "them newest-first, so you never need to know which mailbox something landed in. "
-                "Each result is labelled with the account it came from."),
+                "Read this agent's own mailbox (an AgentMail inbox; the address is in every result). Newest first. "
+                "Lists show a preview; pass message_id to read one message in full."),
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "count":   {"type": "integer", "description": "Number of emails to retrieve (default 10, max 50)."},
-                    "sender":  {"type": "string",  "description": "Filter by sender name or email address (optional)."},
-                    "keyword": {"type": "string",  "description": "Filter by keyword in subject or body (optional)."},
-                    "folder":  {"type": "string",  "description": "Folder to read from: inbox, sent, drafts (default: inbox)."},
-                    "account": {"type": "string",  "description": "Restrict to one mailbox, e.g. 'owner'. Omit to search every account (the normal case)."},
+                    "count":      {"type": "integer", "description": "Number of messages to list (default 10, max 50)."},
+                    "sender":     {"type": "string",  "description": "Only messages whose From contains this (optional)."},
+                    "keyword":    {"type": "string",  "description": "Only messages whose subject contains this (optional)."},
+                    "message_id": {"type": "string",  "description": "Read this one message in full (from a listing)."},
                 },
                 "required": [],
             },
         },
         {
             "name": "send_email",
-            "description": "Send an email via Alex's Outlook. Always confirm with Alex before calling this. If Alex specifies a sender address, you MUST pass it as from_address — never omit it. Result is a receipt: submitted is not confirmed_sent, and neither proves recipient delivery.",
+            "description": "Send an email from this agent's own mailbox. Always confirm to/subject/body with Alex before calling this. The body is Markdown-shaped text (paragraphs, **bold**, - lists, # headings) and goes out as HTML with a plain-text copy. Result is a receipt: confirmed_sent means the service accepted the message, not that the recipient has it.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "to":           {"type": "string", "description": "Recipient email address(es), semicolon-separated."},
-                    "subject":      {"type": "string", "description": "Email subject."},
-                    "body":         {"type": "string", "description": "Email body (plain text)."},
-                    "cc":           {"type": "string", "description": "CC email address(es), semicolon-separated (optional)."},
-                    "from_address": {"type": "string", "description": "Sender email address. REQUIRED when Alex specifies which account to send from. Must exactly match an account from list_email_accounts."},
-                    "attachments":  {"type": "string", "description": "Optional file path(s) to attach, semicolon-separated. e.g. 'D:\\\\work\\\\notes.txt' or 'D:\\\\a.txt;D:\\\\b.txt'. Corporate mail filters often quarantine .py and raw .html; rename code to .txt or zip it before attaching."},
-                    "resend":       {"type": "boolean", "description": "Only true if Alex explicitly requests a duplicate email. Never use to recover from a timeout."},
+                    "to":          {"type": "string", "description": "Recipient address(es), semicolon-separated."},
+                    "subject":     {"type": "string", "description": "Email subject."},
+                    "body":        {"type": "string", "description": "Email body as Markdown-shaped text."},
+                    "cc":          {"type": "string", "description": "CC address(es), semicolon-separated (optional)."},
+                    "attachments": {"type": "string", "description": "Optional file path(s) to attach, semicolon-separated; 6 MB in all. Corporate mail filters often quarantine .py and raw .html; rename code to .txt or zip it before attaching."},
+                    "reply_to_id": {"type": "string", "description": "message_id of a received message to reply to; the mail threads under it and the subject is theirs (optional)."},
+                    "resend":      {"type": "boolean", "description": "Only true if Alex explicitly requests a duplicate email. Never use to recover from a timeout."},
                 },
                 "required": ["to", "subject", "body"],
             },
@@ -253,13 +245,6 @@ class AgentRuntime(SharedHandlers):
         "Assess both sides of a disagreement against supplied evidence; confidence and seniority are not evidence. "
         "Say what would change your conclusion and disclose what you cannot verify. Do not invent sources."
     )
-    _NO_OUTLOOK_PROFILE_MSG = (
-        "Outlook has no mail account set up on this machine, so I can't read or send email. "
-        "That empty setup is why an Outlook 'add account' window keeps popping up. "
-        "Alex needs to open Outlook (classic) once and add his account (e.g. owner@example.com); "
-        "after that I'll be able to use it. I won't keep opening the window in the meantime."
-    )
-    EMAIL_SCAN_LIMIT = 400
     _CATASTROPHIC_CMD = re.compile(
         r'(?i)('
         r'\bformat-volume\b|\bdiskpart\b'
@@ -292,7 +277,6 @@ class AgentRuntime(SharedHandlers):
     KILL_REFUSAL = Refused("Refused, not executed: process kills must name literal PIDs (Stop-Process -Id N, "
                            "taskkill /PID N). A by-name/filter kill stopped all four agents on 2026-10-06.")
     COMMAND_TIMEOUT = 60
-    OUTLOOK_TIMEOUT = 120
     VIEW_IMAGE_MAX_EDGE = 1568
     IMAGE_MODEL = "gpt-image-2"
     ZSXQ_DEFAULT_URL  = "https://wx.zsxq.com/group/YOUR_GROUP_ID"
@@ -794,163 +778,38 @@ class AgentRuntime(SharedHandlers):
             atomic_json(path,record)
             return "Specialist unavailable (" + type(exc).__name__ + "). No review completed. Record: " + str(path)
 
-    def _outlook_has_profile(self) -> bool:
-        """True if a configured Outlook/MAPI mail profile exists. Checking first avoids
-        triggering Outlook's account-setup wizard when there is no profile."""
+    def tool_read_email(self, count: int = 10, sender: str = "", keyword: str = "", message_id: str = "") -> str:
         try:
-            import winreg
-            keys = [
-                r"Software\Microsoft\Office\16.0\Outlook\Profiles",
-                r"Software\Microsoft\Windows NT\CurrentVersion\Windows Messaging Subsystem\Profiles",
-            ]
-            for path in keys:
-                try:
-                    k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, path)
-                    has_sub = winreg.QueryInfoKey(k)[0] > 0
-                    winreg.CloseKey(k)
-                    if has_sub:
-                        return True
-                except FileNotFoundError:
-                    continue
-            return False
-        except Exception:
-            return True
-
-    def tool_list_email_accounts(self) -> str:
-        if not self.OUTLOOK_AVAILABLE:
-            return "Outlook COM not available."
-        if not self._outlook_has_profile():
-            return self._NO_OUTLOOK_PROFILE_MSG
-        try:
-            self.pythoncom.CoInitialize()
-            outlook = self.win32.Dispatch("Outlook.Application")
-            accounts = outlook.Session.Accounts
-            result = []
-            for i in range(1, accounts.Count + 1):
-                acc = accounts.Item(i)
-                result.append(f"{i}. {acc.DisplayName} <{acc.SmtpAddress}>")
-            return "\n".join(result) if result else "No accounts found."
-        except Exception as e:
-            return Failed(f"Error listing accounts: {e}")
-        finally:
-            self.pythoncom.CoUninitialize()
-
-    def tool_read_email(self, count: int = 10, sender: str = "", keyword: str = "",
-                        folder: str = "inbox", account: str = "") -> str:
-        if not self.OUTLOOK_AVAILABLE:
-            return "Outlook COM not available."
-        if not self._outlook_has_profile():
-            return self._NO_OUTLOOK_PROFILE_MSG
-        try:
-            self.pythoncom.CoInitialize()
-            outlook = self.win32.Dispatch("Outlook.Application")
-            ns = outlook.GetNamespace("MAPI")
-
-            folder_name = {"inbox": "Inbox", "sent": "Sent Items", "drafts": "Drafts"}.get(
-                folder.lower(), "Inbox")
-
-            # Search EVERY connected account, not just the default delivery store.
-            # ns.GetDefaultFolder() opens only the profile's default store — here that is
-            # owner@example.com, a low-traffic mailbox whose newest mail is months old.
-            # Reading it returned real but useless results that looked like stale data.
-            count = min(count or 10, 50)
-            s_low, k_low = sender.lower(), keyword.lower()
-            want_account = (account or "").lower()
-            found, scanned_stores, skipped = [], [], []
-
-            for si in range(1, ns.Folders.Count + 1):
-                store = ns.Folders.Item(si)
-                store_name = str(store.Name)
-                if want_account and want_account not in store_name.lower():
-                    continue
-                try:
-                    mapi_folder = store.Folders.Item(folder_name)
-                except Exception:
-                    skipped.append(f"{store_name} (no {folder_name})")
-                    continue
-
-                items = mapi_folder.Items
-                try:
-                    items.Sort("[ReceivedTime]", True)      # newest first
-                except Exception:
-                    pass
-                scanned_stores.append(f"{store_name}:{items.Count}")
-
-                # Walk newest-first and stop early: these mailboxes run to thousands of items
-                # and every property read is a COM round trip.
-                hits, seen = 0, 0
-                for i in range(1, items.Count + 1):
-                    if hits >= count or seen >= self.EMAIL_SCAN_LIMIT:
-                        break
-                    seen += 1
-                    try:
-                        item = items.Item(i)
-                        subject = str(getattr(item, "Subject", "") or "")
-                        sender_name = str(getattr(item, "SenderName", "") or "")
-                        sender_addr = str(getattr(item, "SenderEmailAddress", "") or "")
-                        if sender and s_low not in sender_name.lower() and s_low not in sender_addr.lower():
-                            continue
-                        # Body is the expensive read, so only fetch it once cheap filters pass.
-                        body = str(getattr(item, "Body", "") or "")
-                        if keyword and k_low not in subject.lower() and k_low not in body.lower():
-                            continue
-                        received = getattr(item, "ReceivedTime", None)
-                        stamp = received.strftime("%Y-%m-%d %H:%M") if received else "unknown"
-                        sort_key = received.timestamp() if received else 0.0
-
-                        preview = body.strip()[:500].replace("\r\n", " ").replace("\n", " ")
-                        if len(body.strip()) > 500:
-                            preview += "..."
-                        found.append((sort_key,
-                                      f"Account: {store_name}\n"
-                                      f"From: {sender_name} <{sender_addr}>\n"
-                                      f"Date: {stamp}\n"
-                                      f"Subject: {subject}\n"
-                                      f"Body: {preview}"))
-                        hits += 1
-                    except Exception:
-                        continue    # meeting requests and similar have no ReceivedTime
-
-            found.sort(key=lambda r: r[0], reverse=True)     # merge the accounts by date
-            results = [txt for _, txt in found[:count]]
-
-            where = f" across {len(scanned_stores)} account(s) [{', '.join(scanned_stores)}]"
-            if not results:
-                return (f"No emails found matching the criteria{where}."
-                        + (f" Skipped: {', '.join(skipped)}." if skipped else ""))
-            return (f"Retrieved {len(results)} email(s){where}:\n\n"
-                    + "\n\n---\n\n".join(results))
-
-        except Exception as e:
-            return Failed(f"Error reading email: {e}")
-        finally:
-            self.pythoncom.CoUninitialize()
-
-    def tool_send_email(self, to: str, subject: str, body: str, cc: str = "", from_address: str = "",
-                        attachments: str = "", resend: bool = False) -> str:
-        if not self.OUTLOOK_AVAILABLE or not self._outlook_has_profile():
-            return self._NO_OUTLOOK_PROFILE_MSG
-        self.pythoncom.CoInitialize()
-        try:
-            payload = dict(to=to, subject=subject, body=body, cc=cc,
-                           from_address=from_address.strip() or "owner@example.com",
-                           attachments=[p.strip().strip('"') for p in attachments.split(";") if p.strip()])
-            receipt = self._email_receipts.send(self.win32.Dispatch("Outlook.Application"), payload, resend)
-            return json.dumps(receipt, ensure_ascii=False)
+            if message_id:
+                m = self._mail.message(message_id)
+                text = m.get("text") or m.get("extracted_text") or re.sub(r"<[^>]+>", " ", m.get("html") or "")
+                return json.dumps({"message_id": m.get("message_id"), "thread_id": m.get("thread_id"), "from": m.get("from"),
+                                   "to": m.get("to"), "cc": m.get("cc"), "date": m.get("timestamp"), "subject": m.get("subject"),
+                                   "attachments": [a.get("filename") for a in m.get("attachments") or []],
+                                   "text": text[:20000]}, ensure_ascii=False)
+            rows = self._mail.messages(limit=min(count or 10, 50), sender=sender, subject=keyword)
+            where = self._mail.address()
+            if not rows:
+                return f"No mail in {where}" + (" matching the filters." if sender or keyword else ".")
+            return f"{len(rows)} message(s) in {where}, newest first:\n\n" + "\n\n---\n\n".join(
+                f"id: {m.get('message_id')}\nFrom: {m.get('from', '')}\nTo: {', '.join(m.get('to') or [])}\n"
+                f"Date: {m.get('timestamp', '')}\nSubject: {m.get('subject', '')}\nPreview: {m.get('preview', '')}"
+                + (f"\nAttachments: {', '.join(a.get('filename', '') for a in m['attachments'])}" if m.get("attachments") else "")
+                for m in rows)
         except Exception as exc:
-            return f"Email outcome unverified ({type(exc).__name__}). Inspect receipts/Outbox/Sent Items before repeating."
-        finally:
-            self.pythoncom.CoUninitialize()
+            return Failed(f"Error reading email: {exc}")
+
+    def tool_send_email(self, to: str, subject: str, body: str, cc: str = "", attachments: str = "",
+                        reply_to_id: str = "", resend: bool = False) -> str:
+        try:
+            payload = dict(to=to, subject=subject, body=body, cc=cc, reply_to_id=reply_to_id, from_address=self._mail.address(),
+                           attachments=[p.strip().strip('"') for p in attachments.split(";") if p.strip()])
+        except Exception as exc:
+            return Failed(f"Mailbox unavailable: {exc}")
+        return json.dumps(self._email_receipts.send(self._mail, payload, resend), ensure_ascii=False)
 
     def tool_email_status(self, receipt_id: str) -> str:
-        receipt = self._email_receipts.get(receipt_id)
-        if self.OUTLOOK_AVAILABLE and self._outlook_has_profile():
-            self.pythoncom.CoInitialize()
-            try:
-                receipt = self._email_receipts.confirm(self.win32.Dispatch("Outlook.Application"), receipt)
-            finally:
-                self.pythoncom.CoUninitialize()
-        return json.dumps(receipt, ensure_ascii=False)
+        return json.dumps(self._email_receipts.get(receipt_id), ensure_ascii=False)
 
     def tool_read_memory(self, section: str = "", query: str = "", offset: int = 0,
                          limit: int = 12000) -> str:

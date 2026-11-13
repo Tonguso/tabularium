@@ -35,7 +35,7 @@ CONFIG = Config(
     auto_stub="Tacitus has no shell tools or command auto-mode.",
     tts="openai", tts_voice="sage",
     tts_instructions="Speak warmly, calmly, and unhurried. Soft-spoken and measured, with genuine care. Never rushed.",
-    outlook_browser_tools=False,
+    email_browser_tools=False,
     tool_allow=PRIVATE_ALLOWED_TOOLS,
     plan_signin_aware=True,
     telegram_prompt="""

@@ -52,17 +52,15 @@ def verify_artifact(path):
     return result
 
 class EmailReceipts:
-    def __init__(self, directory, agent_name):
-        """agent_name tags each sent mail ("<Name>Receipt") so it can be found again in Sent Items."""
+    def __init__(self, directory):
         self.directory = Path(directory)
-        self.tag = agent_name + "Receipt"
         self.directory.mkdir(parents=True, exist_ok=True)
 
     def claim(self, payload, resend=False):
         fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
         index = self.directory / (fingerprint + ".json")
         with memory_lock(index):
-            if index.exists() and not resend:
+            if index.exists() and not resend and json.loads(index.read_text(encoding="utf-8")).get("status") != "rejected":
                 return json.loads(index.read_text(encoding="utf-8")), False
             receipt = {"id": uuid.uuid4().hex, "status": "prepared", "created": time.time(),
                        "fingerprint": fingerprint, "to": payload["to"], "subject": payload["subject"],
@@ -76,7 +74,7 @@ class EmailReceipts:
         path = self.directory / (receipt["id"] + ".json")
         with memory_lock(index):
             current = json.loads(path.read_text(encoding="utf-8")) if path.exists() else dict(receipt)
-            ranks = {"prepared": 0, "draft_saved": 1, "send_outcome_unknown": 2, "submitted": 3, "confirmed_sent": 4}
+            ranks = {"prepared": 0, "send_outcome_unknown": 1, "rejected": 2, "confirmed_sent": 3}
             if ranks.get(updates.get("status"), -1) < ranks.get(current.get("status"), -1):
                 updates.pop("status", None)
                 updates.pop("evidence", None)
@@ -93,33 +91,9 @@ class EmailReceipts:
             raise ValueError("Invalid receipt ID.")
         return json.loads((self.directory / (ident + ".json")).read_text(encoding="utf-8"))
 
-    def confirm(self, outlook, receipt):
-        """Find correlation property in Sent Items; no assumptions about delivery."""
-        if receipt["status"] == "confirmed_sent":
-            return receipt
-        try:
-            accounts = outlook.Session.Accounts
-            account = next(accounts.Item(i) for i in range(1, accounts.Count + 1)
-                           if accounts.Item(i).SmtpAddress.lower() == receipt["from"].lower())
-            items = account.DeliveryStore.GetDefaultFolder(5).Items
-            items.Sort("[SentOn]", True)
-            for i in range(1, min(items.Count, 100) + 1):
-                item = items.Item(i)
-                prop = item.UserProperties.Find(self.tag)
-                if prop and prop.Value == receipt["id"]:
-                    return self.save(receipt, status="confirmed_sent", sent_entry_id=item.EntryID,
-                                     evidence=f"Matched {self.tag} in the sender's Sent Items. Recipient delivery unverified.")
-            return self.save(receipt, sent_check="No matching item in the latest 100 Sent Items; delivery remains unverified.")
-        except Exception as exc:
-            return self.save(receipt, sent_check="Sent Items check unavailable: " + type(exc).__name__)
-
-    def send(self, outlook, payload, resend=False):
-        # Validate sender and attachment paths BEFORE claiming or submitting anything.
-        accounts = outlook.Session.Accounts
-        matched = next((accounts.Item(i) for i in range(1, accounts.Count + 1)
-                        if accounts.Item(i).SmtpAddress.lower() == payload["from_address"].lower()), None)
-        if matched is None:
-            return {"status": "not_sent", "error": "Requested sending account is not connected."}
+    def send(self, mail, payload, resend=False):
+        """Claim a receipt for the exact payload, then send once through `mail` (tabularium.tools.agentmail.AgentMail).
+        The same payload again returns the first receipt unsent, unless the service rejected that attempt."""
         paths = [Path(p).resolve() for p in payload["attachments"]]
         if any(not p.is_file() for p in paths):
             return {"status": "not_sent", "error": "An attachment is missing."}
@@ -127,23 +101,17 @@ class EmailReceipts:
         payload = dict(payload, attachment_hashes=[hashlib.sha256(p.read_bytes()).hexdigest() for p in paths])
         receipt, fresh = self.claim(payload, resend)
         if not fresh:
-            self.confirm(outlook, receipt)
             return dict(receipt, replay="Not sent again. An intentional duplicate requires resend=true and Alex's explicit request.")
+        # Persist uncertainty before crossing the external-effect boundary.
+        self.save(receipt, status="send_outcome_unknown")
         try:
-            mail = outlook.CreateItem(0)
-            mail.To, mail.Subject, mail.Body, mail.CC = payload["to"], payload["subject"], payload["body"], payload["cc"]
-            mail._oleobj_.Invoke(*(64209, 0, 8, 0, matched))
-            mail.UserProperties.Add(self.tag, 1).Value = receipt["id"]
-            for p in paths:
-                mail.Attachments.Add(str(p))
-            mail.Save()
-            self.save(receipt, status="draft_saved", draft_entry_id=mail.EntryID)
-            # Persist uncertainty before crossing the external-effect boundary.
-            self.save(receipt, status="send_outcome_unknown")
-            mail.Send()
-            self.save(receipt, status="submitted", evidence="Outlook accepted Send(); Sent Items not yet confirmed.")
-            return self.confirm(outlook, receipt)
-        except Exception as exc:
-            # Never label a timeout/COM exception as proof that nothing was sent.
+            from tabularium.tools.agentmail import addresses
+            result = mail.send(addresses(payload["to"]), payload["subject"], payload["body"], addresses(payload.get("cc")),
+                               [str(p) for p in paths], payload.get("reply_to_id", ""))
+        except RuntimeError as exc:            # the service answered, and the answer was no: nothing went out
+            return self.save(receipt, status="rejected", error=str(exc)[:600])
+        except Exception as exc:               # no answer: never label a timeout as proof that nothing was sent
             return self.save(receipt, error=type(exc).__name__,
-                             warning="Inspect the draft, Outbox and Sent Items before any retry.")
+                             warning="The service did not answer; check the mailbox before any retry.")
+        return self.save(receipt, status="confirmed_sent", message_id=result.get("message_id"), thread_id=result.get("thread_id"),
+                         evidence="AgentMail accepted the message. Recipient delivery unverified.")

@@ -7,8 +7,6 @@ import json
 import os
 from pathlib import Path
 import sqlite3
-import subprocess
-import sys
 import time
 from tabularium.core.agent_runtime import atomic_json
 from tabularium.memory.memory_store import memory_lock
@@ -30,8 +28,8 @@ def query(path,sql,args=()):
 
 def capabilities(root, probe="overview"):
     root=Path(root)
-    if probe not in ("overview","outlook"):
-        raise ValueError("Use overview or outlook.")
+    if probe not in ("overview","email"):
+        raise ValueError("Use overview or email.")
     now=time.time()
     result={"checked_at":now,"telegram":read_json(root/"task_state"/"transport.json"),
             "browser":{"status":"configured" if (root/"browser_profile").exists() else "missing",
@@ -42,7 +40,8 @@ def capabilities(root, probe="overview"):
                      "provider":"ElevenLabs", "model":"eleven_v4",
                      "voice_id":os.environ.get(root.name.upper()+"_ELEVENLABS_VOICE_ID", "c6SfcYrb2t09NHXiT80T"),
                      "note":"No paid audio request made; this does not prove service availability."},
-            "outlook":{"status":"not_probed","note":"Run outlook probe; never launch setup or send test mail."}}
+            "email":{"status":"configured" if os.environ.get(root.name.upper()+"_AGENTMAIL_API_KEY") else "missing_key",
+                     "provider":"AgentMail", "note":"The agent's own inbox; a key proves configuration, not that a message will be accepted."}}
     dbs=[root/"task_state"/"inbox.sqlite3"]+list((root/"task_state"/"background").glob("*/task_state/inbox.sqlite3"))
     rows=[]
     for db in dbs:
@@ -52,30 +51,8 @@ def capabilities(root, probe="overview"):
             pass
     result["models"]={"recent_responses":sorted(rows,key=lambda r:r["created"],reverse=True)[:6],
                       "note":"Historical successes only; remaining subscription quota is not inferred."}
-    if probe=="outlook":
-        code="""import json,pythoncom,win32com.client
-pythoncom.CoInitialize()
-try:
- app=win32com.client.GetActiveObject('Outlook.Application')
- print(json.dumps({'status':'available' if app.Session.Accounts.Count else 'no_accounts','account_count':app.Session.Accounts.Count}))
-except Exception:
- print(json.dumps({'status':'unavailable','note':'Classic Outlook not accessible as a running COM application. No window opened.'}))
-finally:
- pythoncom.CoUninitialize()
-"""
-        try:
-            run=subprocess.run([sys.executable,"-c",code],capture_output=True,timeout=12,encoding="utf-8",errors="replace",
-                               creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
-            result["outlook"]=json.loads(run.stdout) if run.returncode==0 else {"status":"probe_error"}
-        except (subprocess.TimeoutExpired,ValueError):
-            result["outlook"]={"status":"timeout_or_error","note":"Do not assume account access."}
     path=root/"task_state"/"capabilities.json"
     with memory_lock(path):
-        prior=read_json(path)
-        if probe=="overview" and prior.get("outlook",{}).get("checked_at"):
-            result["outlook"]=prior["outlook"]
-        elif probe=="outlook":
-            result["outlook"]["checked_at"]=now
         atomic_json(path,result)
     return result
 

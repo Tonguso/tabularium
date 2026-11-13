@@ -11,7 +11,6 @@ import base64
 import io
 import json
 import re
-import subprocess
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -48,22 +47,6 @@ class SharedHandlers:
             if "file is too big" in str(exc).lower():
                 raise FileTooBig(notice) from exc
             raise
-
-    def _kill_headless_outlook(self) -> str:
-        """Kill Outlook instances that have no visible window -- the ones COM starts on demand.
-        A user-opened Outlook has a main window and is left alone. On 2026-09-30 a headless
-        instance stopped answering COM and held send_email, and with it Cato, for an hour."""
-        try:
-            r = subprocess.run(
-                ["powershell", "-NonInteractive", "-Command",
-                 "Get-Process outlook -ErrorAction SilentlyContinue | "
-                 "Where-Object { -not $_.MainWindowTitle } | "
-                 "ForEach-Object { Stop-Process -Id $_.Id -Force; $_.Id }"],
-                capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            pids = r.stdout.decode("utf-8", errors="replace").split()
-            return f"killed headless Outlook pid(s) {', '.join(pids)}" if pids else "no headless Outlook found"
-        except Exception as e:
-            return f"could not kill Outlook: {e}"
 
     def _language_hint(self, text: str) -> str:
         """A per-turn factual note about which language Alex just used.

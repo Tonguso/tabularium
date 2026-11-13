@@ -193,7 +193,7 @@ To cite the software, see `CITATION.cff`.
 
 Version 0.5. It runs daily, and it is not yet a drop-in product:
 
-- Windows first. The supervisor's process adoption, Outlook access and the desktop tool assume Windows; the engine,
+- Windows first. The supervisor's process adoption and the desktop tool assume Windows; the engine,
   Telegram, SQLite and the command-line entry point do not. Cross-platform support is the next piece of work.
 - The agents' prompts address the owner by a placeholder name. Making the owner's name a setting is open work.
 - The slots are the four of the roster. A fifth agent is a line in the roster and a role module; naming agents

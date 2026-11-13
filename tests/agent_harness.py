@@ -30,7 +30,7 @@ def load_agent(agent, root):
     with store.db() as db:
         db.execute("INSERT OR IGNORE INTO tasks(id,chat,request,status,created,updated) VALUES (1,1,'self-test','running',0,0)")
     env = {"ANTHROPIC_API_KEY": "test", "OPENAI_API_KEY": "test", "SEARCH_PROVIDER": "anthropic",
-           f"{agent.upper()}_BACKGROUND_TASK": "1", "TELEGRAM_BOT_TOKEN": "1:a", "PRIVATE_TELEGRAM_BOT_TOKEN": "2:b",
+           f"{agent.upper()}_BACKGROUND_TASK": "1", f"{agent.upper()}_AGENTMAIL_API_KEY": "am_test", "TELEGRAM_BOT_TOKEN": "1:a", "PRIVATE_TELEGRAM_BOT_TOKEN": "2:b",
            "LIBRARIAN_TELEGRAM_BOT_TOKEN": "3:c", "ENGINEER_TELEGRAM_BOT_TOKEN": "4:d"}
     from tabularium.agents import build
     with patch.dict(os.environ, env):
