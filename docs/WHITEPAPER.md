@@ -292,11 +292,12 @@ A worker that asks the owner something ends its turn at the next settled action 
 saved, nothing further is started, the slot is freed, and the answer queues the continuation. Before this rule a
 worker kept executing for minutes after asking, holding the slot while the next job waited.
 
-Everything that waits on the owner is one page of the dashboard, "Waiting on you": every question from a background
-task, every parked action and every proposed skill edit, oldest first, each opened and answered in place. A question
-asked in the foreground is the conversation the owner is already in and does not appear. The answer travels through
-the same durable inbox as any message, bound to the decision it answers. A verdict on a skill edit is settled by the
-runtime the moment it arrives, as a parked action is; a question leaves the page once the agent records the answer. Before this page the questions existed only in the decision
+Questions and parked actions are asked in the chat and answered there, by a reply or by the owner's next message;
+nothing an agent needs the owner's word on goes anywhere else. The dashboard's "Waiting on you" page is for the
+fundamental changes: every proposed skill edit, oldest first, each opened and judged in place, the verdict travelling
+through the same durable inbox as any message and settled by the runtime the moment it arrives. For a week the page
+also listed every background task's question and every parked action, and the owner answered a command's approval
+there as a line of JSON; approvals belong in the conversation that produced them. Before this page the questions existed only in the decision
 store; nineteen of them had accumulated, visible only inside the dashboard's chat, and each answer meant finding the
 question and typing a reply.
 
@@ -614,6 +615,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-11 | The first method reviews ran in a loop: the runtime re-proposed every observation the agent had excluded, each minute, and each re-proposal re-opened the review, so one docket was reviewed ten times and another fifty, all reaching the same proposal | Each observation records one review state; the runtime proposes only unjudged observations; a docket is reviewed again only after three new proposals since the last review began |
 | 2026-11-13 | Told to go on with a report, the coordinator parked its own read of the file for approval through a tool door meant for actions answering a worker's question, and told the owner the system had held it | The agent has no way to park its own action: the rails park, beside a pending question if one is waiting, and a prepared action is asked as the question and the command |
 | 2026-11-13 | Mail went out through the owner's desktop mail client as the owner, in plain text that arrived as a wall of symbols | Each agent has its own mailbox, named by its own key; the agent's text is rendered as the message's HTML with a plain copy; one send per receipt |
+| 2026-11-13 | Four read-only commands the coordinator had parked itself sat on the dashboard's to-do page as lines of JSON with yes and no buttons, beside the skill edits | The page carries fundamental changes only, the proposed skill edits; every question and approval is asked and answered in the chat |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

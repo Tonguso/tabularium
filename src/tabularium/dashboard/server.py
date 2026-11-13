@@ -145,13 +145,8 @@ def state():
             agent['reviews']=dockets.reviews(ROOT/name,OWNER_CHAT_ID,TASK_STORES.get(name)) if ROLES[name].learns else []
         except Exception as exc:
             agent['reviews']=[]; agent['errors'].append('Docket register unreadable: '+str(exc)[:120])
-        try:   # questions waiting on Alex (2026-11-02: 19 of Cato's stood in the store, shown only inside Messaging).
-               # Parked actions and background tasks' questions only: a foreground question is the conversation he is
-               # already in, not a loose end (2026-11-08: the logo back-and-forth filled the list).
-            agent['questions']=[{'id':d['id'],'task':d['task'],'kind':d.get('kind','question'),'question':d['question'],'created':d['created']}
-                                for d in task_store(name).decisions(OWNER_CHAT_ID) if d.get('kind')=='action' or d['task']]
-        except Exception as exc:
-            agent['questions']=[]; agent['errors'].append('Decision store unreadable: '+str(exc)[:120])
+        # Questions and parked actions are asked in the chat and answered there (Alex, 2026-11-13: the to-do list is
+        # for fundamental changes); the "Waiting on you" page carries skill edits only.
         # Foreground usage today (local day): what one message costs on average, so compaction is measurable.
         try:
             midnight=datetime.now(ZoneInfo('UTC')).replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
