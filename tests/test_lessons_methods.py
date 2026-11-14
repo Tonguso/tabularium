@@ -110,6 +110,21 @@ class Step1(unittest.TestCase):
                                        "deletes": "copy of a printed line", "alternatives": ["a", "b"]})
         self.assertNotIn("ALSO IN", kept["show_owner"])                     # too few distinctive words to have a twin
 
+    def test_a_method_has_one_pending_proposal_and_a_second_one_replaces_the_first(self):
+        # 2026-11-14: six separate proposals edited one skill, each from one observation, two of them the same passage.
+        first = self.observe("The archive rule is the cause")
+        learning.propose_change(self.root, 1, first, self.skill, "- Read the archives for each name.", "- Freeze first.", ANCHORED)
+        second = self.observe("Late changes force rebuilds")
+        with self.assertRaisesRegex(ValueError, "already has a pending proposal: " + first):
+            learning.propose_change(self.root, 1, second, self.skill, "- Build the workbook from the archives.", "- Build it last.",
+                                    dict(ANCHORED, anchor="- Build the workbook from the archives.", deletes="from the archives"))
+        self.assertEqual(learning.read(self.root, 1, second)["status"], "candidate")
+        learning.propose_change(self.root, 1, second, self.skill, "- Read the archives for each name.", "- Freeze; then read.",
+                                ANCHORED, explains=[first])
+        self.assertEqual(learning.read(self.root, 1, first)["status"], "folded")
+        self.assertEqual(learning.read(self.root, 1, first)["folded_into"], second)
+        self.assertEqual([p["key"] for p in learning.proposals(self.root, 1)], [second])
+
     def test_a_proposal_without_a_cause_or_with_an_anchor_not_in_the_method_is_refused(self):
         key = self.observe("Rebuilt the workbook after a late membership change")
         with self.assertRaisesRegex(ValueError, "names its cause"):

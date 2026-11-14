@@ -377,7 +377,10 @@ accepts rather than what the agent is told.
    new one beside it. It names two designs considered, and the owner sees which was chosen against which. And the
    runtime itself searches the agent's other skills for passages carrying the same rule and refuses the proposal
    until each is edited in the same go or kept with a reason, because a library of thirty skills had let one rule be
-   rewritten in one and left saying the old thing in five. The agent also names the observations the cause explains. One instance is enough when it carries a
+   rewritten in one and left saying the old thing in five. And a method has one pending rewrite: a second one must
+   explain the first's observations and replaces it, because the redrafts made under the new shape that same afternoon
+   were six separate edits to one skill, each from one observation, two of them the same passage. The agent also names
+   the observations the cause explains. One instance is enough when it carries a
    receipt (the owner's message or a task record); a claim with neither a receipt nor a second instance stays an
    observation. The runtime checks the anchor and the observations; the claim itself is the owner's to judge
    against the instances it cites, as every edit is.

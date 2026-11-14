@@ -272,7 +272,7 @@ def has_receipt(root, chat, d):
     return bool(m and (root / 'task_state' / 'background' / m.group(1)).is_dir())
 
 
-def check_explains(root, chat, key, method, explains):
+def check_explains(root, chat, key, method, explains, rewrite=True):
     """The observations this cause accounts for: open lessons of this agent about the same method, or about no method
     yet. The proposing lesson is one of them. One instance is enough when it carries a receipt; a claim with neither
     receipt nor a second instance is an observation and stays a candidate."""
@@ -289,6 +289,16 @@ def check_explains(root, chat, key, method, explains):
     if len(keys) == 1 and not has_receipt(root, chat, read(root, chat, key)):
         raise ValueError('One instance without a receipt is an observation, not a cause: name the other observations '
                          'this cause explains (explains), or record it from the task or message that showed it.')
+    # A method has one pending rewrite (2026-11-14: six separate edits to one skill, two of them the same passage).
+    # A second rewrite of the same file explains the first's observations and replaces it; an addition where the
+    # method is silent is bounded by the ledger and may wait beside it.
+    standing = [k for k, d in _lessons(root, chat, ('proposed',))
+                if k != key and k not in keys and (d.get('proposal') or {}).get('current_text')
+                and Path((d.get('proposal') or {}).get('method_path', '')).resolve() == method]
+    if standing and rewrite:
+        raise ValueError(f'{method.name} ({method.parent.name}) already has a pending proposal: {", ".join(standing)}. One '
+                         'method, one proposal: explain its observations in this one (explains) and it replaces them, '
+                         'or retire them first.')
     return keys
 
 
@@ -310,7 +320,7 @@ def propose_change(root, chat, key, method_path, current_text, new_text, cause=N
                          f'passage it replaces ({old}). Delete the rule that allowed the failure and write the right '
                          'one in its place, no longer; where the method is silent, add through the ledger (silent_at).')
     cause = check_cause(method, text, cause, current_text, new_text, root)
-    explained = check_explains(root, chat, key, method, explains)
+    explained = check_explains(root, chat, key, method, explains, rewrite=bool(current_text))
     if not current_text and len(ledger_entries(text)) >= LEDGER_CAP:
         raise ValueError(f'The ledger of {method.name} holds {LEDGER_CAP} entries: rewrite the rule the cause anchors, '
                          'or fold proven entries into the prose first.')
@@ -331,6 +341,9 @@ def propose_change(root, chat, key, method_path, current_text, new_text, cause=N
         if case.get('status') == 'draft' and not case.get('requirements'):
             case['rule'] = ' '.join(new_text.split())     # the case states the rule as the skill will carry it (2026-11-02)
     _update(root, chat, key, change)
+    for k in explained:                                     # the proposals this one replaces leave the owner's list
+        if k != key and read(root, chat, k).get('status') == 'proposed':
+            _update(root, chat, k, lambda d: d.update(status='folded', folded_into=key, folded_at=time.time()))
     shown = (f"Proposed change to {method.name} ({method.parent.name}):\n" + describe_cause(cause, explained)
              + (f"REPLACE:\n{current_text}\nWITH:\n{new_text}" if current_text else f"ADD AT THE END:\n{new_text}"))
     return {'key': key, 'status': 'proposed', 'show_owner': shown}
