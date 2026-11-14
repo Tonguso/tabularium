@@ -125,6 +125,26 @@ class Step1(unittest.TestCase):
         self.assertEqual(learning.read(self.root, 1, first)["folded_into"], second)
         self.assertEqual([p["key"] for p in learning.proposals(self.root, 1)], [second])
 
+    def test_an_edit_may_delete_a_rule_outright_here_and_in_a_sibling(self):
+        # 2026-11-14 (Alex): the act from a lesson was always an append; a deletion is an edit.
+        rule = "- Verify every number against the printed script output before quoting it in prose."
+        twin = "- Verify each number against the printed script output before it goes into prose."
+        self.skill.write_text(SKILL + rule + "\n", encoding="utf-8")
+        other = self.root / "skills" / "writing" / "SKILL.md"
+        other.parent.mkdir(); other.write_text('---\nname: writing\nmetadata:\n  version: "1.0.0"\n---\n\n' + twin + "\n", encoding="utf-8")
+        key = self.observe("Counted a listing by eye")
+        cause = {"claim": "The rule is a check after the fact that nobody runs.", "anchor": rule,
+                 "deletes": "Verify every number", "alternatives": ["Keep the check and add a tool", "Remove the check; numbers come from printed lines"],
+                 "siblings": [{"method_path": str(other), "current_text": twin, "delete": True}]}
+        shown = learning.propose_change(self.root, 1, key, self.skill, rule + "\n", "", cause)
+        self.assertIn("DELETE:\n" + rule, shown["show_owner"])
+        self.assertIn("ALSO IN writing/SKILL.md: DELETE:", shown["show_owner"])
+        learning.approve(self.root, 1, key, *YES, skip_trial=True)
+        self.assertNotIn("Verify every number", self.skill.read_text(encoding="utf-8"))
+        self.assertNotIn("Verify each number", other.read_text(encoding="utf-8"))
+        with self.assertRaisesRegex(ValueError, "nothing to add"):
+            learning.propose_change(self.root, 1, self.observe("x"), self.skill, "", "", SILENT)
+
     def test_a_proposal_without_a_cause_or_with_an_anchor_not_in_the_method_is_refused(self):
         key = self.observe("Rebuilt the workbook after a late membership change")
         with self.assertRaisesRegex(ValueError, "names its cause"):
