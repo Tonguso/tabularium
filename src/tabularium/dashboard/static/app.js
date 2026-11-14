@@ -1,4 +1,4 @@
-const agentNames={coordinator:'Cato',private:'Tacitus',librarian:'Cal',engineer:'Vit'};
+const agentNames={coordinator:'Cato',private:'Tacitus',librarian:'Callimachus',engineer:'Vitruvius'};
 const agentRoles={coordinator:'Chief of staff',private:'Private agent',librarian:'Librarian & knowledge steward',engineer:'Engineer & web designer'};
 let current=null, busy=false, pendingConfirmation=null;
 const $=id=>document.getElementById(id);

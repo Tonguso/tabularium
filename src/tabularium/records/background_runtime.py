@@ -109,8 +109,6 @@ class TaskStore:
             if "release" not in task_columns:                    # the Git commit the worker ran (tabularium.ops.release)
                 db.execute("ALTER TABLE tasks ADD COLUMN release TEXT")
             db.execute("CREATE TABLE IF NOT EXISTS worker_failures(task INTEGER PRIMARY KEY, note TEXT, created REAL, notified INTEGER DEFAULT 0)")
-            # Recover failures hidden by the old delegate-success notification policy, once.
-            db.execute("INSERT OR IGNORE INTO worker_failures(task,note,created) SELECT id,note,updated FROM tasks WHERE status='interrupted'")
             db.execute("CREATE TABLE IF NOT EXISTS decisions(id INTEGER PRIMARY KEY, task INTEGER NOT NULL, chat INTEGER NOT NULL, question TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', answer TEXT, source TEXT, control INTEGER, created REAL NOT NULL, updated REAL NOT NULL)")
             decision_columns = {r[1] for r in db.execute("PRAGMA table_info(decisions)")}
             # 2026-10-21: one record for everything Alex is asked. kind 'action' is a parked tool call (the exact tool

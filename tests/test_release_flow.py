@@ -225,3 +225,25 @@ class BusyBoundaries(unittest.TestCase):
             finish.set();client.join(10);thread.join(10);env.stop()
 
 if __name__=='__main__':unittest.main()
+
+
+class SnapshotPruning(unittest.TestCase):
+    def test_a_snapshot_a_live_process_runs_from_is_never_pruned(self):
+        # 2026-11-14: task 843's worker ran from the snapshot of 8be9d03; two releases later it was pruned under the
+        # worker and its next import failed. A snapshot with a live pid in it stays; dead pids are forgotten.
+        import io, json, tarfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); base=root/release.SNAPSHOTS
+            def make(name,mtime,pid=None):
+                d=base/name; (d/'src/tabularium').mkdir(parents=True)
+                (d/'src/tabularium'/release.MARKER).write_text(json.dumps({'commit':name,'digest':name}),encoding='utf-8')
+                if pid is not None:
+                    (d/release.PIDS).mkdir(); (d/release.PIDS/str(pid)).write_text('',encoding='utf-8')
+                os.utime(d,(mtime,mtime))
+            make('old-live',1,os.getpid()); make('old-dead',2,999999999); make('kept',3)
+            buf=io.BytesIO()
+            with tarfile.open(fileobj=buf,mode='w') as tar:
+                info=tarfile.TarInfo('src/tabularium/__init__.py'); tar.addfile(info,io.BytesIO(b''))
+            with patch.object(release,'archive',return_value=buf.getvalue()), patch.object(release,'REPO',root):
+                release.snapshot({'commit':'new','digest':'new'},root)
+            self.assertEqual(sorted(p.name for p in base.iterdir()),['kept','new','old-live'])

@@ -15,9 +15,40 @@ from pathlib import Path
 
 MARKER = "RELEASE.json"           # written beside the package in a snapshot: the release identity it was exported as
 SNAPSHOTS = ".release"            # <home>/.release/<commit>/src/tabularium
+PIDS = ".pids"                    # <snapshot>/.pids/<pid>: the processes running this snapshot; it is never pruned under them
 KEEP_SNAPSHOTS = 2
 
 ROOT = _home()
+
+
+def _register():
+    """A process running from a snapshot leaves its pid in it (2026-11-14: a worker's snapshot was pruned under it by
+    the second release since, and its next lazy import failed)."""
+    if (PACKAGE / MARKER).exists():
+        try:
+            folder = PACKAGE.parent.parent / PIDS
+            folder.mkdir(exist_ok=True)
+            (folder / str(os.getpid())).write_text("", encoding="utf-8")
+        except OSError:
+            pass
+
+
+_register()
+
+
+def in_use(base):
+    """True while a live process runs from snapshot `base`; the pids of dead processes are forgotten."""
+    from tabularium.ops.supervisor import alive
+    busy = False
+    for entry in (Path(base) / PIDS).glob("*"):
+        try:
+            if entry.name.isdigit() and alive(int(entry.name)):
+                busy = True
+            else:
+                entry.unlink(missing_ok=True)
+        except OSError:
+            busy = True
+    return busy
 
 
 def repo(start=PACKAGE):
@@ -132,7 +163,8 @@ def snapshot(target, root=None):
     kept = sorted((p for p in base.parent.iterdir() if p.is_dir() and not p.name.endswith(".tmp")),
                   key=lambda p: p.stat().st_mtime, reverse=True)
     for old in kept[KEEP_SNAPSHOTS:]:
-        shutil.rmtree(old, ignore_errors=True)
+        if not in_use(old):
+            shutil.rmtree(old, ignore_errors=True)
     return base / "src"
 
 
