@@ -125,7 +125,7 @@ def state():
         agent['usage'],agent['last_response']=usage(name)
         agent['errors']=[]
         if not agent['health_fresh']: agent['errors'].append('Agent heartbeat is stale. The process may have stopped.')
-        elif not agent['polling_fresh']:agent['errors'].append('Telegram connection is not currently confirmed. Check the network and recent logs.')
+        elif not agent['polling_fresh'] and not agent.get('restart_pending'):agent['errors'].append('Telegram connection is not currently confirmed. Check the network and recent logs.')
         try:   # messages Telegram has not accepted yet (2026-10-22 21:47-21:57: nine minutes of 502s and timeouts, invisible)
             stuck=query(folder/'outbox.sqlite3',"SELECT count(*) n, min(created) since, max(attempts) tries, max(error) err FROM outbox WHERE status='pending'")
             if stuck and stuck[0]['n'] and time.time()-(stuck[0]['since'] or time.time())>60:
