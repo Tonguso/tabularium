@@ -152,10 +152,68 @@ def _skill_file(root, method_path):
     return method
 
 
-def check_cause(method, text, cause, current_text):
-    """The decision in the method that allowed the failure: a claim with an anchor, a passage quoted from the method
-    (present once, and the edit rewrites it), or the statement that the method is silent at a named place (then the
-    edit may append). The runtime checks the anchor; the claim is for the owner to judge against the instances."""
+STOP = {'about', 'after', 'again', 'against', 'always', 'another', 'because', 'before', 'being', 'between', 'could',
+        'every', 'first', 'never', 'other', 'should', 'since', 'still', 'their', 'there', 'these', 'those', 'through',
+        'under', 'until', 'where', 'which', 'while', 'without', 'within', 'would', 'owner', 'coordinator', 'skill', 'skills'}
+
+
+def distinctive(text):
+    return {w for w in re.findall(r"[a-z]{5,}", str(text).lower()) if w not in STOP}
+
+
+def overlaps(root, method, anchor):
+    """Passages of the agent's other skills that carry the rule the anchor carries: a line sharing at least four of the
+    anchor's distinctive words and half of them. Found by code (2026-11-14), so a proposal cannot rewrite a rule in
+    one skill and leave its twin in another saying the old thing; the agent edits each with the proposal or says why
+    it stays."""
+    words = distinctive(anchor)
+    if len(words) < 4:
+        return []
+    root = Path(root).resolve()
+    files = [root / 'SKILL.md'] + (sorted((root / 'skills').glob('*/SKILL.md')) if (root / 'skills').exists() else [])
+    out = []
+    for f in files:
+        if not f.is_file() or f.resolve() == Path(method).resolve():
+            continue
+        for line in f.read_text(encoding='utf-8', errors='replace').splitlines():
+            shared = words & distinctive(line)
+            if len(shared) >= 4 and len(shared) * 2 >= len(words):
+                out.append({'method_path': str(f), 'passage': line.strip()})
+    return out
+
+
+def check_siblings(root, method, anchor, given):
+    """Every passage overlaps() finds is answered in cause.siblings: current_text quoted exactly, with new_text (no
+    longer than it) or keep (why it stays). Returns the siblings as the proposal records them."""
+    root = Path(root).resolve()
+    entries = []
+    for s in (given or []):
+        s = dict(s or {})
+        file = _skill_file(root, s.get('method_path') or '')
+        current, new, keep = str(s.get('current_text') or ''), str(s.get('new_text') or ''), ' '.join(str(s.get('keep') or '').split())
+        if file.read_text(encoding='utf-8').count(current) != 1:
+            raise ValueError(f'cause.siblings: current_text must appear exactly once in {file.name} ({file.parent.name}).')
+        if bool(new.strip()) == bool(keep):
+            raise ValueError('cause.siblings: each sibling has new_text (the edit made with this one) or keep (why it stays), not both.')
+        if new and len(' '.join(new.split())) > len(' '.join(current.split())):
+            raise ValueError(f'A lesson never lengthens a method: the sibling edit in {file.name} is longer than the passage it replaces.')
+        entries.append({'method_path': str(file), 'current_text': current, 'new_text': new, 'keep': keep})
+    missing = [o for o in overlaps(root, method, anchor)
+               if not any(Path(e['method_path']) == Path(o['method_path']) and o['passage'] in e['current_text'] for e in entries)]
+    if missing:
+        listed = '; '.join(f"{Path(o['method_path']).parent.name}/{Path(o['method_path']).name}: \"{o['passage'][:160]}\"" for o in missing)
+        raise ValueError('The same rule lives in other skills; a rewrite here leaves them saying the old thing. List each under '
+                         'cause.siblings with current_text quoted exactly and new_text (the edit, no longer) or keep (why it stays): ' + listed)
+    return entries
+
+
+def check_cause(method, text, cause, current_text, new_text='', root=None):
+    """The decision in the method that allowed the failure, in the shape of a change of method rather than a patch
+    (2026-11-14): a claim; an anchor quoted from the method (present once, and the edit rewrites it) or the statement
+    that the method is silent at a named place (then the edit may append); the words of the anchor that carried the
+    decision (deletes), which the edit must remove, so a rule cannot be kept with a new one beside it; two designs
+    considered (alternatives); and an answer for every passage of another skill that carries the same rule
+    (siblings, found by the runtime). The claim and the choice are the owner's to judge against the instances."""
     cause = dict(cause or {})
     claim = ' '.join(str(cause.get('claim') or '').split())
     anchor, silent = str(cause.get('anchor') or ''), ' '.join(str(cause.get('silent_at') or '').split())
@@ -168,7 +226,35 @@ def check_cause(method, text, cause, current_text):
             raise ValueError('The edit rewrites the rule the cause anchors: current_text must contain the anchor.')
     elif not silent:
         raise ValueError('cause needs an anchor quoted from the method, or silent_at: where the method says nothing.')
-    return {'claim': claim, 'anchor': anchor, 'silent_at': silent, 'file_sha256': _sha(method)}
+    deletes = ' '.join(str(cause.get('deletes') or '').split())
+    if anchor:
+        if not deletes or deletes not in ' '.join(anchor.split()):
+            raise ValueError('cause.deletes quotes, from the anchor, the words that carried the decision the failure came from; '
+                             'the edit removes them.')
+        if deletes in ' '.join(str(new_text or '').split()):
+            raise ValueError(f'The edit keeps the decision it names ("{deletes[:80]}") and writes beside it: a rule beside the old '
+                             'one is a patch. Delete it and write the right rule in its place.')
+    alternatives = [' '.join(str(a).split()) for a in (cause.get('alternatives') or []) if str(a).strip()]
+    if anchor and (len(alternatives) < 2 or len(set(alternatives)) < 2):      # a rewrite is a design choice; an addition where the method is silent is bounded by the ledger
+        raise ValueError('cause.alternatives names two different designs considered for this method before the edit, one line '
+                         'each; the edit is the one chosen against the other.')
+    siblings = check_siblings(root, method, anchor, cause.get('siblings')) if root is not None and anchor else []
+    return {'claim': claim, 'anchor': anchor, 'silent_at': silent, 'deletes': deletes, 'alternatives': alternatives[:2],
+            'siblings': siblings, 'file_sha256': _sha(method)}
+
+
+def describe_cause(c, explained):
+    """The proposal as the owner reads it: the cause, what the edit deletes, the designs considered, the sibling rules."""
+    lines = [f"CAUSE: {c['claim']}", f"ANCHOR: {c['anchor']}" if c.get('anchor') else f"THE METHOD IS SILENT AT: {c.get('silent_at', '')}"]
+    if c.get('deletes'):
+        lines.append(f"DELETES: {c['deletes']}")
+    if c.get('alternatives'):
+        lines.append('CONSIDERED: ' + ' | '.join(f"({i + 1}) {a}" for i, a in enumerate(c['alternatives'])))
+    for s in c.get('siblings') or []:
+        where = f"{Path(s['method_path']).parent.name}/{Path(s['method_path']).name}"
+        lines.append(f"ALSO IN {where}: " + (f"keep ({s['keep']})" if s.get('keep') else f"REPLACE: {s['current_text']} WITH: {s['new_text']}"))
+    lines.append(f"EXPLAINS: {', '.join(explained)}")
+    return '\n'.join(lines) + '\n'
 
 
 def has_receipt(root, chat, d):
@@ -223,7 +309,7 @@ def propose_change(root, chat, key, method_path, current_text, new_text, cause=N
         raise ValueError(f'A lesson never lengthens a method: the replacement ({new} characters) is longer than the '
                          f'passage it replaces ({old}). Delete the rule that allowed the failure and write the right '
                          'one in its place, no longer; where the method is silent, add through the ledger (silent_at).')
-    cause = check_cause(method, text, cause, current_text)
+    cause = check_cause(method, text, cause, current_text, new_text, root)
     explained = check_explains(root, chat, key, method, explains)
     if not current_text and len(ledger_entries(text)) >= LEDGER_CAP:
         raise ValueError(f'The ledger of {method.name} holds {LEDGER_CAP} entries: rewrite the rule the cause anchors, '
@@ -245,9 +331,7 @@ def propose_change(root, chat, key, method_path, current_text, new_text, cause=N
         if case.get('status') == 'draft' and not case.get('requirements'):
             case['rule'] = ' '.join(new_text.split())     # the case states the rule as the skill will carry it (2026-11-02)
     _update(root, chat, key, change)
-    shown = (f"Proposed change to {method.name} ({method.parent.name}):\nCAUSE: {cause['claim']}\n"
-             + (f"ANCHOR: {cause['anchor']}\n" if cause['anchor'] else f"THE METHOD IS SILENT AT: {cause['silent_at']}\n")
-             + f"EXPLAINS: {', '.join(explained)}\n"
+    shown = (f"Proposed change to {method.name} ({method.parent.name}):\n" + describe_cause(cause, explained)
              + (f"REPLACE:\n{current_text}\nWITH:\n{new_text}" if current_text else f"ADD AT THE END:\n{new_text}"))
     return {'key': key, 'status': 'proposed', 'show_owner': shown}
 
@@ -311,8 +395,7 @@ def proposals(root, chat):
         skill = method.relative_to(skills).as_posix() if method.is_relative_to(skills) else method.name
         if d.get('case_requested') and not trial.get('notified'): continue   # his choice: a case first; back with the trial
         c = d.get('cause') or {}
-        shown = ((f"CAUSE: {c['claim']}\n" + (f"ANCHOR: {c['anchor']}\n" if c.get('anchor') else f"THE METHOD IS SILENT AT: {c.get('silent_at', '')}\n")
-                  + f"EXPLAINS: {', '.join(d.get('explains') or [key])}\n") if c else '')
+        shown = describe_cause(c, d.get('explains') or [key]) if c else ''
         shown += (f"REPLACE:\n{p['current_text']}\nWITH:\n{p['new_text']}" if p.get('current_text')
                   else f"ADD AT THE END:\n{p.get('new_text', '')}")
         if p.get('fold'): shown += '\nREMOVES ENTRIES: ' + ', '.join(p['fold'])
@@ -387,12 +470,21 @@ def approve(root, chat, key, source_id, quote, skip_trial=False, reason=''):
             raise ValueError('The skill changed since the fold was proposed; propose it again from the current text.')
         if not p['current_text'] and len(ledger_entries(text)) >= LEDGER_CAP:
             raise ValueError(f'The ledger of {method.name} is at {LEDGER_CAP} entries; fold or retire before adding.')
+        siblings = [s for s in (d.get('cause') or {}).get('siblings', []) if s.get('new_text')]
+        for s in siblings:                                  # every sibling file still carries its passage, or nothing is written
+            other = _skill_file(root, s['method_path'])
+            if other.read_text(encoding='utf-8').count(s['current_text']) != 1:
+                raise ValueError(f'{other.name} ({other.parent.name}) changed since the proposal; propose it again from the current text.')
         # A replacement sharpens an existing rule in place; an addition becomes one ledger entry (ACE, 2026-10-24).
         method.write_text(render_change(text, key, p), encoding='utf-8')
+        for s in siblings:                                  # the twin rules change in the same go (2026-11-14)
+            other = _skill_file(root, s['method_path'])
+            other.write_text(_bump_version(other.read_text(encoding='utf-8').replace(s['current_text'], s['new_text'], 1)), encoding='utf-8')
         d['status'] = 'applied'
         d['approval'] = {'source': f'message:{int(source_id)}', 'quote': quote, 'at': time.time()}
         d['applied'] = {'method_path': str(method), 'method_sha256': _sha(method), 'at': time.time(),
-                        'entry': not p['current_text']}
+                        'entry': not p['current_text'],
+                        'siblings': [{'method_path': s['method_path'], 'method_sha256': _sha(Path(s['method_path']))} for s in siblings]}
         d.setdefault('helped', 0); d.setdefault('hurt', 0)
         return {'key': key, 'status': 'applied', 'skill': str(method)}
     out = _update(root, chat, key, change)
@@ -594,8 +686,8 @@ def similar(root, chat, content, threshold=0.3):
     return best[0]
 
 
-TOOL = {"name":"lesson","description":"Turn an observed failure into a change of method, Alex's way: name the cause, show him the edit, apply it on his go, then measure whether it worked. A failure is an observation (recorded by remember kind=lesson, or by a task checkpoint); a lesson is a claim about the decision in a method that allowed it. propose: (re)draft the edit of a recorded lesson: method_path the skill file; cause {claim: the decision that allowed the failure, in one or two sentences; anchor: the passage quoted exactly from the method, which current_text must then contain, because the edit rewrites that rule and never lengthens it (new_text is at most as long as current_text: delete what was wrong, write what is right in its place); or silent_at: where the method says nothing, the only case in which current_text may be empty to add one entry to the skill's '## Lessons' ledger (never past five entries)}; explains: keys of the other open observations this cause accounts for (one instance is enough only when it comes from a task record or Alex's message); new_text in the skill's own voice. The runtime checks the anchor and the observations, shows every proposal to Alex on the dashboard and in a weekly message, and settles his verdict ('Skill edit <key>: apply it' / 'apply it, no trial needed' / 'drop it' / 'draft a case first') before any turn; you see the outcome in the conversation and do nothing for it. fold: ledger entries with measured checks (keys) absorbed into the prose: current_text the prose to rewrite, new_text the prose that now carries them; on his go the runtime rewrites and removes the entries in one write. trial: compare frozen skills on reviewed benchmark cases using disjoint development_cases and heldout_cases IDs, repetitions and max_steps; exposed cases cannot be reused as held-out evidence; small samples are screening, never proof. approve: only after Alex says yes in his own words (message id and exact quote), normally after the trial; skip_trial=true only if he said no trial is needed; the runtime applies exactly the proposed edit and bumps the skill's version; you never edit the file yourself for a lesson. checked: after the next real task where the failure could have recurred: worked, evidence, and for a measured check the task id, a receipt (task:<id>, verification:<id> or message:<id>) and method_sha (the hash of the method file the task ran under); without those three the check is a judgement, kept but counting nothing; a measured recurrence reopens the lesson. group / ungroup: membership of a docket (docket key, members: observation keys; group also takes method_path and cause): the runtime proposes membership from similarity and opens a method review at three observations in sixty days; only you confirm it, and ungroup reverses it without loss. retire: drop a proposed edit, or remove an applied ledger entry, on Alex's quoted words. case: fill in the lesson's drafted benchmark case (oracle_basis, requirements with id, description and a check of kind json/text/csv/xlsx/judgment, and fixtures: input files, a scripted delegate result, a scripted verification result or scripted search results, so a method about delegating, verifying or reading inputs can be exercised) so code can grade it; calibrate: isolated runs per arm, after which the runtime refuses a case that mostly fails even with the rule stated or mostly passes without it; approve_case: Alex's quoted yes adds a calibrated case to the benchmark; recombine: draft a reserved (held-out) case from this and one or two other approved cases of the same skill.",
-  "input_schema":{"type":"object","properties":{"action":{"type":"string","enum":["propose","fold","group","ungroup","trial","approve","checked","retire","case","calibrate","approve_case","recombine"]},"slot":{"type":"string","enum":["case","reserved"]},"request":{"type":"string","description":"case: the task as Alex would ask it (defaults to the lesson's task request)"},"oracle_basis":{"type":"string","description":"case: how the expected answer was established, independent of the agent"},"requirements":{"type":"array","items":{"type":"object"},"description":"case: benchmark requirements, each with id, description and a check"},"fixtures":{"type":"object","description":"case: what the trial run needs, provided without side effects: files [{path, content}] placed in the run's inputs folder; delegate {result} returned by a scripted delegate; verify {exit_code, output} returned by execute_command; search [{title, url, snippet}] returned by web_search"},"with_keys":{"type":"array","items":{"type":"string"},"description":"recombine: one or two other lesson keys of the same skill"},"key":{"type":"string"},"cause":{"type":"object","properties":{"claim":{"type":"string"},"anchor":{"type":"string"},"silent_at":{"type":"string"}},"description":"propose: the decision in the method that allowed the failure, anchored in the method (anchor quoted exactly) or silent_at; group: the same object, its claim kept on the docket"},"explains":{"type":"array","items":{"type":"string"},"description":"propose: keys of the other open observations this cause accounts for"},"keys":{"type":"array","items":{"type":"string"},"description":"fold: the ledger entries to absorb"},"docket":{"type":"string","description":"group, ungroup: the docket key (group: empty starts a new docket)"},"members":{"type":"array","items":{"type":"string"},"description":"group, ungroup: observation keys"},"note":{"type":"string","description":"ungroup: why"},"development_cases":{"type":"array","items":{"type":"string"}},"heldout_cases":{"type":"array","items":{"type":"string"}},"repetitions":{"type":"integer","minimum":1,"maximum":5},"max_steps":{"type":"integer","minimum":1,"maximum":60},"skip_trial":{"type":"boolean","description":"approve: only when Alex said no trial is needed"},"method_path":{"type":"string","description":"propose, fold: the SKILL.md or references file under skills/"},"current_text":{"type":"string"},"new_text":{"type":"string"},"source_message_id":{"type":"integer"},"quote":{"type":"string"},"worked":{"type":"boolean"},"evidence":{"type":"string"},"task":{"type":"integer","description":"checked: the task where the failure could have recurred"},"receipt":{"type":"string","description":"checked: task:<id>, verification:<id> or message:<id>"},"method_sha":{"type":"string","description":"checked: the hash of the method file the task ran under"}},"required":["action"]}}
+TOOL = {"name":"lesson","description":"Turn an observed failure into a change of method, Alex's way: name the cause, show him the edit, apply it on his go, then measure whether it worked. A failure is an observation (recorded by remember kind=lesson, or by a task checkpoint); a lesson is a claim about the decision in a method that allowed it. propose: (re)draft the edit of a recorded lesson: method_path the skill file; cause {claim: the decision in the method that allowed the failure, not the failure restated, in one or two sentences; anchor: the passage quoted exactly from the method, which current_text must then contain, because the edit rewrites that rule and never lengthens it (new_text is at most as long as current_text); deletes: the words of the anchor that carried that decision, quoted from it, which must be gone from new_text (a rule kept with a new one beside it is a patch and is refused); alternatives: two different designs for this method considered before the edit, one line each, the edit being the one chosen; siblings: the runtime searches your other skills for passages carrying the same rule and refuses the proposal until each is listed here with current_text quoted exactly and new_text (changed in the same go, no longer) or keep (why it stays); or silent_at: where the method says nothing, the only case in which current_text may be empty to add one entry to the skill's '## Lessons' ledger (never past five entries)}; explains: keys of the other open observations this cause accounts for (one instance is enough only when it comes from a task record or Alex's message); new_text in the skill's own voice. The runtime checks the anchor and the observations, shows every proposal to Alex on the dashboard and in a weekly message, and settles his verdict ('Skill edit <key>: apply it' / 'apply it, no trial needed' / 'drop it' / 'draft a case first') before any turn; you see the outcome in the conversation and do nothing for it. fold: ledger entries with measured checks (keys) absorbed into the prose: current_text the prose to rewrite, new_text the prose that now carries them; on his go the runtime rewrites and removes the entries in one write. trial: compare frozen skills on reviewed benchmark cases using disjoint development_cases and heldout_cases IDs, repetitions and max_steps; exposed cases cannot be reused as held-out evidence; small samples are screening, never proof. approve: only after Alex says yes in his own words (message id and exact quote), normally after the trial; skip_trial=true only if he said no trial is needed; the runtime applies exactly the proposed edit and bumps the skill's version; you never edit the file yourself for a lesson. checked: after the next real task where the failure could have recurred: worked, evidence, and for a measured check the task id, a receipt (task:<id>, verification:<id> or message:<id>) and method_sha (the hash of the method file the task ran under); without those three the check is a judgement, kept but counting nothing; a measured recurrence reopens the lesson. group / ungroup: membership of a docket (docket key, members: observation keys; group also takes method_path and cause): the runtime proposes membership from similarity and opens a method review at three observations in sixty days; only you confirm it, and ungroup reverses it without loss. retire: drop a proposed edit, or remove an applied ledger entry, on Alex's quoted words. case: fill in the lesson's drafted benchmark case (oracle_basis, requirements with id, description and a check of kind json/text/csv/xlsx/judgment, and fixtures: input files, a scripted delegate result, a scripted verification result or scripted search results, so a method about delegating, verifying or reading inputs can be exercised) so code can grade it; calibrate: isolated runs per arm, after which the runtime refuses a case that mostly fails even with the rule stated or mostly passes without it; approve_case: Alex's quoted yes adds a calibrated case to the benchmark; recombine: draft a reserved (held-out) case from this and one or two other approved cases of the same skill.",
+  "input_schema":{"type":"object","properties":{"action":{"type":"string","enum":["propose","fold","group","ungroup","trial","approve","checked","retire","case","calibrate","approve_case","recombine"]},"slot":{"type":"string","enum":["case","reserved"]},"request":{"type":"string","description":"case: the task as Alex would ask it (defaults to the lesson's task request)"},"oracle_basis":{"type":"string","description":"case: how the expected answer was established, independent of the agent"},"requirements":{"type":"array","items":{"type":"object"},"description":"case: benchmark requirements, each with id, description and a check"},"fixtures":{"type":"object","description":"case: what the trial run needs, provided without side effects: files [{path, content}] placed in the run's inputs folder; delegate {result} returned by a scripted delegate; verify {exit_code, output} returned by execute_command; search [{title, url, snippet}] returned by web_search"},"with_keys":{"type":"array","items":{"type":"string"},"description":"recombine: one or two other lesson keys of the same skill"},"key":{"type":"string"},"cause":{"type":"object","properties":{"claim":{"type":"string"},"anchor":{"type":"string"},"silent_at":{"type":"string"},"deletes":{"type":"string"},"alternatives":{"type":"array","items":{"type":"string"}},"siblings":{"type":"array","items":{"type":"object","properties":{"method_path":{"type":"string"},"current_text":{"type":"string"},"new_text":{"type":"string"},"keep":{"type":"string"}}}}},"description":"propose: the decision in the method that allowed the failure, anchored in the method (anchor quoted exactly) or silent_at; group: the same object, its claim kept on the docket"},"explains":{"type":"array","items":{"type":"string"},"description":"propose: keys of the other open observations this cause accounts for"},"keys":{"type":"array","items":{"type":"string"},"description":"fold: the ledger entries to absorb"},"docket":{"type":"string","description":"group, ungroup: the docket key (group: empty starts a new docket)"},"members":{"type":"array","items":{"type":"string"},"description":"group, ungroup: observation keys"},"note":{"type":"string","description":"ungroup: why"},"development_cases":{"type":"array","items":{"type":"string"}},"heldout_cases":{"type":"array","items":{"type":"string"}},"repetitions":{"type":"integer","minimum":1,"maximum":5},"max_steps":{"type":"integer","minimum":1,"maximum":60},"skip_trial":{"type":"boolean","description":"approve: only when Alex said no trial is needed"},"method_path":{"type":"string","description":"propose, fold: the SKILL.md or references file under skills/"},"current_text":{"type":"string"},"new_text":{"type":"string"},"source_message_id":{"type":"integer"},"quote":{"type":"string"},"worked":{"type":"boolean"},"evidence":{"type":"string"},"task":{"type":"integer","description":"checked: the task where the failure could have recurred"},"receipt":{"type":"string","description":"checked: task:<id>, verification:<id> or message:<id>"},"method_sha":{"type":"string","description":"checked: the hash of the method file the task ran under"}},"required":["action"]}}
 
 
 def execute(agent, chat, inputs):

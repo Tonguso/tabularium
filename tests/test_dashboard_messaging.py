@@ -122,7 +122,7 @@ class DashboardMessaging(unittest.TestCase):
         source = f"message:{a._recall.note(OWNER_CHAT_ID, 'Freeze it first', 'telegram')}"
         key = learning.propose(a.AGENT_DIR, OWNER_CHAT_ID, 'Freeze membership first', source, 'basket_build')
         learning.propose_change(a.AGENT_DIR, OWNER_CHAT_ID, key, skill, '- Read the archives.', '- Freeze, then read.',
-                                {'claim': 'The rules read the archives before the membership is fixed.', 'anchor': '- Read the archives.'})
+                                {'claim': 'The rules read the archives before the membership is fixed.', 'anchor': '- Read the archives.', 'deletes': 'Read the archives', 'alternatives': ['a', 'b']})
         raw = {'channel':'dashboard','message_id':-1,'date':time.time(),'text':f'Skill edit {key}: apply it, no trial needed.'}
         self.assertTrue(a._settle_by_reply(decode(raw))[0])
         self.assertIn('applied to SKILL.md, no trial', a.send_message.call_args[0][1])

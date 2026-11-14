@@ -50,7 +50,7 @@ class LessonCases(unittest.TestCase):
     def lesson(self, rule="Save the value the owner named, nothing else", request="Save result.txt containing A."):
         task = self.store.start(1, request, "")["id"]
         key = learning.propose(self.root, 1, rule, str(self.store.directory(task) / "checkpoint.json"), "basket_build")
-        learning.propose_change(self.root, 1, key, self.skill, "", rule + ".", {"claim": "The skill says nothing about it.", "silent_at": "the rules"})
+        learning.propose_change(self.root, 1, key, self.skill, "", rule + ".", {"claim": "The skill says nothing about it.", "silent_at": "the rules", "alternatives": ["a", "b"]})
         return key
 
     def read(self, key, slot="case"):
@@ -151,7 +151,7 @@ class LessonCases(unittest.TestCase):
             db.close()
         key = learning.record(self.root, 1, "I built the workbook before the membership was frozen", "message:9",
                               self.skill, "", "Freeze the membership before building the workbook.",
-                              cause={"claim": "The skill says nothing about when the membership is fixed.", "silent_at": "the rules"})["key"]
+                              cause={"claim": "The skill says nothing about when the membership is fixed.", "silent_at": "the rules", "alternatives": ["a", "b"]})["key"]
         case = self.read(key)
         self.assertEqual(case["request"], "Build me the Q4 basket workbook")
         self.assertEqual(case["rule"], "Freeze the membership before building the workbook.")

@@ -8,8 +8,8 @@ from tabularium.records.project_store import ProjectStore
 
 SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\n## Membership\n- Read the archives for each name.\n'
 CAUSE = {"claim": "The method reads the archives before the membership is fixed, so a late change forces a rebuild.",
-         "anchor": "- Read the archives for each name."}
-SILENT = {"claim": "The method says nothing about when the membership is fixed.", "silent_at": "the Membership section"}
+         "anchor": "- Read the archives for each name.", "deletes": "Read the archives for each name", "alternatives": ["Add a rule beside the old one", "Replace the rule with the order the failure needs"]}
+SILENT = {"claim": "The method says nothing about when the membership is fixed.", "silent_at": "the Membership section", "alternatives": ["Add a rule beside the old one", "Replace the rule with the order the failure needs"]}
 
 
 class Lessons(unittest.TestCase):
@@ -53,7 +53,7 @@ class Lessons(unittest.TestCase):
         persona = self.root / "SKILL.md"; persona.write_text("# Cato\n\nAnswer in his register.\n", encoding="utf-8")
         shown = learning.record(self.root, 1, "Asked Alex to confirm a plain instruction twice", "message:7", persona, "",
                                 "Act on a plain instruction; ask only when two readings differ.",
-                                cause={"claim": "The persona file says nothing about plain instructions.", "silent_at": "instructions"})
+                                cause={"claim": "The persona file says nothing about plain instructions.", "silent_at": "instructions", "alternatives": ["Add a rule beside the old one", "Replace the rule with the order the failure needs"]})
         self.assertIn("ADD AT THE END", shown["show_owner"])
         self.assertEqual(learning.proposals(self.root, 1)[0]["skill"], "SKILL.md")
 

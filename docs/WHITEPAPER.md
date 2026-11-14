@@ -370,7 +370,14 @@ accepts rather than what the agent is told.
    in which a line may be appended. The length rule came on 2026-11-14, when all fourteen pending edits had kept or
    reworded the anchored rule and added sentences after it: a rule beside the old one is a patch, and a gate that
    checked only the anchor and the observations let every one through. A replacement at most as long as the passage
-   it replaces has to delete the rule that allowed the failure. The agent also names the observations the cause explains. One instance is enough when it carries a
+   it replaces has to delete the rule that allowed the failure. The same day the owner put the length rule in its
+   place: the growth was a symptom, and the disease was that nothing in the path made the agent reason about the
+   method before touching it. A proposal now has the shape of that reasoning. It quotes, from the anchor, the words
+   that carried the decision, and the runtime refuses an edit in which they survive, so a rule cannot be kept with a
+   new one beside it. It names two designs considered, and the owner sees which was chosen against which. And the
+   runtime itself searches the agent's other skills for passages carrying the same rule and refuses the proposal
+   until each is edited in the same go or kept with a reason, because a library of thirty skills had let one rule be
+   rewritten in one and left saying the old thing in five. The agent also names the observations the cause explains. One instance is enough when it carries a
    receipt (the owner's message or a task record); a claim with neither a receipt nor a second instance stays an
    observation. The runtime checks the anchor and the observations; the claim itself is the owner's to judge
    against the instances it cites, as every edit is.
@@ -621,6 +628,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-14 | All fourteen pending skill edits lengthened their skills, seven by keeping the rule and appending sentences; the proposal gate checked the anchor and the observations, never the shape of the edit | A lesson never lengthens a method: a replacement longer than the passage it replaces is refused; additions go only where the method is silent, through the bounded ledger |
 | 2026-11-14 | A worker ran from the snapshot of one release while two more were released; the snapshot, now the third, was pruned under the worker, whose next import failed; on the restart a one-time recovery copied every interrupted task into the failure notices, so the owner read "stopped trying" about a task rerun thirty seconds later | A process running from a snapshot leaves its pid in it, and a snapshot with a live pid is never pruned; the recovery line is gone, a crash that reruns is announced by nothing |
 | 2026-11-14 | Two releases each waited an hour behind one engineering worker, because a drain let every worker finish; both were unblocked by cancelling the task by hand and resuming it after | A drain pauses every worker at its next safe point and queues its task again for the new process; no release waits longer than one tool call, and no work is lost |
+| 2026-11-14 | Every proposed skill edit was a patch: the rule blamed stayed and a sentence was added after it, and the same rule lived in several skills; the path asked for a cause, an anchor and an edit, and checked nothing about the reasoning | A proposal has the shape of the reasoning: the words that carried the decision must be gone from the edit, two designs are named and one chosen, and the runtime finds the twin rules in the agent's other skills, each edited in the same go or kept with a reason |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

@@ -11,8 +11,8 @@ from tabularium.learning import learning
 SKILL = ('---\nname: basket\nmetadata:\n  version: "2.0.0"\n---\n\n## Membership\n- Read the archives for each name.\n'
          '- Build the workbook from the archives.\n')
 ANCHORED = {"claim": "The method reads the archives before the membership is fixed, so a late change forces a rebuild.",
-            "anchor": "- Read the archives for each name."}
-SILENT = {"claim": "The method says nothing about when the membership is fixed.", "silent_at": "the Membership section"}
+            "anchor": "- Read the archives for each name.", "deletes": "Read the archives for each name", "alternatives": ["Add a rule beside the old one", "Replace the rule with the order the failure needs"]}
+SILENT = {"claim": "The method says nothing about when the membership is fixed.", "silent_at": "the Membership section", "alternatives": ["Add a rule beside the old one", "Replace the rule with the order the failure needs"]}
 YES = (7, "yes, change the skill like that")
 
 
@@ -64,6 +64,51 @@ class Step1(unittest.TestCase):
         learning.propose_change(self.root, 1, key, self.skill, "- Read the archives for each name.",
                                 "- Freeze names, then read archives", ANCHORED)           # as long, not longer
         self.assertEqual(learning.read(self.root, 1, key)["status"], "proposed")
+
+    def test_an_edit_that_keeps_the_decision_and_writes_beside_it_is_refused(self):
+        # 2026-11-14: every pending edit kept the rule it blamed and added sentences after it.
+        key = self.observe("The archive rule is the cause")
+        with self.assertRaisesRegex(ValueError, "beside the old one is a patch"):
+            learning.propose_change(self.root, 1, key, self.skill, "- Read the archives for each name.",
+                                    "- Read the archives for each name!", ANCHORED)
+        with self.assertRaisesRegex(ValueError, "cause.deletes"):
+            learning.propose_change(self.root, 1, key, self.skill, "- Read the archives for each name.", "- Freeze first.",
+                                    dict(ANCHORED, deletes="not in the anchor"))
+        with self.assertRaisesRegex(ValueError, "cause.alternatives"):
+            learning.propose_change(self.root, 1, key, self.skill, "- Read the archives for each name.", "- Freeze first.",
+                                    dict(ANCHORED, alternatives=["one design"]))
+        self.assertEqual(learning.read(self.root, 1, key)["status"], "candidate")
+
+    def test_a_twin_rule_in_another_skill_is_found_by_the_runtime_and_changes_in_the_same_go(self):
+        # 2026-11-14: six of the coordinator's skills carried the same writing rules; an edit to one left the others.
+        rule = "- Verify every number against the printed script output before quoting it in prose."
+        twin = "- Verify each number against the printed script output before it goes into prose."
+        self.skill.write_text(SKILL + rule + "\n", encoding="utf-8")
+        other = self.root / "skills" / "writing" / "SKILL.md"
+        other.parent.mkdir(); other.write_text('---\nname: writing\nmetadata:\n  version: "1.0.0"\n---\n\n' + twin + "\n", encoding="utf-8")
+        key = self.observe("Counted a listing by eye")
+        cause = {"claim": "The rule checks numbers after they are written, by hand.", "anchor": rule,
+                 "deletes": "Verify every number against the printed script output", "alternatives": ["Check by hand", "Copy only printed lines"]}
+        new = "- A number goes into prose only as a copy of a printed line."
+        with self.assertRaisesRegex(ValueError, "writing/SKILL.md"):
+            learning.propose_change(self.root, 1, key, self.skill, rule, new, cause)
+        self.assertEqual(learning.read(self.root, 1, key)["status"], "candidate")
+        with self.assertRaisesRegex(ValueError, "never lengthens"):
+            learning.propose_change(self.root, 1, key, self.skill, rule, new, dict(cause, siblings=[
+                {"method_path": str(other), "current_text": twin, "new_text": twin + " Always, and for every table too."}]))
+        shown = learning.propose_change(self.root, 1, key, self.skill, rule, new, dict(cause, siblings=[
+            {"method_path": str(other), "current_text": twin, "new_text": "- A number is a copy of a printed line."}]))
+        self.assertIn("ALSO IN writing/SKILL.md: REPLACE:", shown["show_owner"])
+        self.assertIn("CONSIDERED: (1) Check by hand | (2) Copy only printed lines", shown["show_owner"])
+        learning.approve(self.root, 1, key, *YES, skip_trial=True)
+        self.assertIn("- A number goes into prose only as a copy of a printed line.", self.skill.read_text(encoding="utf-8"))
+        self.assertNotIn(twin, other.read_text(encoding="utf-8"))
+        self.assertIn("- A number is a copy of a printed line.", other.read_text(encoding="utf-8"))
+        self.assertEqual(len(learning.read(self.root, 1, key)["applied"]["siblings"]), 1)
+        kept = learning.propose_change(self.root, 1, self.observe("Again"), self.skill, "- A number goes into prose only as a copy of a printed line.",
+                                       "- A number in prose is a printed line.", {"claim": "c", "anchor": "- A number goes into prose only as a copy of a printed line.",
+                                       "deletes": "copy of a printed line", "alternatives": ["a", "b"]})
+        self.assertNotIn("ALSO IN", kept["show_owner"])                     # too few distinctive words to have a twin
 
     def test_a_proposal_without_a_cause_or_with_an_anchor_not_in_the_method_is_refused(self):
         key = self.observe("Rebuilt the workbook after a late membership change")

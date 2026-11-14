@@ -121,7 +121,8 @@ class Dockets(unittest.TestCase):
         learning.propose_change(self.root, 1, keys[0], self.skill, "- State what done looks like.",
                                 "- Done is a script's check.",
                                 {"claim": "The acceptance rule allows prose, so a worker cannot verify its own result.",
-                                 "anchor": "- State what done looks like."}, explains=keys[1:])
+                                 "anchor": "- State what done looks like.", "deletes": "State what done looks like",
+                                 "alternatives": ["a", "b"]}, explains=keys[1:])
         learning.approve(self.root, 1, keys[0], 7, "yes", skip_trial=True)
         docket = dockets.read(self.root, 1, key)
         self.assertEqual((docket["status"], docket["closed"]["by"]), ("closed", keys[0]))
