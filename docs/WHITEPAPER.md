@@ -157,7 +157,9 @@ Everything an agent asks the owner is a decision: one durable row with the quest
 that asked it, and later the answer, its source message and the owner's quoted words. Two kinds exist. A question
 ("30 names or 50?") is answered by the owner's next message, or by a reply to the question's message, which binds
 directly. A parked action (send this email, run this command) stores the exact inputs and runs only on a yes, whenever
-it comes; a late yes is still a yes, and a restart forgets nothing. The runtime parks, never the agent: the danger
+it comes; a late yes is still a yes, and a restart forgets nothing. A bare yes answers the newest parked action when
+nothing has been said to the chat since its ask except the reply of the same turn; a reply to the ask settles it at any
+time; an action identical to one already pending is asked again, never parked twice. The runtime parks, never the agent: the danger
 screen and the desktop grant each park the action they stop, beside any question already pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
 describe the result as the system's caution; the one way an agent attaches an exact action to a decision is in answer
 to a worker's pending question, and that ask reads as the question and the command. One pending question per task is enforced by a
