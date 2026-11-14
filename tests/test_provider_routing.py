@@ -188,7 +188,7 @@ class ClaudeBridge(unittest.TestCase):
             with patch.object(bridge,'find_cli',return_value='fake.exe'),patch.object(bridge,'auth_status',return_value={'loggedIn':True,'authMethod':'claude.ai'}),patch.object(sdk,'create_sdk_mcp_server',side_effect=server),patch.object(sdk,'query',side_effect=query):
                 self.assertEqual(bridge.run_claude(agent,messages,1,'claude-test'),'Done')
             self.assertEqual(captured['options'].tools,[])
-            self.assertEqual(captured['options'].output_format['schema']['required'],['reply', 'modality', 'work', 'task_outcome', 'question', 'decision_task_id', 'decision_id', 'status_claims', 'correction', 'answers', 'request'])   # declared reply field
+            self.assertEqual(captured['options'].output_format['schema']['required'],['reply', 'modality', 'work', 'task_outcome', 'question', 'decision_task_id', 'decision_id', 'status_claims', 'correction', 'answers', 'request', 'not_correction'])   # declared reply field
             self.assertEqual(captured['options'].env['ANTHROPIC_API_KEY'],'')
             self.assertEqual(captured['options'].allowed_tools,['mcp__agent__read_memory'])
             self.assertEqual(messages[1]['content'][0]['id'],messages[2]['content'][0]['tool_use_id'])
