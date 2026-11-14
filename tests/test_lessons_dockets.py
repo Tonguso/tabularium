@@ -119,7 +119,7 @@ class Dockets(unittest.TestCase):
         key = dockets.dockets(self.root, 1)[0][0]
         dockets.group(self.root, 1, key, keys, method_path=self.skill)
         learning.propose_change(self.root, 1, keys[0], self.skill, "- State what done looks like.",
-                                "- State done as a check a script can run: a file, a value, a command's exit code.",
+                                "- Done is a script's check.",
                                 {"claim": "The acceptance rule allows prose, so a worker cannot verify its own result.",
                                  "anchor": "- State what done looks like."}, explains=keys[1:])
         learning.approve(self.root, 1, keys[0], 7, "yes", skip_trial=True)

@@ -366,8 +366,11 @@ accepts rather than what the agent is told.
    observation that belongs to a docket never expires.
 2. **Cause.** To propose an edit, the agent names the cause: a claim about the decision in the method that allowed
    the failure, with an anchor the runtime checks, a passage quoted exactly from the method file, which the edit
-   must then rewrite, or the statement that the method is silent at a named place, the only case in which a line may
-   be appended. The agent also names the observations the cause explains. One instance is enough when it carries a
+   must then rewrite and never lengthen, or the statement that the method is silent at a named place, the only case
+   in which a line may be appended. The length rule came on 2026-11-14, when all fourteen pending edits had kept or
+   reworded the anchored rule and added sentences after it: a rule beside the old one is a patch, and a gate that
+   checked only the anchor and the observations let every one through. A replacement at most as long as the passage
+   it replaces has to delete the rule that allowed the failure. The agent also names the observations the cause explains. One instance is enough when it carries a
    receipt (the owner's message or a task record); a claim with neither a receipt nor a second instance stays an
    observation. The runtime checks the anchor and the observations; the claim itself is the owner's to judge
    against the instances it cites, as every edit is.
@@ -615,6 +618,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-13 | Mail went out through the owner's desktop mail client as the owner, in plain text that arrived as a wall of symbols | Each agent has its own mailbox, named by its own key; the agent's text is rendered as the message's HTML with a plain copy; one send per receipt |
 | 2026-11-13 | Four read-only commands the coordinator had parked itself sat on the dashboard's to-do page as lines of JSON with yes and no buttons, beside the skill edits | The page carries fundamental changes only, the proposed skill edits; every question and approval is asked and answered in the chat |
 | 2026-11-14 | Told to go on with a wiki, the coordinator searched its own past conversations and then asked the owner's yes for a read-only listing, because any reader tool made every later command a parked action | The taint rail is gone: the owner's instruction is the consent, and what parks is destruction, the desktop and nothing else; a page or an email can still ask for a command, and the danger screen is the answer to that |
+| 2026-11-14 | All fourteen pending skill edits lengthened their skills, seven by keeping the rule and appending sentences; the proposal gate checked the anchor and the observations, never the shape of the edit | A lesson never lengthens a method: a replacement longer than the passage it replaces is refused; additions go only where the method is silent, through the bounded ledger |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

@@ -30,7 +30,7 @@ class Lessons(unittest.TestCase):
 
     def propose(self):
         return learning.propose_change(self.root, 1, self.key, self.skill, "- Read the archives for each name.",
-                                       "- Freeze the membership first; then read the archives once per name.", CAUSE)
+                                       "- Freeze the membership first.", CAUSE)
 
     def measured(self, task):
         """A task in the records with a result, as a check's receipt."""
@@ -73,7 +73,7 @@ class Lessons(unittest.TestCase):
         self.assertIn("edit proposed", learning.hints(self.root, 1, "basket_build"))
         self.assertEqual(learning.approve(self.root, 1, self.key, 7, "yes, change the skill like that", skip_trial=True)["status"], "applied")
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("- Freeze the membership first; then read the archives once per name.", text)
+        self.assertIn("- Freeze the membership first.", text)
         self.assertIn('version: "1.8.6"', text)
         self.assertIn("APPLIED", learning.hints(self.root, 1, "basket_build"))       # checked on the next task
         self.assertEqual(learning.record_check(self.root, 1, self.key, True, "task 160: membership frozen first", **self.measured(160))["status"], "verified")

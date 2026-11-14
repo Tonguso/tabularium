@@ -54,6 +54,17 @@ class Step1(unittest.TestCase):
         return key
 
     # 4.1 a lesson names its cause
+    def test_a_lesson_never_lengthens_a_method(self):
+        # 2026-11-14: fourteen pending edits kept or reworded the anchored rule and added sentences after it.
+        key = self.observe("The archive rule is the cause")
+        with self.assertRaisesRegex(ValueError, "never lengthens a method"):
+            learning.propose_change(self.root, 1, key, self.skill, "- Read the archives for each name.",
+                                    "- Read the archives for each name. Freeze the membership first.", ANCHORED)
+        self.assertEqual(learning.read(self.root, 1, key)["status"], "candidate")
+        learning.propose_change(self.root, 1, key, self.skill, "- Read the archives for each name.",
+                                "- Freeze names, then read archives", ANCHORED)           # as long, not longer
+        self.assertEqual(learning.read(self.root, 1, key)["status"], "proposed")
+
     def test_a_proposal_without_a_cause_or_with_an_anchor_not_in_the_method_is_refused(self):
         key = self.observe("Rebuilt the workbook after a late membership change")
         with self.assertRaisesRegex(ValueError, "names its cause"):
@@ -67,7 +78,7 @@ class Step1(unittest.TestCase):
             learning.propose_change(self.root, 1, key, self.skill, "", "- Freeze first.", {"claim": "x"})
         self.assertEqual(learning.read(self.root, 1, key)["status"], "candidate")            # the observation stays
         shown = learning.propose_change(self.root, 1, key, self.skill, "- Read the archives for each name.",
-                                        "- Freeze the membership; then read the archives once per name.", ANCHORED)
+                                        "- Freeze the membership; then read", ANCHORED)
         self.assertIn("CAUSE: The method reads the archives", shown["show_owner"])
         self.assertIn("ANCHOR: - Read the archives for each name.", shown["show_owner"])
         d = learning.read(self.root, 1, key)
@@ -105,7 +116,7 @@ class Step1(unittest.TestCase):
             learning.propose_change(self.root, 1, extra, self.skill, "", "Rule number six.", SILENT)
         rewrite = self.observe("The archive rule is the cause")
         learning.propose_change(self.root, 1, rewrite, self.skill, "- Read the archives for each name.",
-                                "- Freeze the membership; then read the archives once per name.", ANCHORED)
+                                "- Freeze the membership; then read", ANCHORED)
         learning.approve(self.root, 1, rewrite, *YES, skip_trial=True)                    # a rewrite is always allowed
         self.assertIn("Freeze the membership; then read", self.skill.read_text(encoding="utf-8"))
         learning.retire(self.root, 1, keys[0], *YES)                                        # a removal is always allowed
