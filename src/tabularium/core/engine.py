@@ -1875,6 +1875,11 @@ class AgentRuntime(SharedHandlers):
         if self.BACKGROUND_TASK_ID:
             return result
         corrected = getattr(result, "correction", ())
+        for ident in getattr(result, "not_correction", ()):   # the judgement on strong language is recorded either way
+            try:
+                self._inbox.record_event('considered', model='owner', role='foreground', details={'message_id': int(ident), 'verdict': 'not a correction'})
+            except (OSError, ValueError, AttributeError) as exc:
+                print(f"[correction] not recorded: {type(exc).__name__}: {exc}")
         from tabularium.records.task_decisions import verify_reply
         result = verify_reply(self, messages, chat_id, result)
         if corrected:

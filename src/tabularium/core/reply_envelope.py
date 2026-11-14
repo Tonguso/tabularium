@@ -57,6 +57,8 @@ SCHEMA["properties"].update({
         "description": "EVERY claim in reply about this agent's task progress, including implicit claims such as 'still working'. Identify the task; live evidence will be checked before delivery. Empty only when there are no status claims."},
     "correction": {"type": "array", "items": {"type": "integer"},
                    "description": "IDs from the Incoming messages list that correct you or the system. Empty if none. Runtime warnings are not human feedback. Select each actual correction, including follow-ups; disagreement or a changed preference alone is not a correction."},
+    "not_correction": {"type": "array", "items": {"type": "integer"},
+                       "description": "IDs from the Incoming messages list that the runtime marked as carrying strong language and that you judged are not a correction of you or the system (venting, a status report, a request). Every such message is listed here or in correction; the judgement is recorded either way. Empty if none."},
     "answers": {"type": "array", "items": {"type": "integer"},
                 "description": ("IDs from Incoming messages that this reply answers or acknowledges. One reply can "
                                 "cover several messages: when a correction changes an earlier request and you handle "
@@ -95,8 +97,9 @@ class Reply(str):
     answers = ()             # exact current-turn message IDs covered by this reply
     request = "none"         # where his request stands: done, started, asking, blocked, none (2026-10-21)
 
-    def __new__(cls, text, modality="text", complete=True, work="none", task_outcome="none", question="", decision_task_id=0, status_claims=None, correction=(), answers=(), request="none", decision_id=0):
+    def __new__(cls, text, modality="text", complete=True, work="none", task_outcome="none", question="", decision_task_id=0, status_claims=None, correction=(), answers=(), request="none", decision_id=0, not_correction=()):
         self = super().__new__(cls, text)
+        self.not_correction = tuple(not_correction) if isinstance(not_correction, (list, tuple)) and all(type(i) is int for i in not_correction) else ()
         self.answers = tuple(a for a in answers if type(a) is int and a > 0) if isinstance(answers, (list, tuple)) else ()
         self.request = request if request in ("done", "started", "asking", "blocked", "none") else "none"
         self.correction = tuple(correction) if isinstance(correction, (list, tuple)) and all(type(i) is int for i in correction) else ()
@@ -140,6 +143,34 @@ def unanswered(reply, turn_messages):
     return [(mid, text) for mid, text in turn_messages if mid not in covered]
 
 
+STRONG = ("fuck", "shit", "wtf", "damn", "crap", "stupid", "idiot", "ashamed", "useless", "傻逼", "他妈", "妈的", "操", "靠",
+          "垃圾", "蠢", "白痴", "滚", "废物", "shut up")
+
+
+def strong_language(text):
+    """A deterministic marker for the owner's strong language (2026-11-14): a prompt to consider, never a verdict."""
+    low = str(text or "").lower()
+    return any(m in low for m in STRONG)
+
+
+def unconsidered(reply, turn_messages):
+    """Strong-language messages the turn took in that the reply has neither called a correction nor said are not one
+    (2026-11-14: three of five cursing messages went unmarked and unexamined in one day). The agent decides; the
+    runtime only insists that it decides."""
+    if not isinstance(turn_messages, list):
+        return []
+    decided = set(getattr(reply, "correction", ())) | set(getattr(reply, "not_correction", ()))
+    return [(mid, text) for mid, text in turn_messages if strong_language(text) and mid not in decided]
+
+
+def unconsidered_note(missing):
+    lines = "\n".join(f"- ID {mid}: {str(text or '')[:80]}" for mid, text in missing)
+    return ("[System: these incoming messages carry strong language:\n" + lines +
+            "\nDecide for each whether it corrects you or the system. If it does, include its ID in correction, so the "
+            "runtime records it and a diagnosis follows; if it does not (venting, a status report, a request), include "
+            "its ID in not_correction. Either way the judgement is recorded. Nothing has been sent yet.]")
+
+
 def unanswered_note(missing):
     lines = "\n".join(f"- ID {mid}: {str(text or '')[:80]}" for mid, text in missing)
     return ("[System: your reply does not cover these incoming message IDs:\n" + lines +
@@ -180,7 +211,7 @@ def reply(value) -> Reply:
                  task_outcome=value.get("task_outcome", "none"), question=value.get("question", ""),
                  decision_id=value.get("decision_id", 0), decision_task_id=value.get("decision_task_id", 0), status_claims=value.get("status_claims", []),
                  correction=value.get("correction", []), answers=value.get("answers") or (),
-                 request=value.get("request", "none"))
+                 request=value.get("request", "none"), not_correction=value.get("not_correction", []))
 
 
 def readable(text: str) -> str:

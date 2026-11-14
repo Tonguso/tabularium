@@ -474,6 +474,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | One completion decision | A worker's "done" taken at its word | Finished is derived from proof, pending questions and accepted dependencies |
 | Waiting on a decision | A worker holding its slot after asking | A pending question ends the turn and frees the slot |
 | Correction bundling | Twelve diagnosis tasks from one argument | One silent diagnosis per quiet thread; the next reply restates |
+| Strong language | The owner's anger passed over as venting, so no diagnosis follows | The runtime marks such a message by a list of his words; the reply must call it a correction or not before it goes out, and the verdict is recorded either way |
 | Durable outbox | A reply lost during an outage | Written to disk first, retried in order, stalls visible |
 | Announced routes | Two days on a fallback model unannounced | A missing route is announced; a changed client runs the self-test |
 | Truthful live status | A dead process shown idle; planned restarts counted as crashes | Status from process identity; unknowns shown as unknown |
@@ -637,6 +638,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-14 | A worker ran from the snapshot of one release while two more were released; the snapshot, now the third, was pruned under the worker, whose next import failed; on the restart a one-time recovery copied every interrupted task into the failure notices, so the owner read "stopped trying" about a task rerun thirty seconds later | A process running from a snapshot leaves its pid in it, and a snapshot with a live pid is never pruned; the recovery line is gone, a crash that reruns is announced by nothing |
 | 2026-11-14 | Two releases each waited an hour behind one engineering worker, because a drain let every worker finish; both were unblocked by cancelling the task by hand and resuming it after | A drain pauses every worker at its next safe point and queues its task again for the new process; no release waits longer than one tool call, and no work is lost |
 | 2026-11-14 | Every proposed skill edit was a patch: the rule blamed stayed and a sentence was added after it, and the same rule lived in several skills; the path asked for a cause, an anchor and an edit, and checked nothing about the reasoning | A proposal has the shape of the reasoning: the words that carried the decision must be gone from the edit, two designs are named and one chosen, and the runtime finds the twin rules in the agent's other skills, each edited in the same go or kept with a reason |
+
+| 2026-11-14 | Three of five messages in which the owner cursed were marked as neither correction nor anything else, because the reply envelope leaves the recognising of a correction to the model and the runtime asked nothing when it stayed silent | The runtime spots strong language by a list of the owner's own words; the reply must say correction or not for each such message before it is accepted, and the judgement is recorded either way |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

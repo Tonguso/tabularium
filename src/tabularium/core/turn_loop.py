@@ -50,6 +50,7 @@ def run(agent, messages, chat_id, provider):
     turn_started = time.time()                     # an accepted start/resume/reopen after this backs "work started"
     reminded = False
     covered_asked = False
+    considered_asked = False
     unblocked_asked = False
     decision_asked = False
     # Trim FIRST, on the raw in-memory list whose dict objects are stable (that is what the window anchor keys on),
@@ -118,6 +119,12 @@ def run(agent, messages, chat_id, provider):
             if missing:
                 covered_asked = True                            # once: answer them or say how each is handled
                 api_messages.append(reply_envelope.retry_note(agent, "unanswered_message", final, reply_envelope.unanswered_note(missing)))
+                continue
+            undecided = [] if agent.BACKGROUND_TASK_ID or considered_asked else reply_envelope.unconsidered(
+                final, agent._inbox.turn_messages() if hasattr(agent._inbox, "turn_messages") else [])
+            if undecided:
+                considered_asked = True                         # once: strong language is decided on, not passed over
+                api_messages.append(reply_envelope.retry_note(agent, "strong_language_undecided", final, reply_envelope.unconsidered_note(undecided)))
                 continue
             from tabularium.records.task_decisions import completion_feedback, declaration_error, DECISION_NOTE
             error = None if agent.BACKGROUND_TASK_ID or decision_asked or not (getattr(final, "question", "") or getattr(final, "decision_id", 0)) else \
