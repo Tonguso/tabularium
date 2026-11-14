@@ -221,7 +221,7 @@ class DashboardMessaging(unittest.TestCase):
             self.assertEqual(response.status,403)
             response.read()
             self.assertFalse((self.root/'coordinator/task_state/inbox.sqlite3').exists())
-            headers['X-CSRF-Token']=dashboard.TOKEN
+            headers['X-CSRF-Token']=dashboard.token()
             receipts=[]
             for _ in range(2):
                 connection.request('POST','/api/messages',body,headers)

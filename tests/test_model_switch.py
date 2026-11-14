@@ -25,7 +25,7 @@ class ModelSwitch(unittest.TestCase):
                 try:
                     connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
                     headers = {"Host": f"127.0.0.1:{dashboard.PORT}", "Origin": dashboard.URL,
-                               "Content-Type": "application/json", "X-CSRF-Token": dashboard.TOKEN}
+                               "Content-Type": "application/json", "X-CSRF-Token": dashboard.token()}
 
                     def post(body):
                         connection.request("POST", "/api/model", json.dumps(body), headers)

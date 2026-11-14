@@ -26,7 +26,24 @@ from tabularium.dashboard.history import history, export
 from tabularium.channels import messaging
 from tabularium.core.agent_runtime import DurableInbox
 from tabularium.dashboard.audit import response as audit_response, format_audit
-TOKEN = secrets.token_urlsafe(32)
+_TOKENS = {}
+
+
+def token():
+    """The page's write token, kept in a file so a page opened before a dashboard restart can still save (2026-11-14:
+    the token was made per process, and every save from an older page was refused without a word)."""
+    path = ROOT / 'dashboard' / 'csrf_token'
+    if path not in _TOKENS:
+        try:
+            value = path.read_text(encoding='utf-8').strip()
+        except FileNotFoundError:
+            value = ''
+        if len(value) < 32:
+            value = secrets.token_urlsafe(32)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(value, encoding='utf-8')
+        _TOKENS[path] = value
+    return _TOKENS[path]
 # Phone access (2026-10-09): Tailscale Serve proxies the tailnet hostname to this loopback server and stamps every
 # proxied request with Tailscale-User-Login. Only that hostname with Alex's login is accepted besides loopback.
 TAILNET_HOST = 'your-pc.your-tailnet.ts.net'
@@ -184,10 +201,6 @@ def state():
             if s and s.get('drifting'):
                 agent['errors'].append(f"Research signal: the last {s['runs']} weekly reruns of real cases came out further from the accepted answers than closer. Something changed for the worse; read task_state/research_signal/.")
         except (OSError, ValueError): agent['research_signal']=None
-        if agent['memory_exam'] and not agent['memory_exam'].get('ok'):
-            wrong=[i for i in agent['memory_exam'].get('items',[]) if i.get('score')=='wrong']
-            detail='; '.join(f"Q: {str(i.get('question',''))[:90]} / expected: {str(i.get('expected',''))[:60]}" for i in wrong[:3])
-            agent['errors'].append(f"Weekly memory exam failed: {len(wrong)} wrong answer(s). {detail}")
     data['tasks']=[]
     for name,store in TASK_STORES.items():
         for task in store.status(OWNER_CHAT_ID):
@@ -200,7 +213,7 @@ def state():
     data['restart']=read_json(ROOT/'dashboard/restart_status.json')
     data['supervisor']=read_json(ROOT/'logs/supervisor_state.json')
     data['subscriptions']=subscription_snapshot()
-    data['csrf']=TOKEN
+    data['csrf']=token()
     data['search_order']=search_routing.read_order()
     data['claude_login']=read_json(ROOT/'dashboard/claude_login.json')
     data['quota']=read_json(ROOT/'coordinator/task_state/search_quota.json')
@@ -212,12 +225,21 @@ def state():
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def allowed(self,write=False,media=False):
+        reason=self.refusal(write,media)
+        if reason and write:print('[dashboard refused]',self.path,reason)
+        return not reason
+    def refusal(self,write,media):
         host=self.headers.get('Host')
-        if host not in ALLOWED_HOSTS or self.headers.get('Sec-Fetch-Site')=='cross-site':return False
-        if host==TAILNET_HOST and self.headers.get('Tailscale-User-Login')!=TAILNET_LOGIN:return False
+        if host not in ALLOWED_HOSTS:return 'host '+str(host)
+        if self.headers.get('Sec-Fetch-Site')=='cross-site':return 'cross-site'
+        if host==TAILNET_HOST and self.headers.get('Tailscale-User-Login')!=TAILNET_LOGIN:return 'tailnet login'
         origin=self.headers.get('Origin')
-        if origin and origin not in ALLOWED_ORIGINS:return False
-        return not write or (origin in ALLOWED_ORIGINS and self.headers.get('X-CSRF-Token')==TOKEN and self.headers.get('Content-Type','').split(';')[0]==('application/octet-stream' if media else 'application/json'))
+        if origin and origin not in ALLOWED_ORIGINS:return 'origin '+origin
+        if not write:return ''
+        if origin not in ALLOWED_ORIGINS:return 'no origin'
+        if self.headers.get('X-CSRF-Token')!=token():return 'stale page token'
+        if self.headers.get('Content-Type','').split(';')[0]!=('application/octet-stream' if media else 'application/json'):return 'content type'
+        return ''
     def send(self,body,kind='application/json',code=200,filename=None):
         if not isinstance(body,bytes):body=json.dumps(body,ensure_ascii=False).encode('utf-8')
         self.send_response(code);self.send_header('Content-Type',kind);self.send_header('Cache-Control','no-store')

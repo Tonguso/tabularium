@@ -160,7 +160,7 @@ class DashboardMedia(unittest.TestCase):
         response = connection.getresponse()
         self.assertEqual(response.status, 403)
         response.read()
-        headers['X-CSRF-Token'] = dashboard.TOKEN
+        headers['X-CSRF-Token'] = dashboard.token()
         connection.request('POST', '/api/attachments?agent=coordinator&name=voice.wav', b'RIFF demo', headers)
         response = connection.getresponse()
         self.assertEqual(response.status, 200)
