@@ -391,7 +391,10 @@ accepts rather than what the agent is told.
    then restated in the tool, at the owner's word: a lesson is not an append to a list of rules; before proposing, the
    agent reads every skill the cause could touch, and the edit is a deletion, a replacement or a rephrase, in one skill
    or several in the same go, with an addition only where the method is truly silent. The runtime accepts a deletion as
-   an edit. The agent also names the observations the cause explains. One instance is enough when it carries a
+   an edit. By that evening the coordinator's three pending edits had the intended shape: one rewrite per skill,
+   each explaining two to five observations, each shorter than the passage it replaced, and each answering the twin
+   rules in other skills, one of them by rewriting a second skill in the same proposal. The agent also names the
+   observations the cause explains. One instance is enough when it carries a
    receipt (the owner's message or a task record); a claim with neither a receipt nor a second instance stays an
    observation. The runtime checks the anchor and the observations; the claim itself is the owner's to judge
    against the instances it cites, as every edit is.
