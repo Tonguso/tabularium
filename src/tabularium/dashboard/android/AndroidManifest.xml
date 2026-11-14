@@ -3,7 +3,7 @@
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
-  <application android:label="Agents" android:theme="@android:style/Theme.Material" android:allowBackup="false" android:usesCleartextTraffic="false" android:icon="@drawable/app_icon">
+  <application android:label="Tabularium" android:theme="@android:style/Theme.Material" android:allowBackup="false" android:usesCleartextTraffic="false" android:icon="@drawable/app_icon">
     <activity android:name=".MainActivity" android:exported="true" android:enableOnBackInvokedCallback="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden">
       <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
     </activity>

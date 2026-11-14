@@ -19,7 +19,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        setTitle("Agents");
+        setTitle("Tabularium");
         base = getPreferences(MODE_PRIVATE).getString("origin", BuildConfig.HOME_URL);
         web = new WebView(this);
         web.setBackgroundColor(0xff050809);
@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) setTitle("Check Tailscale; use Reload");
             }
-            @Override public void onPageFinished(WebView view, String url) { setTitle("Agents"); }
+            @Override public void onPageFinished(WebView view, String url) { setTitle("Tabularium"); }
             // Keep the default cancellation of certificate errors; never bypass TLS checks.
         });
         web.setWebChromeClient(new WebChromeClient() {
