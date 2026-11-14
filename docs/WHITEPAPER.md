@@ -1,6 +1,6 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.6, 13 November 2026
+Version 0.7, 14 November 2026
 
 ## Abstract
 
@@ -480,8 +480,9 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Snapshot | An edit on disk reaching running agents before any test | Every component and worker runs an export of the released commit, never the working tree; a crash restart runs the last release |
 | Privacy by role | Maintainers reading private conversations | The private agent's records are closed; only tool records |
 
-**Known gaps.** A command is held after outside content was read, but a command in a clean turn runs with the
-owner's rights; the boundary holds the file tools, not the shell. A real sandbox with desktop integrations behind
+**Known gaps.** A command runs with the owner's rights on his instruction, and outside content read in the same
+turn can ask for one; only the danger screen stands between that page and the shell, by the owner's choice (the
+taint rail that held every command after a read went on 2026-11-14). The boundary holds the file tools, not the shell. A real sandbox with desktop integrations behind
 narrow host-side tools is the next large piece. A declared check proves that a test ran against those bytes, not that
 the test was a good one. The supervisor itself still runs from the working tree; it is the process that exports
 the snapshots and hands itself off after a release.
@@ -527,7 +528,8 @@ The system is built so that the human is the judge, not the operator. The jobs n
 | Job | When |
 |---|---|
 | Apply or drop proposed skill edits, and rule on trial results | On the dashboard's "Waiting on you" page at any time, or from the weekly message |
-| Answer questions and approve or decline parked actions | On the same page, or by replying on Telegram; there is no deadline |
+| Answer questions and approve or decline parked actions | In the chat, by a reply or the next message; there is no deadline, and none of it is on the dashboard |
+| Switch an agent's model | One click on its dashboard card, effective at the next turn; the saved sequence is the fallback order |
 | Approve memory tidy-ups, after seeing the exam before and after | After the weekly review |
 | Read the lesson digest and the scorecard | Weekly |
 | Say when something is wrong, in any words | Any time; the agent works out the specifics |

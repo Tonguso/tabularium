@@ -73,13 +73,15 @@ agent is in [examples/minimal](examples/minimal/README.md).
 - **Delegation by contract.** A coordinator briefs another agent with numbered obligations; delivery is accepted
   from the checks, not the report; what no check could confirm reaches you named as unproven.
 - **Owner-judged learning.** Agents turn your corrections into exact skill edits and change nothing until you say so.
-  Your verdict from the dashboard settles at once; an approved rule becomes one tagged entry in the skill's ledger,
-  counted helped or hurt on later tasks.
+  A proposal must delete the rule it blames rather than add beside it, name the designs considered, and account for
+  the same rule in the agent's other skills; it never lengthens a method. Your verdict from the dashboard settles at
+  once, and an approved edit is counted helped or hurt on later tasks.
 - **Memory that is tested.** One readable memory file per agent, writes that must quote you, a weekly exam, a
   weekly review that reads every sourced fact against what you said later, and tidy-ups applied only after the exam
   passes on both versions.
 - **Operations like software.** A supervisor, self-tests, weekly scorecards, per-task traces, a regression
-  benchmark, and releases only onto tested, committed code.
+  benchmark, and releases only onto tested, committed code; a release pauses running workers at their next safe point
+  and resumes them on the new build. The dashboard switches an agent's model in one click.
 
 ## Add the rest of the cast
 
