@@ -53,7 +53,7 @@ def read(path, default=None):
 def config(root):
     value = read(Path(root)/'routing.json')
     if not value:
-        raise ValueError("No model sequence configured. Save a sequence in the dashboard.")
+        raise ValueError("No model sequence configured: routing.json is missing from the agent folder.")
     return validate(value)
 
 
@@ -66,6 +66,60 @@ def save(root, value):
 
 def label(route):
     return f"{route['model']} · {KINDS[route['kind']]}"
+
+
+# A temporary switch to one route, beside the permanent order: Alex asked to switch to OpenAI for a
+# while, not to reorder routing.json (2026-11-14). Its own file, so routing.json is never rewritten.
+OVERRIDE = 'routing_override.json'
+
+
+def _checked_override(kind, model, reason, expires, now):
+    route = validate({'routes': [{'kind': kind, 'model': model}]})['routes'][0]
+    if not isinstance(reason, str):
+        raise ValueError('The reason must be text.')
+    if expires is not None and (isinstance(expires, bool) or not isinstance(expires, (int, float)) or expires <= now):
+        raise ValueError('The expiry must be a future time, or none until cleared.')
+    return route
+
+
+def override(root, now=None):
+    """The valid, unexpired override, or None. Read inside every turn, so it never raises."""
+    try:
+        value = read(Path(root)/OVERRIDE)
+        if not value:
+            return None
+        now = time.time() if now is None else now
+        route = _checked_override(value.get('kind'), value.get('model'), value.get('reason', ''),
+                                  value.get('expires'), now)
+        return dict(route, reason=value.get('reason', ''), set=value.get('set'), expires=value.get('expires'))
+    except Exception:
+        return None
+
+
+def set_override(root, kind, model, reason, expires=None):
+    now = time.time()
+    route = _checked_override(kind, model, reason, expires, now)
+    value = dict(route, reason=reason, set=now, expires=expires)
+    atomic_json(Path(root)/OVERRIDE, value)
+    return value
+
+
+def clear_override(root):
+    (Path(root)/OVERRIDE).unlink(missing_ok=True)
+
+
+def effective_routes(root):
+    """The override first, then the permanent sequence without its billing kind, in saved order."""
+    routes = config(root)['routes']
+    current = override(root)
+    if not current:
+        return routes
+    return [{'kind': current['kind'], 'model': current['model']}] + [r for r in routes if r['kind'] != current['kind']]
+
+
+def override_label(current):
+    until = time.strftime('until %Y-%m-%d %H:%M', time.localtime(current['expires'])) if current.get('expires') else 'until cleared'
+    return f"Temporary override: {label(current)} ({until})"
 
 
 def provider():
@@ -96,12 +150,12 @@ def failure(exc):
 
 
 def run(agent, messages, chat):
-    settings = config(agent.AGENT_DIR)
+    routes = effective_routes(agent.AGENT_DIR)
     reasons = []
     agent._review_counts[chat] = 0
     agent._strip_old_images(messages, chat)
     state_path = agent.RUNTIME_DIR/'task_state'/'routing_state.json'
-    for route in settings['routes']:
+    for route in routes:
         cooldown_path = agent.AGENT_DIR/'task_state'/('route_'+route['kind']+'.json')
         cooldown = read(cooldown_path)
         if cooldown.get('model') == route['model'] and cooldown.get('retry_at', 0) > time.time():
@@ -145,7 +199,7 @@ def run(agent, messages, chat):
                                       'notified': bool(rejected.quota or signed_out)})
             atomic_json(state_path, {'route': route, 'status': 'unavailable', 'reason': str(rejected), 'updated': time.time()})
             if (rejected.quota or signed_out) and subscription and not already_announced:
-                more = settings['routes'].index(route) < len(settings['routes']) - 1
+                more = routes.index(route) < len(routes) - 1
                 notice = (KINDS[route['kind']] + ' is unavailable: ' + str(rejected) if 'not installed' in str(rejected).lower()
                           else KINDS[route['kind']] + ' sign-in has expired and needs reconnecting.' if signed_out
                           else KINDS[route['kind']] + ' usage limit reached.')

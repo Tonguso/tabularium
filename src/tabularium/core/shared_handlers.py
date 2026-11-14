@@ -303,7 +303,9 @@ class SharedHandlers:
     def handle_model(self, message):
         status = self._routing.read(self.RUNTIME_DIR/'task_state'/'routing_state.json')
         rows = self._routing.config(self.AGENT_DIR)['routes']
-        text = 'Model sequence: ' + ' → '.join(self._routing.label(r) for r in rows)
+        current = self._routing.override(self.AGENT_DIR)
+        text = ((self._routing.override_label(current) + '\nPermanent sequence: ') if current else 'Model sequence: ') \
+            + ' → '.join(self._routing.label(r) for r in rows)
         if status.get('route'):
             label = 'Active: ' if status.get('status') == 'attempting' else 'Last used: ' if status.get('status') == 'completed' else 'Last attempted: '
             text += '\n' + label + self._routing.label(status['route']) + ' (' + status.get('status','unknown') + ')'

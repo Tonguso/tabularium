@@ -119,7 +119,6 @@ async function downloadAudit(fmt,params=auditParams()){let p=new URLSearchParams
 $('audit-form').onsubmit=e=>{e.preventDefault();auditOffset=0;loadAudit()};$('audit-prev').onclick=()=>{auditOffset=Math.max(0,auditOffset-30);loadAudit()};$('audit-next').onclick=()=>{auditOffset+=30;loadAudit()};$('audit-close').onclick=()=>{$('audit-detail').hidden=true};for(let fmt of ['json','jsonl','txt'])$('audit-'+fmt).onclick=()=>downloadAudit(fmt);
 // Drafts survive status refreshes. Routes apply at the next new turn, not midway through a task.
 const routeKinds={openai_subscription:'ChatGPT subscription',anthropic_subscription:'Claude subscription',openai_api:'OpenAI API · paid',anthropic_api:'Anthropic API · paid'};
-const routeDrafts={};
 const routeModels={
  openai:[['gpt-6.1-sol','GPT 6.1 Sol'],['gpt-6-sol','GPT 6 Sol'],['gpt-6-astra','GPT 6 Astra'],['gpt-6-luna','GPT 6 Luna'],['gpt-5.6-sol','GPT 5.6 Sol']],
  anthropic:[['claude-sonnet-5-5','Claude Sonnet 5.5'],['claude-opus-5-5','Claude Opus 5.5'],['claude-haiku-4-5','Claude Haiku 4.5'],['claude-fable-5-1','Claude Fable 5.1'],['claude-sonnet-5','Claude Sonnet 5']]
@@ -136,8 +135,19 @@ function searchOrderPanel(d){
  let missing=Object.keys(searchEngines).filter(e=>!draft.includes(e));if(missing.length){let add=el('select');add.append(new Option('Add engine…',''));for(let e of missing)add.append(new Option(searchEngines[e],e));add.onchange=()=>{if(add.value){draft.push(add.value);render(current)}};box.append(routeField('Add',add))}
  let save=el('button','Save search order','button');save.onclick=()=>confirmAction('Save the search order for all four agents?','Engines are tried top to bottom on every web search. Model routes use each agent’s own model sequence and may cost API searches.',()=>action('/api/search_order',{order:draft}));box.append(save);
  box.append(el('p','Saved: '+(d.search_order||[]).map(e=>searchEngines[e]||e).join(' → '),'model-caption'));return box}
+const routeDrafts={};
+function routeTitle(r){let fam=r.kind.startsWith('openai')?'openai':'anthropic';return (routeModels[fam].find(([id])=>id===r.model)||[r.model,r.model])[1]+' · '+routeKinds[r.kind]}
 function routingPanel(name,a){
  let form=el('section',undefined,'routing-controls');
+ form.append(el('h3','Model'),el('p','One click: the agent runs on this model from its next turn. Default sequence goes back to the saved order.','muted'));
+ if(current?.claude_login?.status==='connected')form.append(el('p','Claude subscription connected','model-caption'));else{let connect=el('button','Connect subscriptions','button secondary');connect.onclick=()=>action('/api/connect-subscriptions',{});form.append(connect);if(current?.claude_login?.message)form.append(el('p',current.claude_login.message,'model-caption'));}
+ let pick=el('select');pick.setAttribute('aria-label',name+' model');let routes=a.routing?.routes||[];
+ pick.append(new Option('Default sequence: '+(routes.map(routeTitle).join(' → ')||'none saved'),''));
+ for(let kind of Object.keys(routeKinds))for(let [id,title]of routeModels[kind.startsWith('openai')?'openai':'anthropic'])pick.append(new Option(title+' · '+routeKinds[kind],kind+'|'+id));
+ let o=a.routing_override,want=o?o.kind+'|'+o.model:'';if(o&&![...pick.options].some(x=>x.value===want))pick.append(new Option(o.model+' · '+routeKinds[o.kind]+' (saved)',want));pick.value=want;
+ pick.onchange=async()=>{let [kind,model]=pick.value.split('|');pick.disabled=true;try{let d=await api('/api/model',{agent:name,kind:kind||'',model:model||''});toast(d.message);await refresh()}catch(e){toast(e.message,true);pick.disabled=false}};
+ form.append(routeField('Running on',pick));
+ form.append(el('h3','Model sequence'),el('p','The saved order: first choice, then fallbacks. Steps run from top to bottom.','muted'));
  let draft=routeDrafts[name]||(routeDrafts[name]=JSON.parse(JSON.stringify(a.routing?.routes?.length?a.routing:{enabled:true,routes:[{kind:'openai_subscription',model:'gpt-6.1-sol'},{kind:'anthropic_subscription',model:'claude-sonnet-5-5'},{kind:'openai_api',model:'gpt-6.1-sol'}]})));
  form.append(el('h3','Model sequence'),el('p','Choose how to pay, then the provider and model. Steps run from top to bottom.','muted'));
  if(current?.claude_login?.status==='connected')form.append(el('p','Claude subscription connected','model-caption'));else{let connect=el('button','Connect subscriptions','button secondary');connect.onclick=()=>action('/api/connect-subscriptions',{});form.append(connect);if(current?.claude_login?.message)form.append(el('p',current.claude_login.message,'model-caption'));}
@@ -159,8 +169,8 @@ function routingPanel(name,a){
  });
  let add=el('button','Add route','button secondary');add.disabled=draft.routes.length>=4;add.onclick=()=>{let kind=Object.keys(routeKinds).find(k=>!draft.routes.some(r=>r.kind===k));if(kind)draft.routes.push({kind,model:kind.startsWith('openai')?'gpt-6.1-sol':'claude-sonnet-5-5'});render(current)};
  let save=el('button','Save sequence','button');save.onclick=()=>confirmAction('Save '+agentNames[name]+'’s route order?', 'API steps authorize paid inference after earlier routes are unavailable. Existing tasks finish with their starting sequence. Voice, search and advisor billing are separate.',async()=>{try{let d=await api('/api/routing',{agent:name,routing:draft});delete routeDrafts[name];toast(d.message);await refresh()}catch(e){toast(e.message,true)}});
- form.append(add,save,el('p','If a step is unavailable, try the next. API steps use paid billing. Model availability depends on your account.','muted'));
- form.append(el('p',a.routing_live?'Routing runtime connected. Changes apply at the next turn.':'Saved settings require an agent restart before they can run.','model-caption'));
+ form.append(add,save,el('p','The order is the fallback sequence when no model is picked above. If a step is unavailable, the next is tried. API steps use paid billing.','muted'));
+ form.append(el('p',a.routing_live?'Routing runtime connected. The choice applies at the next turn.':'Saved settings require an agent restart before they can run.','model-caption'));
  if(a.routing_state?.route)form.append(el('p','Last route: '+a.routing_state.route.model+' · '+routeKinds[a.routing_state.route.kind]+' · '+a.routing_state.status,'model-caption'));
  form.append(el('p','Claude subscription uses this Windows user’s Claude Code sign-in. Each ChatGPT connection remains agent-specific.','muted'));
  return form;

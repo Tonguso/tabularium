@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import tempfile
+import time
 from types import SimpleNamespace as NS
 import unittest
 from unittest.mock import Mock, patch
@@ -67,6 +68,101 @@ class Routing(unittest.TestCase):
         for rows in [[],self.routes+[self.routes[0]],[{'kind':'openai_api','model':'claude-test'}]]:
             with self.assertRaises(ValueError):
                 routing.validate({'enabled':True,'routes':rows})
+
+
+class Override(unittest.TestCase):
+    """A temporary route goes first without rewriting routing.json; a bad or expired one is ignored."""
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.agent = NS(AGENT_DIR=self.root, RUNTIME_DIR=self.root, _review_counts={},
+                        _strip_old_images=Mock(), OPENAI_API_KEY='fake', ANTHROPIC_API_KEY='fake',
+                        send_message=Mock(), run_turn_anthropic=Mock(return_value='Claude API'),
+                        run_turn_openai=Mock(return_value='OpenAI'))
+        # Vit's permanent order (2026-11-14)
+        self.routes = [{'kind': 'anthropic_subscription', 'model': 'claude-perm'},
+                       {'kind': 'openai_subscription', 'model': 'gpt-perm'},
+                       {'kind': 'anthropic_api', 'model': 'claude-perm'},
+                       {'kind': 'openai_api', 'model': 'gpt-perm'}]
+        routing.save(self.root, {'enabled': True, 'routes': self.routes})
+        self.claude = patch('tabularium.models.subscription_runtime.run_claude', return_value='Claude')
+        self.run_claude = self.claude.start()
+        self.addCleanup(self.claude.stop)
+
+    def file(self):
+        return self.root/'routing_override.json'
+
+    def test_override_first_then_permanent_order_without_its_kind(self):
+        routing.set_override(self.root, 'openai_subscription', 'gpt-6.1-sol', 'Alex: switch to OpenAI')
+        self.assertEqual(routing.effective_routes(self.root),
+                         [{'kind': 'openai_subscription', 'model': 'gpt-6.1-sol'}, self.routes[0], self.routes[2], self.routes[3]])
+        seen = []
+        self.agent.run_turn_openai.side_effect = lambda m, c: seen.append(dict(routing.ACTIVE.get())) or 'OpenAI'
+        self.assertEqual(routing.run(self.agent, [], 1), 'OpenAI')
+        self.assertEqual(seen, [{'kind': 'openai_subscription', 'model': 'gpt-6.1-sol'}])
+        self.run_claude.assert_not_called()
+
+    def test_kind_absent_from_sequence_is_added_first(self):
+        routing.save(self.root, {'enabled': True, 'routes': self.routes[:1]})
+        routing.set_override(self.root, 'openai_api', 'gpt-6.1-sol', '')
+        self.assertEqual(routing.effective_routes(self.root),
+                         [{'kind': 'openai_api', 'model': 'gpt-6.1-sol'}, self.routes[0]])
+
+    def test_override_route_falls_back_and_cools_down(self):
+        routing.set_override(self.root, 'openai_subscription', 'gpt-6.1-sol', 'switch', time.time()+3600)
+        self.agent.run_turn_openai.side_effect = routing.Unavailable('quota', 3600, quota=True)
+        self.assertEqual(routing.run(self.agent, [], 1), 'Claude')
+        self.assertIn('Continuing through your configured fallback', self.agent.send_message.call_args.args[1])
+        cooldown = routing.read(self.root/'task_state/route_openai_subscription.json')
+        self.assertEqual(cooldown['model'], 'gpt-6.1-sol')
+        self.agent.run_turn_openai.reset_mock(side_effect=True)
+        self.assertEqual(routing.run(self.agent, [], 1), 'Claude')   # cooled-down override is skipped
+        self.agent.run_turn_openai.assert_not_called()
+
+    def test_expired_invalid_or_corrupt_override_is_ignored_without_raising(self):
+        bad = [{'kind': 'openai_subscription', 'model': 'gpt-6.1-sol', 'reason': '', 'set': 1, 'expires': time.time()-1},
+               {'kind': 'openai_subscription', 'model': 'claude-wrong', 'reason': '', 'set': 1, 'expires': None},
+               {'kind': 'nobody', 'model': 'gpt-6.1-sol', 'reason': '', 'set': 1, 'expires': None},
+               {'kind': 'openai_api', 'model': 'gpt-6.1-sol', 'reason': '', 'set': 1, 'expires': 'tomorrow'},
+               ['not', 'an', 'object']]
+        for value in bad:
+            routing.atomic_json(self.file(), value)
+            self.assertIsNone(routing.override(self.root))
+            self.assertEqual(routing.effective_routes(self.root), self.routes)
+        self.file().write_text('{not json', encoding='utf-8')
+        self.assertEqual(routing.effective_routes(self.root), self.routes)
+        self.assertEqual(routing.run(self.agent, [], 1), 'Claude')
+        self.assertEqual(self.run_claude.call_args.args[3], 'claude-perm')
+
+    def test_expiry_lapses_back_to_permanent_order(self):
+        routing.set_override(self.root, 'openai_subscription', 'gpt-6.1-sol', 'switch', time.time()+60)
+        self.assertIsNotNone(routing.override(self.root))
+        self.assertIsNone(routing.override(self.root, now=time.time()+61))
+
+    def test_set_and_clear_never_touch_routing_json(self):
+        before = (self.root/'routing.json').read_bytes()
+        stored = routing.set_override(self.root, 'openai_subscription', 'gpt-6.1-sol', 'switch')
+        self.assertEqual(routing.read(self.file()), stored)
+        self.assertIsNone(stored['expires'])
+        self.assertEqual((self.root/'routing.json').read_bytes(), before)
+        self.assertEqual(routing.config(self.root)['routes'], self.routes)
+        routing.clear_override(self.root)
+        routing.clear_override(self.root)   # clearing twice is harmless
+        self.assertFalse(self.file().exists())
+        self.assertEqual((self.root/'routing.json').read_bytes(), before)
+        self.assertEqual(routing.effective_routes(self.root), self.routes)
+
+    def test_set_rejects_bad_values_and_writes_nothing(self):
+        for args in [('openai_subscription', 'claude-x', ''), ('unknown', 'gpt-x', ''),
+                     ('openai_api', 'gpt-x', None), ('openai_api', 'gpt-x', '', time.time()-5), ('openai_api', 'gpt-x', '', True)]:
+            self.assertRaises(ValueError, routing.set_override, self.root, *args)
+        self.assertFalse(self.file().exists())
+
+    def test_label_names_the_end(self):
+        self.assertEqual(routing.override_label({'kind': 'openai_subscription', 'model': 'gpt-6.1-sol', 'expires': None}),
+                         'Temporary override: gpt-6.1-sol \u00b7 ChatGPT subscription (until cleared)')
+        self.assertIn('(until 20', routing.override_label({'kind': 'openai_api', 'model': 'gpt-x', 'expires': time.time()+60}))
 
 
 class ClaudeBridge(unittest.TestCase):

@@ -96,10 +96,15 @@ def state():
         agent['routing'] = routing.read(ROOT/name/'routing.json')
         agent['routing_state'] = routing.read(folder/'routing_state.json')
         agent['routing_live'] = agent['controls_live'] and ui.get('routing_version') == 1
+        agent['routing_override']=routing.override(ROOT/name)   # temporary route, read by run() every turn
         if agent['routing'].get('enabled'):
             active=agent['routing_state'].get('route') if agent['routing_live'] else None
-            preferred=agent['routing']['routes'][0]
-            agent['model']=dict(agent['model'],model=(active or preferred)['model'],route=(('Last attempted: '+routing.label(active)) if active else 'Preferred: '+routing.label(preferred))+('' if agent['routing_live'] else ' · restart pending'))
+            current=agent['routing_override']
+            preferred=current or agent['routing']['routes'][0]
+            route=('Last attempted: '+routing.label(active)) if active else 'Preferred: '+routing.label(preferred)
+            if current:
+                route=routing.override_label(current)+' · Permanent: '+' → '.join(routing.label(r) for r in agent['routing']['routes'])+(' · Last attempted: '+routing.label(active) if active else '')
+            agent['model']=dict(agent['model'],model=(active or preferred)['model'],route=route+('' if agent['routing_live'] else ' · restart pending'))
         agent['usage'],agent['last_response']=usage(name)
         agent['errors']=[]
         if not agent['health_fresh']: agent['errors'].append('Agent heartbeat is stale. The process may have stopped.')
@@ -307,6 +312,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if not 0<size<=(32768 if self.path=='/api/messages' else 4096):raise ValueError('Invalid request size')
             value=json.loads(self.rfile.read(size))
+            print('[dashboard write]',self.path,json.dumps({k:v for k,v in value.items() if k not in ('text','client_id')},ensure_ascii=False)[:200])
             if self.path=='/api/messages':
                 name=value.get('agent')
                 if name not in AGENTS:raise ValueError('Unknown agent')
@@ -340,7 +346,15 @@ class Handler(BaseHTTPRequestHandler):
                         CLAUDE_LOGIN_LOCK.release()
                 threading.Thread(target=login,daemon=True).start()
                 self.send({'message':'Connecting subscriptions. Complete any authorization pages opened in your browser.'}); return
-            if self.path=='/api/routing':
+            if self.path=='/api/model':   # one click (2026-11-14): the temporary route, read by run() every turn
+                name=value.get('agent')
+                if name not in AGENTS: raise ValueError('Unknown agent')
+                if value.get('kind'):
+                    route=routing.set_override(ROOT/name,value['kind'],value.get('model'),'dashboard')
+                    self.send({'message':name.title()+' runs on '+routing.label(route)+' from its next turn, until you choose again.'}); return
+                routing.clear_override(ROOT/name)
+                self.send({'message':name.title()+' is back on its default sequence from its next turn.'}); return
+            if self.path=='/api/routing':   # the saved order: the fallback sequence behind the one-click pick
                 name=value.get('agent')
                 if name not in AGENTS: raise ValueError('Unknown agent')
                 routing.save(ROOT/name,value.get('routing'))
