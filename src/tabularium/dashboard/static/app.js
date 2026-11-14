@@ -154,11 +154,10 @@ function routingPanel(name,a){
  draft.routes.forEach((route,index)=>{
   let row=el('div',undefined,'route-row'),billing=el('select'),provider=el('select'),model=el('select');
   let family=route.kind.startsWith('openai')?'openai':'anthropic',method=route.kind.endsWith('subscription')?'subscription':'api';
-  const taken=(f,m)=>draft.routes.some((r,i)=>i!==index&&r.kind===f+'_'+m);
-  for(let [value,title]of [['subscription','Subscription'],['api','API · pay per use']]){let o=new Option(title,value);o.disabled=['openai','anthropic'].every(f=>taken(f,value));billing.append(o)}billing.value=method;
-  for(let [value,title]of [['openai','OpenAI'],['anthropic','Anthropic']]){let o=new Option(title,value);o.disabled=taken(value,method);provider.append(o)}provider.value=family;
+  for(let [value,title]of [['subscription','Subscription'],['api','API · pay per use']]){billing.append(new Option(title,value))}billing.value=method;
+  for(let [value,title]of [['openai','OpenAI'],['anthropic','Anthropic']]){provider.append(new Option(title,value))}provider.value=family;
   billing.setAttribute('aria-label',`${name} step ${index+1} billing method`);provider.setAttribute('aria-label',`${name} step ${index+1} provider`);model.setAttribute('aria-label',`${name} step ${index+1} model`);
-  function choose(f,m){if(taken(f,m))f=['openai','anthropic'].find(p=>!taken(p,m));if(!f)return;if(!route.kind.startsWith(f))route.model=routeModels[f][0][0];route.kind=f+'_'+m;render(current)}
+  function choose(f,m){let other=draft.routes.findIndex((r,i)=>i!==index&&r.kind===f+'_'+m);if(other>=0){[draft.routes[index],draft.routes[other]]=[draft.routes[other],draft.routes[index]]}else{if(!route.kind.startsWith(f))route.model=routeModels[f][0][0];route.kind=f+'_'+m}render(current)}
   billing.onchange=()=>choose(family,billing.value);provider.onchange=()=>choose(provider.value,method);
   let choices=[...routeModels[family]];if(!choices.some(([id])=>id===route.model))choices.unshift([route.model,route.model+' (saved)']);
   for(let [id,title]of choices)model.append(new Option(title,id));model.value=route.model;model.onchange=()=>route.model=model.value;
