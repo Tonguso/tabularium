@@ -158,8 +158,7 @@ that asked it, and later the answer, its source message and the owner's quoted w
 ("30 names or 50?") is answered by the owner's next message, or by a reply to the question's message, which binds
 directly. A parked action (send this email, run this command) stores the exact inputs and runs only on a yes, whenever
 it comes; a late yes is still a yes, and a restart forgets nothing. The runtime parks, never the agent: the danger
-screen, taint after outside content and the desktop grant each park the action they stop, beside any question already
-pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
+screen and the desktop grant each park the action they stop, beside any question already pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
 describe the result as the system's caution; the one way an agent attaches an exact action to a decision is in answer
 to a worker's pending question, and that ask reads as the question and the command. One pending question per task is enforced by a
 unique index. A task's question waits as long as the task does. A conversation question lives until the owner's next
@@ -448,7 +447,6 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Declared work | "I will do X", then nothing happens | A promise with no activation record is sent back to the model |
 | Declared answers | Several messages sent, one answered | A reply that leaves out a message is sent back once |
 | Typed outcomes | A tool's "no" read as "done" | Refused and Failed are distinct types the code can see |
-| Taint | Outside content instructing the agent to send mail or run a command | After reading outside content, sending and every command become parked actions |
 | Boundary | An agent reading another's memory, or writing a skill or the shell profile past the owner | Every tool that takes a path is held to the agent's own folder and its declared work roots; memory and skills change only through their own gates |
 | Parked actions | A confirmation lost to a timeout or restart; an agent parking a read it was free to run and blaming the system | The exact action is stored and runs only on the owner's yes; only the rails park, an agent has no tool to |
 | Desktop grant | An agent driving the owner's screen unasked, or into a password field | The desktop is taken per task on the owner's yes; the grant ends on his next message, after thirty minutes, or when he moves the mouse; a credential or payment window refuses input |
@@ -616,6 +614,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-13 | Told to go on with a report, the coordinator parked its own read of the file for approval through a tool door meant for actions answering a worker's question, and told the owner the system had held it | The agent has no way to park its own action: the rails park, beside a pending question if one is waiting, and a prepared action is asked as the question and the command |
 | 2026-11-13 | Mail went out through the owner's desktop mail client as the owner, in plain text that arrived as a wall of symbols | Each agent has its own mailbox, named by its own key; the agent's text is rendered as the message's HTML with a plain copy; one send per receipt |
 | 2026-11-13 | Four read-only commands the coordinator had parked itself sat on the dashboard's to-do page as lines of JSON with yes and no buttons, beside the skill edits | The page carries fundamental changes only, the proposed skill edits; every question and approval is asked and answered in the chat |
+| 2026-11-14 | Told to go on with a wiki, the coordinator searched its own past conversations and then asked the owner's yes for a read-only listing, because any reader tool made every later command a parked action | The taint rail is gone: the owner's instruction is the consent, and what parks is destruction, the desktop and nothing else; a page or an email can still ask for a command, and the danger screen is the answer to that |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

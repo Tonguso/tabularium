@@ -46,7 +46,6 @@ from tabularium.core.roster import Role
 from tabularium.core.outcome import Refused, Failed
 from tabularium.tools.sec_edgar import SEC_FILING_TOOL, sec_filing
 from tabularium.memory import archive_search
-from tabularium.core import taint
 @dataclass
 class Config:
     """Everything that differs between the four agents. Text fields are verbatim from the old files."""
@@ -960,7 +959,7 @@ class AgentApp(engine.AgentRuntime):
     # Command autonomy: when auto mode is ON for a chat, execute_command runs without the yes/no gate.
     def _approved(self, tool: str, **fields) -> bool:
         """True only while the runtime runs the parked call Alex said yes to: same tool, and every field a gate
-        checks equal to the parked inputs (the command gate checks the command; the taint gate, all inputs)."""
+        checks equal to the parked inputs (the command gate checks the command)."""
         if not self._approving or self._approving[0] != tool:
             return False
         parked = self._approving[1]
@@ -1174,9 +1173,6 @@ class AgentApp(engine.AgentRuntime):
                 return fenced
         from tabularium.core import boundary
         held = boundary.check(self, name, inputs)            # one boundary for every path a tool takes
-        if held:
-            return held
-        held = taint.check(self, chat_id, name, inputs)      # external content read this turn: outward actions need Alex
         if held:
             return held
         if self.BACKGROUND_TASK_ID and self._background.get(int(self.BACKGROUND_TASK_ID))["status"] in ("cancelled", "cancelling"):

@@ -4,7 +4,7 @@ An agent reads and writes inside its own folder and the work roots the owner dec
 (work_roots); never another agent's folder, never the home's own files (.env, POLICY.md, the dashboard's state).
 Inside its own folder the file tools do not write memory.md (the memory tool does, with a quote) or a skill (a skill
 changes only on the owner's word). Until today read_file and write_file took any path: the private agent's memory was
-readable by the others, and a tainted turn could write the PowerShell profile that every later command loaded.
+readable by the others, and a turn that had read outside content could write the PowerShell profile that every later command loaded.
 """
 from pathlib import Path
 from tabularium.core.outcome import Refused

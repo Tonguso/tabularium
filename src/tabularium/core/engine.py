@@ -23,7 +23,6 @@ import telebot
 from tabularium.memory.memory_context import read_view, WorkingMemory, current_context
 from tabularium.learning.learning import record as record_lesson
 from tabularium.core import turn_loop
-from tabularium.core import taint
 from tabularium.core.wire_budget import MAX_IMAGES, bound_result
 from tabularium.core.outcome import Refused, Failed
 from tabularium.core.context_window import archive_preview, prepare_context, clear_cache_markers, wire_size, REQUEST_BYTES
@@ -336,7 +335,6 @@ class AgentRuntime(SharedHandlers):
         self._turn_notes = {}
         self._completion_feedback = {}
         self._truncations = {}
-        self._tainted = {}                 # chat -> the reader that brought external content into this turn (tabularium.core.taint)
         self._core_versions = {}
 
     def drain_flag(self):
@@ -1554,7 +1552,6 @@ class AgentRuntime(SharedHandlers):
                 "or report the blocker and stop."), chat_id)
         try:
             result = self._execute_tool_unguarded(name, inputs, chat_id)
-            taint.mark(self, chat_id, name)               # a reader of external content taints the turn (tabularium.core.taint)
             result = bound_result(result, self.AGENT_DIR / "context_archive" / "results")
         except TaskStopped:
             raise                      # worker control flow, not a tool failure
@@ -1870,8 +1867,6 @@ class AgentRuntime(SharedHandlers):
         self._completion_feedback.pop(chat_id, None)
         self._repeat_calls.pop(chat_id, None)
         self._unproductive_streak.pop(chat_id, None)
-        from tabularium.core import taint
-        taint.reset(self, chat_id)
         from tabularium.core.session_lifecycle import continue_turn
         result = continue_turn(self, messages, chat_id, lambda: self._routing.run(self, messages, chat_id))
         if self.BACKGROUND_TASK_ID:
