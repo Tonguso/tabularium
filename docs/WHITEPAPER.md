@@ -641,6 +641,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-14 | Three of five messages in which the owner cursed were marked as neither correction nor anything else, because the reply envelope leaves the recognising of a correction to the model and the runtime asked nothing when it stayed silent | The runtime spots strong language by a list of the owner's own words; the reply must say correction or not for each such message before it is accepted, and the judgement is recorded either way |
 
+| 2026-11-14 | The owner said yes three times to a desktop grant and none bound: the rail's ask was followed by the turn's own reply, so it was no longer the newest message, and each retry parked a duplicate, after which a bare yes bound to none | Every message records the turn it was sent in; a bare yes binds to the newest parked action when nothing has been said since its ask except that turn's reply; an identical pending action is asked again, never parked twice |
+
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
 own work, it eventually accepted a failure; each fix made the proof a record the runtime produces itself, and made

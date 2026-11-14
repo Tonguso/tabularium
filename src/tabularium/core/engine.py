@@ -645,8 +645,9 @@ class AgentRuntime(SharedHandlers):
             source = (hits or turn or [(inbox.answering(), '')])[-1][0]
         channel = inbox.destination(chat_id, source) if inbox is not None and hasattr(inbox, 'destination') else 'telegram'
         decision = getattr(text, 'decision_id', 0)
+        job = getattr(getattr(inbox, 'local', None), 'job', None)        # the turn this message belongs to
         if channel == 'dashboard':
-            self.outbox().put(chat_id, [str(text)], decision=decision, channel=channel, original=str(text))
+            self.outbox().put(chat_id, [str(text)], decision=decision, channel=channel, original=str(text), job=job)
             return True
         reply_to = self.reply_target(chat_id, reply_to, text)
         # A Telegram reply can follow a dashboard request; never quote its local reference on Telegram.
@@ -664,7 +665,7 @@ class AgentRuntime(SharedHandlers):
         chunks.append(clean)
         # Durable until Telegram accepts it (tabularium.records.outbox, 2026-10-21): a network failure queues the message
         # for the retry thread instead of dropping it, so True means "accepted for delivery".
-        self.outbox().put(chat_id, chunks, reply_to, decision, original=str(text))
+        self.outbox().put(chat_id, chunks, reply_to, decision, original=str(text), job=job)
         return True
 
     def outbox(self):
@@ -1548,7 +1549,8 @@ class AgentRuntime(SharedHandlers):
         key = name + "\x00" + json.dumps(inputs, sort_keys=True, ensure_ascii=False, default=str)
         history = self._repeat_calls.setdefault(chat_id, [])
         recent = history[-self._REPEAT_LIMIT:]
-        if len(recent) == self._REPEAT_LIMIT and all(k == key for k, _ in recent) and len({d for _, d in recent}) == 1:
+        approved = bool(getattr(self, '_approving', None))        # the owner's yes runs a parked call whatever came before it
+        if not approved and len(recent) == self._REPEAT_LIMIT and all(k == key for k, _ in recent) and len({d for _, d in recent}) == 1:
             return self._note_outcome(name, Refused(
                 f"NOT executed: this exact {name} call has already run {self._REPEAT_LIMIT} times in a row with the identical "
                 "result. Repeating it cannot change the outcome. Read the previous result, change the inputs or the tool, "

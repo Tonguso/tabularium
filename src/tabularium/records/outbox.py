@@ -67,7 +67,7 @@ class Outbox:
         try:
             db.execute('BEGIN IMMEDIATE')
             columns = {row[1] for row in db.execute('PRAGMA table_info(outbox)')}
-            for name, declaration in [('channel', "TEXT NOT NULL DEFAULT 'telegram'"), ('original', 'TEXT')]:
+            for name, declaration in [('channel', "TEXT NOT NULL DEFAULT 'telegram'"), ('original', 'TEXT'), ('job', 'INTEGER')]:
                 if name not in columns:
                     db.execute(f'ALTER TABLE outbox ADD COLUMN {name} {declaration}')
             db.commit()
@@ -79,7 +79,7 @@ class Outbox:
         db.row_factory = sqlite3.Row
         return db
 
-    def put(self, chat, chunks, reply_to=None, decision=0, channel='telegram', original=None):
+    def put(self, chat, chunks, reply_to=None, decision=0, channel='telegram', original=None, job=None):
         """Queue the chunks of one message, then try to deliver this chat's queue now. Returns the Telegram ids of
         the chunks delivered in this call (empty when the connection is down: they stay queued)."""
         if channel not in ('telegram', 'dashboard'):
@@ -88,14 +88,26 @@ class Outbox:
         db = self._db()
         try:
             for i, chunk in enumerate(c for c in chunks if c):
-                db.execute("INSERT INTO outbox(chat,text,reply_to,decision,first,created,channel,original,status) VALUES (?,?,?,?,?,?,?,?,?)",
+                db.execute("INSERT INTO outbox(chat,text,reply_to,decision,first,created,channel,original,status,job) VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (chat, chunk, reply_to if i == 0 else None, decision or 0, int(i == 0), now, channel,
                      original if i == 0 or original is None else '',
-                     'sent' if channel == 'dashboard' else 'pending'))
+                     'sent' if channel == 'dashboard' else 'pending', job))
             db.commit()
         finally:
             db.close()
         return self.flush(chat) if channel == 'telegram' else []
+
+    def ask_is_current(self, chat, decision):
+        """True when the ask for `decision` was sent and everything sent to the chat since came from the same inbox
+        job (the reply that goes out with the ask); False once a later turn said anything (2026-11-14: a bare yes to
+        a desktop grant bound to nothing because the turn's own reply followed the ask)."""
+        with closing(self._db()) as db:
+            ask = db.execute("SELECT id, job FROM outbox WHERE chat=? AND decision=? AND status='sent' ORDER BY id DESC LIMIT 1",
+                             (chat, int(decision))).fetchone()
+            if not ask:
+                return False
+            later = db.execute("SELECT job FROM outbox WHERE chat=? AND status='sent' AND id>?", (chat, ask["id"])).fetchall()
+        return all(row["job"] is not None and row["job"] == ask["job"] for row in later)
 
     def last_sent(self, chat):
         """(decision, message_id) of the newest message delivered to `chat`: what the owner is answering when he

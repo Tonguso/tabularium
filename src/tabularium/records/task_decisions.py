@@ -158,8 +158,13 @@ def park_action(store, chat, tool, inputs, question, decision_id=None, task=0):
         else:
             if task:
                 raise ValueError("Create the task question first, then prepare its exact action by decision_id.")
-            key = db.execute("INSERT INTO decisions(task,chat,question,created,updated,kind,action) "
-                             "VALUES (0,?,?,?,?,'action',?)", (chat, question, now, now, action)).lastrowid
+            same = db.execute("SELECT id FROM decisions WHERE chat=? AND state='pending' AND kind='action' AND action=? "
+                              "ORDER BY id DESC LIMIT 1", (chat, action)).fetchone()
+            if same:                                            # asked again, never parked twice (2026-11-14: #486-#488)
+                key = same[0]
+            else:
+                key = db.execute("INSERT INTO decisions(task,chat,question,created,updated,kind,action) "
+                                 "VALUES (0,?,?,?,?,'action',?)", (chat, question, now, now, action)).lastrowid
         db.commit()
         return dict(db.execute("SELECT * FROM decisions WHERE id=?", (key,)).fetchone())
     finally:

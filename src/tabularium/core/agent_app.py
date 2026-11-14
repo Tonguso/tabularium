@@ -1028,11 +1028,12 @@ class AgentApp(engine.AgentRuntime):
             self.send_message(chat, 'That question is no longer pending. No action was repeated; refresh Messaging.')
             return True, ''
         if decision is None and ref is None and getattr(message, 'channel', '') != 'dashboard' and td.verdict(text) is not None:
-            # A bare yes answers the last thing asked. It binds to the one parked action only when that action's ask is
-            # the newest message this agent sent to the chat; a reply to the ask, or the dashboard's button, settles
-            # it at any time (2026-11-12 16:32: "Ok" to a wording question ran a deletion parked eleven hours earlier).
+            # A bare yes answers the last thing asked. It binds to the newest parked action only when nothing has been
+            # said to the chat since its ask except the reply of the same turn (2026-11-12 16:32: "Ok" to a wording
+            # question ran a deletion parked eleven hours earlier; 2026-11-14 19:52: three yeses to a desktop grant
+            # bound to nothing because the turn's own reply followed the ask). A reply to the ask settles it at any time.
             actions = td.pending(self._background, chat, kind="action")
-            decision = actions[0] if len(actions) == 1 and self.outbox().last_sent(chat)[0] == actions[0]["id"] else None
+            decision = actions[-1] if actions and self.outbox().ask_is_current(chat, actions[-1]["id"]) else None
         if decision is None:
             return False, ""
         source = json.dumps({"message_id": message.message_id, "quote": text[:500]}, ensure_ascii=False)
