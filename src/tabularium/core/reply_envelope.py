@@ -40,7 +40,7 @@ SCHEMA = {
         },
     },
     "required": ["reply", "modality", "work", "task_outcome", "question", "decision_task_id", "decision_id", "status_claims", "correction",
-                 "answers", "request"],
+                 "answers", "request", "not_correction"],
     "additionalProperties": False,
 }
 

@@ -31,6 +31,10 @@ class StrongLanguage(unittest.TestCase):
         inbox.local.message_id = 12001
         inbox.local.turn_messages = list(TURN)
 
+    def test_every_property_of_the_envelope_is_required_as_the_strict_schema_demands(self):
+        # 2026-11-14 19:39: a property added without its required entry stopped every OpenAI turn with a 400.
+        self.assertEqual(set(reply_envelope.SCHEMA["properties"]), set(reply_envelope.SCHEMA["required"]))
+
     def test_the_marker_is_a_list_of_the_owners_words(self):
         self.assertTrue(reply_envelope.strong_language("傻逼玩意儿"))
         self.assertFalse(reply_envelope.strong_language("Is it done?"))
