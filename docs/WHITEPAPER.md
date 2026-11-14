@@ -312,7 +312,11 @@ why, and whose fault it was. A fault in the agent's method becomes a lesson: the
 it, anchored in the method file, the other observations it explains, and the edit that removes it; a one-off
 misreading records nothing. A fault in the runtime becomes a report for the coding agents. The diagnosis never speaks to the owner and cannot ask him anything; he reads the digest when he
 chooses. After two corrections in a thread, the agent's next reply may not fix, compute or propose anything: it
-restates in the owner's words what it now understands and asks whether that is right.
+restates in the owner's words what it now understands and asks whether that is right. The owner's next message is
+the answer to that restatement, whatever its words: it is never counted as a correction and it closes the burst, so
+the reply after it acts; a new burst needs two new corrections. Until 2026-11-14 each "yes, fix it" that the agent
+had marked as a correction earned another restatement, four in a row. A message carrying the owner's strong language
+is marked by the runtime and must be called a correction or not before the reply goes out; the judgement is recorded.
 
 The same diagnosis also receives two failures the runtime records itself, each marked as the runtime's record and
 not the owner's words: a lesson that recurred on a real task, and a declared check that failed on a delivered file.
@@ -475,7 +479,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Durable requirements | An instruction lost when a checkpoint rewrote the list | Obligations have stable numbers; omission never removes one |
 | One completion decision | A worker's "done" taken at its word | Finished is derived from proof, pending questions and accepted dependencies |
 | Waiting on a decision | A worker holding its slot after asking | A pending question ends the turn and frees the slot |
-| Correction bundling | Twelve diagnosis tasks from one argument | One silent diagnosis per quiet thread; the next reply restates |
+| Correction bundling | Twelve diagnosis tasks from one argument | One silent diagnosis per quiet thread; the next reply restates once, and the owner's answer to it ends the restating |
 | Strong language | The owner's anger passed over as venting, so no diagnosis follows | The runtime marks such a message by a list of his words; the reply must call it a correction or not before it goes out, and the verdict is recorded either way |
 | Durable outbox | A reply lost during an outage | Written to disk first, retried in order, stalls visible |
 | Announced routes | Two days on a fallback model unannounced | A missing route is announced; a changed client runs the self-test |
