@@ -202,7 +202,7 @@ class Burst(unittest.TestCase):
         feedback(self.agent, CHAT, self.conversation("你知道你在说什么吗"), now=T0 + 60)
         note = corrections.burst_note(self.agent, CHAT, now=T0 + 90)
         self.assertIn("corrected you 2 times", note)
-        self.assertIn("say what you now understand he means", note)
+        self.assertIn("do not ask whether you understood", note)               # 2026-11-14: a question only when unclear
 
     def test_the_note_fires_once_per_correction_not_once_per_turn(self):
         for t in (T0, T0 + 60):

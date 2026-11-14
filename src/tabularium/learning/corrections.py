@@ -23,9 +23,10 @@ PREFIX = "[Correction diagnosis]"
 QUIET_SECONDS = 600            # a thread is over when Alex has not corrected for this long
 BURST_RECENT_SECONDS = 180     # a burst note applies to replies within this long of the latest correction
 
-BURST_NOTE = ("[Runtime note: Alex has corrected you {n} times in the last {minutes} minutes. Do not produce, fix, compute, "
-              "propose or explain anything in this reply. In two or three lines, using the words he has used, say what you "
-              "now understand he means and wants, then ask whether that is right. Nothing else.]")
+BURST_NOTE = ("[Runtime note: Alex has corrected you {n} times in the last {minutes} minutes. Do not explain, justify or "
+              "propose anything in this reply. If what he wants is clear from his words, act on it now and tell him in one "
+              "line what you are doing; do not ask whether you understood. Only if his instruction is genuinely unclear, ask "
+              "one plain question in his words. Nothing else.]")
 
 BRIEF = """{prefix} Recorded feedback, last at {when}. Sources and quoted targets are explicit below.
 An unspecified target must be investigated, never assumed to be the previous assistant reply:

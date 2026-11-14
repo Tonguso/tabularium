@@ -311,11 +311,13 @@ his words). Corrections collect, and once the thread has been quiet for ten minu
 why, and whose fault it was. A fault in the agent's method becomes a lesson: the decision in the method that allowed
 it, anchored in the method file, the other observations it explains, and the edit that removes it; a one-off
 misreading records nothing. A fault in the runtime becomes a report for the coding agents. The diagnosis never speaks to the owner and cannot ask him anything; he reads the digest when he
-chooses. After two corrections in a thread, the agent's next reply may not fix, compute or propose anything: it
-restates in the owner's words what it now understands and asks whether that is right. The owner's next message is
-the answer to that restatement, whatever its words: it is never counted as a correction and it closes the burst, so
-the reply after it acts; a new burst needs two new corrections. Until 2026-11-14 each "yes, fix it" that the agent
-had marked as a correction earned another restatement, four in a row. A message carrying the owner's strong language
+chooses. After two corrections in a thread, the agent's next reply may not explain, justify or propose anything:
+when what the owner wants is clear from his words it acts and tells him in one line what it is doing, and it asks
+only when his instruction is genuinely unclear, one plain question in his words. Until 2026-11-14 that
+reply restated his point and asked whether that was right, a rule from a night of arguing about a formula; by the
+time the corrections were "it is broken again" the question read as a stupid one, and each "yes, fix it" the agent
+had marked as a correction earned another, four in a row. The owner's next message closes the burst whatever its
+words, and a new burst needs two new corrections. A message carrying the owner's strong language
 is marked by the runtime and must be called a correction or not before the reply goes out; the judgement is recorded.
 
 The same diagnosis also receives two failures the runtime records itself, each marked as the runtime's record and
@@ -479,7 +481,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Durable requirements | An instruction lost when a checkpoint rewrote the list | Obligations have stable numbers; omission never removes one |
 | One completion decision | A worker's "done" taken at its word | Finished is derived from proof, pending questions and accepted dependencies |
 | Waiting on a decision | A worker holding its slot after asking | A pending question ends the turn and frees the slot |
-| Correction bundling | Twelve diagnosis tasks from one argument | One silent diagnosis per quiet thread; the next reply restates once, and the owner's answer to it ends the restating |
+| Correction bundling | Twelve diagnosis tasks from one argument | One silent diagnosis per quiet thread; after repeated corrections the next reply acts, and asks only when the instruction is unclear |
 | Strong language | The owner's anger passed over as venting, so no diagnosis follows | The runtime marks such a message by a list of his words; the reply must call it a correction or not before it goes out, and the verdict is recorded either way |
 | Durable outbox | A reply lost during an outage | Written to disk first, retried in order, stalls visible |
 | Announced routes | Two days on a fallback model unannounced | A missing route is announced; a changed client runs the self-test |
