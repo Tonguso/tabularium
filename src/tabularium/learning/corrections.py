@@ -86,15 +86,24 @@ def start(agent, chat, message_ids, now=None):
         raise ValueError('Correction must identify an incoming message in this turn.')
     pending = _pending(agent)
     items = pending.setdefault(str(chat), [])
+    # The owner's first message after a restatement answers it, whatever its words (2026-11-14 20:19: "yes, fix it"
+    # with a curse was marked a correction four times running, and each brought another restatement). It is kept for
+    # the diagnosis but never counted, and it closes the burst.
+    job = getattr(getattr(getattr(agent, "_inbox", None), "local", None), "job", None)
+    noted = pending.get("noted", {}).get(str(chat)) or {}
+    answer = bool(noted) and not noted.get("closed_at") and job is not None and noted.get("job") != job
     for ident in dict.fromkeys(message_ids):
         if any(i.get('message_id') == ident for i in items):
             continue
         source = sources[ident]
         ref = source.get('reply_to_message') or {}
-        items.append(dict(kind='human', message_id=ident, words=source['text'],
+        items.append(dict(kind='answer' if answer else 'human', message_id=ident, words=source['text'],
                           reply_to=ref.get('message_id'), before=ref.get('text') or ref.get('caption') or '',
                           at=now or time.time()))
         agent._inbox.record_event('correction', model='owner', role='foreground', details={'message_id': ident})
+    if answer:
+        noted["closed_at"] = now or time.time()
+        pending.setdefault("noted", {})[str(chat)] = noted
     atomic_json(_pending_path(agent), pending)
     return len(items)
 
@@ -107,7 +116,9 @@ def burst_note(agent, chat, now=None):
         return ""
     now = now or time.time()
     pending = _pending(agent)
-    items = [i for i in pending.get(str(chat), []) if i.get("kind") == "human" and now - i["at"] < QUIET_SECONDS]
+    noted = pending.get("noted", {}).get(str(chat)) or {}
+    closed = float(noted.get("closed_at") or 0)                 # a burst the owner has answered is over
+    items = [i for i in pending.get(str(chat), []) if i.get("kind") == "human" and now - i["at"] < QUIET_SECONDS and i["at"] > closed]
     if len(items) < 2 or now - max(i["at"] for i in items) > BURST_RECENT_SECONDS:
         return ""
     # Once per correction: the first evening it fired on every turn within three minutes, so after Alex said
@@ -115,8 +126,11 @@ def burst_note(agent, chat, now=None):
     # correction and the turn (inbox job) that first carried it; later turns see it only after a new correction.
     latest = max(i["at"] for i in items)
     job = getattr(getattr(getattr(agent, "_inbox", None), "local", None), "job", None)
-    noted = pending.get("noted", {}).get(str(chat)) or {}
     if noted.get("at") == latest and job is not None and noted.get("job") != job:
+        if not noted.get("closed_at"):                          # the owner's next turn answers the restatement
+            noted["closed_at"] = now
+            pending.setdefault("noted", {})[str(chat)] = noted
+            atomic_json(_pending_path(agent), pending)
         return ""
     if job is not None and noted.get("at") != latest:
         pending.setdefault("noted", {})[str(chat)] = {"at": latest, "job": job}
@@ -163,7 +177,7 @@ def flush(agent, now=None):
                 if i.get("kind") == "failure":
                     lines.append(f'{n}. [{time.strftime("%H:%M", time.localtime(i["at"]))}] Recorded by the runtime, not Alex\'s words: '
                                  f'{i["words"]}\n   Evidence: {i["before"]}')
-                elif i.get('kind') == 'human':
+                elif i.get('kind') in ('human', 'answer'):
                     lines.append(f'{n}. Alex message {i["message_id"]}: "{i["words"]}"\n'
                                  f'   Quoted target {i["reply_to"]}: "{i["before"]}"' if i.get('reply_to') else
                                  f'{n}. Alex message {i["message_id"]}: "{i["words"]}"\n   No quoted target supplied.')

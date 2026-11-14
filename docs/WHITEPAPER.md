@@ -645,6 +645,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-14 | The owner said yes three times to a desktop grant and none bound: the rail's ask was followed by the turn's own reply, so it was no longer the newest message, and each retry parked a duplicate, after which a bare yes bound to none | Every message records the turn it was sent in; a bare yes binds to the newest parked action when nothing has been said since its ask except that turn's reply; an identical pending action is asked again, never parked twice |
 
+| 2026-11-14 | Told to fix something, the coordinator restated the owner's point and asked "is that right?" four times running, because the runtime's rule after repeated corrections, restate once per correction, took each "yes, fix it" as a new correction | The owner's first message after a restatement answers it, whatever its words: it is never counted as a correction, it closes the burst, and a single later correction is acted on |
+
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
 own work, it eventually accepted a failure; each fix made the proof a record the runtime produces itself, and made

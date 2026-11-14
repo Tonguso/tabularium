@@ -1,6 +1,6 @@
 """Alex's correction starts a diagnosis the agent does itself; he never has to spell the error out (2026-10-20).
 
-22:08 [quote removed] said nothing about the cause. The reply's
+22:08 "状态更正：任务 241 在等您决定；任务 245 没有在运行。这都是啥？" said nothing about the cause. The reply's
 `correction` field marks it; the runtime diagnoses what happened and whose fault it is (the agent's method → a
 proposed skill edit in the lesson register; the runtime → a report for Claude Code or Codex).
 
@@ -210,13 +210,32 @@ class Burst(unittest.TestCase):
         self.agent._inbox.local.job = 501                                      # the turn after the second correction
         self.assertIn("corrected you", corrections.burst_note(self.agent, CHAT, now=T0 + 70))
         self.assertIn("corrected you", corrections.burst_note(self.agent, CHAT, now=T0 + 75))   # same turn: stable
-        self.agent._inbox.local.job = 502                                      # Alex said [quote removed]; next turn: no restating again
+        self.agent._inbox.local.job = 502                                      # Alex said "对"; next turn: no restating again
         self.assertEqual(corrections.burst_note(self.agent, CHAT, now=T0 + 100), "")
         feedback(self.agent, CHAT, self.conversation("还是不对"), now=T0 + 120)
-        self.agent._inbox.local.job = 503
-        self.assertIn("corrected you 3 times", corrections.burst_note(self.agent, CHAT, now=T0 + 130))
-        corrections.flush(self.agent, now=T0 + 120 + corrections.QUIET_SECONDS)   # the thread ends; nothing lingers
+        self.agent._inbox.local.job = 503                                      # his answer closed the burst: one new correction is acted on
+        self.assertEqual(corrections.burst_note(self.agent, CHAT, now=T0 + 130), "")
+        feedback(self.agent, CHAT, self.conversation("你到底懂不懂"), now=T0 + 150)
+        self.agent._inbox.local.job = 504                                      # two new ones: a new burst
+        self.assertIn("corrected you 2 times", corrections.burst_note(self.agent, CHAT, now=T0 + 160))
+        corrections.flush(self.agent, now=T0 + 150 + corrections.QUIET_SECONDS)   # the thread ends; nothing lingers
         self.assertEqual(corrections._pending(self.agent).get("noted", {}).get(str(CHAT)), None)
+
+    def test_the_answer_to_a_restatement_is_never_a_correction_even_when_the_model_marks_it(self):
+        # 2026-11-14 20:19-20:23: "对，操你妈", "修啊，操你妈", "操你妈，你说呢" were each marked a correction, and each brought
+        # another "is that right?" The first message after the restatement answers it, whatever its words.
+        for t in (T0, T0 + 60):
+            feedback(self.agent, CHAT, self.conversation("不对"), now=t)
+        self.agent._inbox.local.job = 601
+        self.assertIn("corrected you", corrections.burst_note(self.agent, CHAT, now=T0 + 70))     # the restatement turn
+        self.agent._inbox.local.job = 602
+        feedback(self.agent, CHAT, self.conversation("对，操你妈"), now=T0 + 90)                   # marked anyway
+        self.assertEqual([i["kind"] for i in corrections._pending(self.agent)[str(CHAT)]], ["human", "human", "answer"])
+        self.agent._inbox.local.job = 603
+        self.assertEqual(corrections.burst_note(self.agent, CHAT, now=T0 + 100), "")              # act, do not restate
+        feedback(self.agent, CHAT, self.conversation("修啊，操你妈"), now=T0 + 110)
+        self.agent._inbox.local.job = 604
+        self.assertEqual(corrections.burst_note(self.agent, CHAT, now=T0 + 120), "")              # one correction since: act
 
     def test_the_note_lapses_once_the_thread_has_moved_on_and_never_reaches_a_worker(self):
         for t in (T0, T0 + 60):
