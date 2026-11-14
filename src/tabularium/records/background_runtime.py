@@ -29,7 +29,7 @@ from tabularium.core.outcome import Refused
 # request. Crash recovery now decides from the action records of the task itself (retry_interrupted).
 import re
 
-ACTIVE = ("queued", "starting", "running", "cancelling")
+ACTIVE = ("queued", "starting", "running", "cancelling", "pausing")
 TERMINAL = ("finished", "cancelled", "superseded")       # cancel on these is a no-op, said so in the summary
 # A worker whose delivery waits on an in-flight Cal/Vit request parks here. It holds no worker slot,
 # so queued tasks can run; the monitor polls delegate status (no model tokens) and requeues it.
@@ -243,7 +243,7 @@ class TaskStore:
             return task
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
-            prior = db.execute("SELECT * FROM tasks WHERE chat=? AND request=? AND status IN ('queued','starting','running','cancelling','waiting_on_delegate')", (chat, request)).fetchone()
+            prior = db.execute("SELECT * FROM tasks WHERE chat=? AND request=? AND status IN ('queued','starting','running','cancelling','pausing','waiting_on_delegate')", (chat, request)).fetchone()
             if prior:
                 return dict(prior)
             cursor = db.execute("INSERT INTO tasks(chat,request,status,created,updated,note) VALUES (?,?,?,?,?,?)",
@@ -265,7 +265,7 @@ class TaskStore:
             task["summary"] = f"Launch requested for task {ident}; use live status to confirm the worker is running."
         else:
             with self.db() as db:
-                ahead = [r[0] for r in db.execute("SELECT id FROM tasks WHERE status IN ('starting','running','cancelling') AND id<>? ORDER BY id", (ident,))]
+                ahead = [r[0] for r in db.execute("SELECT id FROM tasks WHERE status IN ('starting','running','cancelling','pausing') AND id<>? ORDER BY id", (ident,))]
             task["summary"] = (f"queued: task {ident} waits behind task {', '.join(map(str, ahead))} and starts automatically when a slot frees"
                                if ahead else f"queued: task {ident} will start at the next monitor tick")
         return task
@@ -811,7 +811,7 @@ class TaskStore:
             row["result_file"] = str(result) if result.exists() else None
             row["result_exists"] = result.exists()
             row["result_saved_at"] = result.stat().st_mtime if result.exists() else None
-            row["worker_alive"] = self.lease_busy(row["id"]) if row["status"] in ("starting", "running", "cancelling") else False
+            row["worker_alive"] = self.lease_busy(row["id"]) if row["status"] in ("starting", "running", "cancelling", "pausing") else False
             row["evidence_directory"] = str(folder / "task_state" / "actions")
             row["evidence_note"] = "Saved answer is not verified task completion; inspect action outcomes and artifacts."
 
@@ -1008,6 +1008,15 @@ class TaskStore:
                 lifecycle.move(db, task["id"], "recover", "queued",
                                "Recovery queued: worker crashed with no unfinished external action", quiet=True)
 
+    def pause_running(self):
+        """A release drains: every worker is asked to stop at its next safe point; its task is queued again once it has
+        (2026-11-14: a release waited an hour behind one engineering worker, twice, until the task was cancelled by hand)."""
+        with self.db() as db:
+            rows = [r[0] for r in db.execute("SELECT id FROM tasks WHERE status IN ('starting','running')")]
+            for ident in rows:
+                lifecycle.move(db, ident, "pause", "pausing", "Pausing for a release at the next safe point.", quiet=True)
+        return rows
+
     def failed_for_good(self, task):
         """Record a stop that no automatic rerun will lift; report_worker_failures tells Alex once."""
         with self.db() as db:
@@ -1040,7 +1049,7 @@ class TaskStore:
         db = sqlite3.connect(self.database, timeout=30)
         db.row_factory = sqlite3.Row
         try:
-            rows = list(db.execute("SELECT id,status,updated FROM tasks WHERE status IN ('starting','running','cancelling')"))
+            rows = list(db.execute("SELECT id,status,updated FROM tasks WHERE status IN ('starting','running','cancelling','pausing')"))
         finally:
             db.close()
         for row in rows:
@@ -1094,7 +1103,7 @@ class TaskStore:
             rows = [dict(r) for r in db.execute("SELECT * FROM tasks ORDER BY id")]
             by_id = {r["id"]: r for r in rows}
             owners = {r["id"] for r in rows if self.owner_alive(r["id"])}
-            occupied = owners | {r["id"] for r in rows if r["status"] in ("starting", "running", "cancelling")}
+            occupied = owners | {r["id"] for r in rows if r["status"] in ("starting", "running", "cancelling", "pausing")}
             queued = [r for r in rows if r["status"] == "queued" and r["id"] not in owners]
             # Two lanes: Alex's work has the worker slots; runtime work (diagnoses, trials, eval reruns) has one lane
             # of its own, so neither waits behind the other.
@@ -1148,7 +1157,7 @@ class TaskStore:
             if proc.poll() is not None and self.get(ident)["status"] not in ACTIVE:
                 self.processes.pop(ident, None)
         with self.db() as db:
-            active = [dict(r) for r in db.execute("SELECT * FROM tasks WHERE status IN ('starting','running','cancelling')")]
+            active = [dict(r) for r in db.execute("SELECT * FROM tasks WHERE status IN ('starting','running','cancelling','pausing')")]
         for task in active:
             ident = task["id"]
             proc = self.processes.get(ident)
@@ -1158,7 +1167,10 @@ class TaskStore:
             dead = (proc is not None and proc.poll() is not None and not self.lease_busy(ident))
             if proc is None and time.time() - task["updated"] > 30:
                 dead = not self.lease_busy(ident)
-            if dead:
+            if dead and task["status"] == "pausing":
+                self.move(ident, "paused", "queued", "Paused for a release; resumes on the new build.", quiet=True)
+                self.processes.pop(ident, None)
+            elif dead:
                 self.move(ident, "cancel" if task["status"] == "cancelling" else "stop",
                           "cancelled" if task["status"] == "cancelling" else "interrupted",
                           "Worker stopped. Saved tool outcomes must be checked before repeating an action.", quiet=True)
@@ -1172,7 +1184,7 @@ class TaskStore:
         self.report_worker_failures(send)
         self.launch_next()
         with self.db() as db:
-            notices = [dict(r) for r in db.execute("SELECT * FROM tasks WHERE status NOT IN ('queued','starting','running','cancelling') AND notified=0")]
+            notices = [dict(r) for r in db.execute("SELECT * FROM tasks WHERE status NOT IN ('queued','starting','running','cancelling','pausing') AND notified=0")]
         for task in notices:
             if self.lease_busy(task["id"]):
                 continue  # A decision may be durable before its worker has saved the final result.
@@ -1387,7 +1399,10 @@ def worker(ident, agent_dir, role, attempt=None):
                     from tabularium.learning import corrections
                     corrections.start_failure(agent, chat, f"Task {ident}: a declared check failed", "; ".join(failed))
         except TaskStopped:
-            store.move(ident, "cancel", "cancelled", "Stopped; completed actions remain recorded.", quiet=True)
+            if store.get(ident)["status"] == "pausing":
+                store.move(ident, "paused", "queued", "Paused for a release; resumes on the new build.", quiet=True)
+            else:
+                store.move(ident, "cancel", "cancelled", "Stopped; completed actions remain recorded.", quiet=True)
         except Exception as exc:
             store.move(ident, "stop", "interrupted", "Worker error: " + type(exc).__name__ + ". Inspect worker.log and saved actions before resuming.", quiet=True)
             import traceback

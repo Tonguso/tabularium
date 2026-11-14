@@ -30,8 +30,12 @@ OPS = {
     "recover": ({"interrupted"}, {"queued"}),                                # crash with nothing half-done
     "resume":  ({"needs_answer", WAITING, "cancelled", *STOPPED}, {"queued"}),
     "reopen":  ({"finished"}, {"queued"}),                                   # explicit: more work on a finished task
-    "cancel":  ({"queued", "starting", "running", "cancelling", "needs_answer", WAITING, *STOPPED},
+    "cancel":  ({"queued", "starting", "running", "cancelling", "pausing", "needs_answer", WAITING, *STOPPED},
                 {"cancelling", "cancelled"}),
+    # a release drains: the worker stops at its next safe point and the task is queued for the new process
+    # (2026-11-14: a release waited an hour behind one engineering worker, twice)
+    "pause":   ({"starting", "running"}, {"pausing"}),
+    "paused":  ({"pausing"}, {"queued"}),
 }
 
 _ANY = object()

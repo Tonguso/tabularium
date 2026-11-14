@@ -560,6 +560,9 @@ class AgentRuntime(SharedHandlers):
             except Exception:
                 pass
             time.sleep(5)
+        paused = self._background.pause_running() if getattr(self, '_background', None) else []
+        if paused:
+            print(f"[drain] pausing {len(paused)} worker(s) at the next safe point; they resume on the new build")
         finished = self.wait_for_quiet(self._inbox)
         while not finished:
             print('[drain] active work still owns its slot; continuing to wait')
@@ -2027,7 +2030,7 @@ class AgentRuntime(SharedHandlers):
         fresh = []
         if self.BACKGROUND_TASK_ID:
             ident = int(self.BACKGROUND_TASK_ID)
-            if self._background.get(ident)["status"] in ("cancelled", "cancelling"):
+            if self._background.get(ident)["status"] in ("cancelled", "cancelling", "pausing"):
                 raise TaskStopped()
             updates = self._background.pending_controls(ident)
             if updates:

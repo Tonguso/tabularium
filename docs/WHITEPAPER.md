@@ -469,7 +469,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Owner tier | A coordinator's accept presented as the owner's approval | An owner-tier request records a decision for the owner at acceptance; nothing is applied until he answers |
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
 | Checkpoints and receipts | A crash losing work | Every tool call is a receipt; progress is checkpointed |
-| Drain restart | Restarting mid-task or onto broken code | Waits for work, runs all tests, refuses uncommitted code |
+| Drain restart | Restarting mid-task or onto broken code | Pauses workers at their next safe point and queues their tasks for the new process, runs all tests, refuses uncommitted code |
 | Snapshot | An edit on disk reaching running agents before any test | Every component and worker runs an export of the released commit, never the working tree; a crash restart runs the last release |
 | Privacy by role | Maintainers reading private conversations | The private agent's records are closed; only tool records |
 
@@ -620,6 +620,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-14 | Told to go on with a wiki, the coordinator searched its own past conversations and then asked the owner's yes for a read-only listing, because any reader tool made every later command a parked action | The taint rail is gone: the owner's instruction is the consent, and what parks is destruction, the desktop and nothing else; a page or an email can still ask for a command, and the danger screen is the answer to that |
 | 2026-11-14 | All fourteen pending skill edits lengthened their skills, seven by keeping the rule and appending sentences; the proposal gate checked the anchor and the observations, never the shape of the edit | A lesson never lengthens a method: a replacement longer than the passage it replaces is refused; additions go only where the method is silent, through the bounded ledger |
 | 2026-11-14 | A worker ran from the snapshot of one release while two more were released; the snapshot, now the third, was pruned under the worker, whose next import failed; on the restart a one-time recovery copied every interrupted task into the failure notices, so the owner read "stopped trying" about a task rerun thirty seconds later | A process running from a snapshot leaves its pid in it, and a snapshot with a live pid is never pruned; the recovery line is gone, a crash that reruns is announced by nothing |
+| 2026-11-14 | Two releases each waited an hour behind one engineering worker, because a drain let every worker finish; both were unblocked by cancelling the task by hand and resuming it after | A drain pauses every worker at its next safe point and queues its task again for the new process; no release waits longer than one tool call, and no work is lost |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
