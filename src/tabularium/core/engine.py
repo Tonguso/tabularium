@@ -450,24 +450,33 @@ class AgentRuntime(SharedHandlers):
         return text
 
     def _cli_changed(self):
-        """True once per change of the Claude Code CLI the subscription route would use (a new version after an
-        update, or none at all). 2026-10-20: an update moved the CLI and the agents ran on the fallback for two
-        days; the daily self-test passed because the fallback answered. Now the path is checked every minute and a
-        change runs the self-test at once, with the route it used in the record."""
-        from tabularium.models.subscription_runtime import find_cli
+        """True once per change of the subscription CLI paths (Claude Code or Antigravity CLI).
+        2026-10-20: an update moved the CLI and the agents ran on the fallback for two days; the daily
+        self-test passed because the fallback answered. Now paths are checked every minute and a change
+        runs the self-test at once, with the route it used in the record."""
+        from tabularium.models.subscription_runtime import find_cli, find_gemini_cli
         from tabularium.core.agent_runtime import atomic_json
         path = self.AGENT_DIR / "task_state" / "claude_cli.json"
         current = find_cli() or ""
+        current_gemini = find_gemini_cli() or ""
         try:
-            previous = json.loads(path.read_text(encoding="utf-8")).get("path", "")
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            previous = saved.get("path")
+            previous_gemini = saved.get("gemini_path")
         except (OSError, ValueError):
             previous = None
-        if previous == current:
+            previous_gemini = None
+        if previous == current and previous_gemini == current_gemini:
             return False
-        atomic_json(path, {"path": current, "changed": time.time()})
-        if previous is None:
+        atomic_json(path, {"path": current, "gemini_path": current_gemini, "changed": time.time()})
+        claude_changed = previous is not None and previous != current
+        gemini_changed = previous_gemini is not None and previous_gemini != current_gemini
+        if not claude_changed and not gemini_changed:
             return False                                 # first record on this installation: nothing changed
-        print(f"[selftest] Claude CLI changed: {previous or '(none)'} -> {current or '(none)'}; running the self-test now")
+        if claude_changed:
+            print(f"[selftest] Claude CLI changed: {previous or '(none)'} -> {current or '(none)'}; running the self-test now")
+        if gemini_changed:
+            print(f"[selftest] Gemini CLI changed: {previous_gemini or '(none)'} -> {current_gemini or '(none)'}; running the self-test now")
         return True
 
     def run_selftest(self):

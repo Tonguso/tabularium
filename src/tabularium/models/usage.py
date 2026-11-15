@@ -19,6 +19,9 @@ def normalize(provider, usage):
                       cache_write=get(usage, 'cache_creation_input_tokens'), output=get(usage, 'output_tokens'))
         result['input_total'] = input_total(result)
         return result
+    if provider == 'gemini-cli':
+        return dict(input_total=get(usage, 'input_tokens'), cache_read=get(usage, 'cache_read_tokens'),
+                    cache_write=None, input_uncached=None, output=get(usage, 'output_tokens'))
     total = get(usage, 'input_tokens', get(usage, 'prompt_tokens'))
     details = get(usage, 'input_tokens_details', get(usage, 'prompt_tokens_details'))
     cached, written = get(details, 'cached_tokens'), get(details, 'cache_write_tokens')

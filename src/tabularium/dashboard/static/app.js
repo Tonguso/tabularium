@@ -118,11 +118,13 @@ function renderConversation(d,row){let events=d.events||[],nodes=[];let submit=e
 async function downloadAudit(fmt,params=auditParams()){let p=new URLSearchParams(params);p.delete('offset');p.set('format',fmt);try{let r=await fetch('/api/communications/export?'+p,{cache:'no-store'});if(!r.ok)throw Error('Export unavailable. Narrow filters or check dashboard reload.');let url=URL.createObjectURL(await r.blob()),a=el('a');a.href=url;a.download='inter-agent-audit.'+fmt;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){toast(e.message,true)}}
 $('audit-form').onsubmit=e=>{e.preventDefault();auditOffset=0;loadAudit()};$('audit-prev').onclick=()=>{auditOffset=Math.max(0,auditOffset-30);loadAudit()};$('audit-next').onclick=()=>{auditOffset+=30;loadAudit()};$('audit-close').onclick=()=>{$('audit-detail').hidden=true};for(let fmt of ['json','jsonl','txt'])$('audit-'+fmt).onclick=()=>downloadAudit(fmt);
 // Drafts survive status refreshes. Routes apply at the next new turn, not midway through a task.
-const routeKinds={openai_subscription:'ChatGPT subscription',anthropic_subscription:'Claude subscription',openai_api:'OpenAI API · paid',anthropic_api:'Anthropic API · paid'};
+const routeKinds={openai_subscription:'ChatGPT subscription',anthropic_subscription:'Claude subscription',gemini_subscription:'Gemini subscription',openai_api:'OpenAI API · paid',anthropic_api:'Anthropic API · paid'};
 const routeModels={
  openai:[['gpt-6.1-sol','GPT 6.1 Sol'],['gpt-6-sol','GPT 6 Sol'],['gpt-6-astra','GPT 6 Astra'],['gpt-6-luna','GPT 6 Luna'],['gpt-5.6-sol','GPT 5.6 Sol']],
- anthropic:[['claude-sonnet-5-5','Claude Sonnet 5.5'],['claude-opus-5-5','Claude Opus 5.5'],['claude-haiku-4-5','Claude Haiku 4.5'],['claude-fable-5-1','Claude Fable 5.1'],['claude-sonnet-5','Claude Sonnet 5']]
+ anthropic:[['claude-sonnet-5-5','Claude Sonnet 5.5'],['claude-opus-5-5','Claude Opus 5.5'],['claude-haiku-4-5','Claude Haiku 4.5'],['claude-fable-5-1','Claude Fable 5.1'],['claude-sonnet-5','Claude Sonnet 5']],
+ gemini:[['gemini-4-carbon-high','Gemini 4 Carbon (High)'],['gemini-4-carbon-medium','Gemini 4 Carbon (Medium)'],['gemini-4-hydrogen-high','Gemini 4 Hydrogen (High)'],['gemini-4-hydrogen-xhigh','Gemini 4 Hydrogen (XHigh)'],['gemini-4-argon-high','Gemini 4 Argon (High)'],['gemini-3.8-flash-high','Gemini 3.8 Flash (High)'],['gemini-3.8-flash-medium','Gemini 3.8 Flash (Medium)']]
 };
+function routeFamily(kind){return kind.startsWith('openai')?'openai':kind.startsWith('gemini')?'gemini':'anthropic'}
 function routeField(title,control){let label=el('label',undefined,'route-field');label.append(el('span',title),control);return label}
 
 const searchEngines={anysearch:'AnySearch',tavily:'Tavily',model:'Model routes (the agent’s own model sequence)'};
@@ -136,14 +138,14 @@ function searchOrderPanel(d){
  let save=el('button','Save search order','button');save.onclick=()=>confirmAction('Save the search order for all four agents?','Engines are tried top to bottom on every web search. Model routes use each agent’s own model sequence and may cost API searches.',()=>action('/api/search_order',{order:draft}));box.append(save);
  box.append(el('p','Saved: '+(d.search_order||[]).map(e=>searchEngines[e]||e).join(' → '),'model-caption'));return box}
 const routeDrafts={};
-function routeTitle(r){let fam=r.kind.startsWith('openai')?'openai':'anthropic';return (routeModels[fam].find(([id])=>id===r.model)||[r.model,r.model])[1]+' · '+routeKinds[r.kind]}
+function routeTitle(r){let fam=routeFamily(r.kind);return ((routeModels[fam]||[]).find(([id])=>id===r.model)||[r.model,r.model])[1]+' · '+routeKinds[r.kind]}
 function routingPanel(name,a){
  let form=el('section',undefined,'routing-controls');
  form.append(el('h3','Model'));
  if(current?.claude_login?.status==='connected')form.append(el('p','Claude subscription connected','model-caption'));else{let connect=el('button','Connect subscriptions','button secondary');connect.onclick=()=>action('/api/connect-subscriptions',{});form.append(connect);if(current?.claude_login?.message)form.append(el('p',current.claude_login.message,'model-caption'));}
  let pick=el('select');pick.setAttribute('aria-label',name+' model');let routes=a.routing?.routes||[];
  pick.append(new Option('Default sequence: '+(routes.map(routeTitle).join(' → ')||'none saved'),''));
- for(let kind of Object.keys(routeKinds))for(let [id,title]of routeModels[kind.startsWith('openai')?'openai':'anthropic'])pick.append(new Option(title+' · '+routeKinds[kind],kind+'|'+id));
+ for(let kind of Object.keys(routeKinds))for(let [id,title]of routeModels[routeFamily(kind)])pick.append(new Option(title+' · '+routeKinds[kind],kind+'|'+id));
  let o=a.routing_override,want=o?o.kind+'|'+o.model:'';if(o&&![...pick.options].some(x=>x.value===want))pick.append(new Option(o.model+' · '+routeKinds[o.kind]+' (saved)',want));pick.value=want;
  pick.onchange=async()=>{let [kind,model]=pick.value.split('|');pick.disabled=true;try{let d=await api('/api/model',{agent:name,kind:kind||'',model:model||''});toast(d.message);await refresh()}catch(e){toast(e.message,true);pick.disabled=false}};
  form.append(routeField('Running on',pick));
@@ -153,11 +155,12 @@ function routingPanel(name,a){
  if(current?.claude_login?.status==='connected')form.append(el('p','Claude subscription connected','model-caption'));else{let connect=el('button','Connect subscriptions','button secondary');connect.onclick=()=>action('/api/connect-subscriptions',{});form.append(connect);if(current?.claude_login?.message)form.append(el('p',current.claude_login.message,'model-caption'));}
  draft.routes.forEach((route,index)=>{
   let row=el('div',undefined,'route-row'),billing=el('select'),provider=el('select'),model=el('select');
-  let family=route.kind.startsWith('openai')?'openai':'anthropic',method=route.kind.endsWith('subscription')?'subscription':'api';
-  for(let [value,title]of [['subscription','Subscription'],['api','API · pay per use']]){billing.append(new Option(title,value))}billing.value=method;
-  for(let [value,title]of [['openai','OpenAI'],['anthropic','Anthropic']]){provider.append(new Option(title,value))}provider.value=family;
+  let family=routeFamily(route.kind),method=route.kind.endsWith('subscription')?'subscription':'api';
+  let billingOpts=family==='gemini'?[['subscription','Subscription']]:[['subscription','Subscription'],['api','API · pay per use']];
+  for(let [value,title]of billingOpts){billing.append(new Option(title,value))}billing.value=method;
+  for(let [value,title]of [['openai','OpenAI'],['anthropic','Anthropic'],['gemini','Gemini']]){provider.append(new Option(title,value))}provider.value=family;
   billing.setAttribute('aria-label',`${name} step ${index+1} billing method`);provider.setAttribute('aria-label',`${name} step ${index+1} provider`);model.setAttribute('aria-label',`${name} step ${index+1} model`);
-  function choose(f,m){let other=draft.routes.findIndex((r,i)=>i!==index&&r.kind===f+'_'+m);if(other>=0){[draft.routes[index],draft.routes[other]]=[draft.routes[other],draft.routes[index]]}else{if(!route.kind.startsWith(f))route.model=routeModels[f][0][0];route.kind=f+'_'+m}render(current)}
+  function choose(f,m){if(f==='gemini')m='subscription';let other=draft.routes.findIndex((r,i)=>i!==index&&r.kind===f+'_'+m);if(other>=0){[draft.routes[index],draft.routes[other]]=[draft.routes[other],draft.routes[index]]}else{if(routeFamily(route.kind)!==f)route.model=routeModels[f][0][0];route.kind=f+'_'+m}render(current)}
   billing.onchange=()=>choose(family,billing.value);provider.onchange=()=>choose(provider.value,method);
   let choices=[...routeModels[family]];if(!choices.some(([id])=>id===route.model))choices.unshift([route.model,route.model+' (saved)']);
   for(let [id,title]of choices)model.append(new Option(title,id));model.value=route.model;model.onchange=()=>route.model=model.value;
@@ -166,7 +169,7 @@ function routingPanel(name,a){
   let remove=el('button','Remove','button secondary');remove.disabled=draft.routes.length===1;remove.onclick=()=>{draft.routes.splice(index,1);render(current)};buttons.append(remove);
   row.append(el('div',index===0?'01 · First choice':String(index+1).padStart(2,'0')+' · Fallback','route-step'),routeField('Billing method',billing),routeField('Provider',provider),routeField('Model',model),buttons);form.append(row);
  });
- let add=el('button','Add route','button secondary');add.disabled=draft.routes.length>=4;add.onclick=()=>{let kind=Object.keys(routeKinds).find(k=>!draft.routes.some(r=>r.kind===k));if(kind)draft.routes.push({kind,model:kind.startsWith('openai')?'gpt-6.1-sol':'claude-sonnet-5-5'});render(current)};
+ let add=el('button','Add route','button secondary');add.disabled=draft.routes.length>=Object.keys(routeKinds).length;add.onclick=()=>{let kind=Object.keys(routeKinds).find(k=>!draft.routes.some(r=>r.kind===k));if(kind)draft.routes.push({kind,model:routeModels[routeFamily(kind)][0][0]});render(current)};
  let save=el('button','Save sequence','button');save.onclick=()=>confirmAction('Save '+agentNames[name]+'’s route order?', 'API steps authorize paid inference after earlier routes are unavailable. Existing tasks finish with their starting sequence. Voice, search and advisor billing are separate.',async()=>{try{let d=await api('/api/routing',{agent:name,routing:draft});delete routeDrafts[name];toast(d.message);await refresh()}catch(e){toast(e.message,true)}});
  form.append(add,save);
  if(!a.routing_live)form.append(el('p','Saved settings require an agent restart before they can run.','model-caption'));
@@ -176,20 +179,28 @@ function routingPanel(name,a){
 
 function resetTime(value){if(!value)return 'Not reported';let d=new Date(typeof value==='number'?value*1000:value);return Number.isNaN(d.getTime())?'Not reported':d.toLocaleString('en-GB',{timeZone:'UTC',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+' UTC'}
 function usageLink(url,title){let a=el('a',title,'link');a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a}
+function appendAllowanceWindows(card,section,refreshing){
+ for(let w of section?.windows||[]){let block=el('div',undefined,'allowance-window');block.append(el('strong',w.name));if(w.remaining!==null&&w.remaining!==undefined){block.append(el('div',w.remaining.toLocaleString('en-GB',{maximumFractionDigits:1})+'% remaining','allowance-value'));let progress=el('progress');progress.max=100;progress.value=Math.min(100,Math.max(0,w.used));progress.setAttribute('aria-label',w.name+' used');block.append(progress,el('small',w.used+'% used','muted'))}else block.append(el('p','Remaining percentage not reported','muted'));block.append(el('p','Resets '+resetTime(w.resets_at),'muted'));if(w.resets_at&&new Date(w.resets_at).getTime()<Date.now())block.append(el('small','Reset time has passed; awaiting a fresh provider reading.','muted'));card.append(block)}
+ if(!section?.windows?.length)card.append(el('p',refreshing?'Reading allowance…':'Allowance unavailable','muted'));
+}
 function renderSubscriptions(data){
- let oa=el('section',undefined,'panel allowance-card'),cl=el('section',undefined,'panel allowance-card');
+ let oa=el('section',undefined,'panel allowance-card'),cl=el('section',undefined,'panel allowance-card'),gm=el('section',undefined,'panel allowance-card');
  oa.append(el('h2','OpenAI subscription'),el('p','Remaining: not exposed','allowance-value'),el('p',data.openai?.note||'Reading saved connections…','muted'));
  for(let r of data.openai?.agents||[]){let status=r.authorized===null?'Status unavailable':!r.authorized?'Not authorized':r.limit_reported?'Usage limit reported':'Authorized';oa.append(el('p',(agentNames[r.agent]||r.agent)+': '+status));if(r.limit_reported&&r.retry_at)oa.append(el('small','Agent retry: '+resetTime(r.retry_at)+' — not a provider reset time','muted'))}
  oa.append(usageLink('https://chatgpt.com/settings/usage','Open OpenAI Usage →'));
  cl.append(el('h2','Claude'+(data.claude?.plan?' '+data.claude.plan.toUpperCase():'')+' subscription'));
- let stale=data.error||!data.claude?.updated||Date.now()/1000-data.claude.updated>600;
- for(let w of data.claude?.windows||[]){let block=el('div',undefined,'allowance-window');block.append(el('strong',w.name));if(w.remaining!==null&&w.remaining!==undefined){block.append(el('div',w.remaining.toLocaleString('en-GB',{maximumFractionDigits:1})+'% remaining','allowance-value'));let progress=el('progress');progress.max=100;progress.value=Math.min(100,Math.max(0,w.used));progress.setAttribute('aria-label',w.name+' used');block.append(progress,el('small',w.used+'% used','muted'))}else block.append(el('p','Remaining percentage not reported','muted'));block.append(el('p','Resets '+resetTime(w.resets_at),'muted'));if(w.resets_at&&new Date(w.resets_at).getTime()<Date.now())block.append(el('small','Reset time has passed; awaiting a fresh provider reading.','muted'));cl.append(block)}
- if(!data.claude?.windows?.length)cl.append(el('p',data.refreshing?'Reading allowance…':'Allowance unavailable','muted'));
+ let clStale=data.error||!data.claude?.updated||Date.now()/1000-data.claude.updated>600;
+ appendAllowanceWindows(cl,data.claude,data.refreshing);
  if(data.claude?.extra_usage){let e=data.claude.extra_usage;cl.append(el('p','Extra usage billed separately: '+e.amount.toLocaleString('en-GB',{style:'currency',currency:e.currency||'GBP'}),'muted'))}
- cl.append(el('p',(stale?'Last successful reading: ':'Updated ')+age(data.claude?.updated)+(data.refreshing?' · refreshing':''),'muted'));
+ cl.append(el('p',(clStale?'Last successful reading: ':'Updated ')+age(data.claude?.updated)+(data.refreshing?' · refreshing':''),'muted'));
  if(data.error)cl.append(el('p',data.error,'diagnostic-issue'));
  cl.append(usageLink('https://claude.ai/settings/usage','Open Claude Usage →'));
- $('subscriptions').replaceChildren(oa,cl);
+ gm.append(el('h2','Gemini subscription'));
+ let gmStale=data.error||!data.gemini?.updated||Date.now()/1000-data.gemini.updated>600;
+ appendAllowanceWindows(gm,data.gemini,data.refreshing);
+ gm.append(el('p',(gmStale?'Last successful reading: ':'Updated ')+age(data.gemini?.updated)+(data.refreshing?' · refreshing':''),'muted'));
+ gm.append(usageLink('https://one.google.com','Open Google One →'));
+ $('subscriptions').replaceChildren(oa,cl,gm);
 }
 $('refresh-subscriptions').onclick=()=>action('/api/subscriptions/refresh',{});
 

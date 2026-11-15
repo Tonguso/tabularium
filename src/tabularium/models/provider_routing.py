@@ -10,6 +10,7 @@ from tabularium.core.agent_runtime import atomic_json
 ACTIVE = ContextVar('primary_route', default=None)
 KINDS = {'openai_subscription': 'ChatGPT subscription',
          'anthropic_subscription': 'Claude subscription',
+         'gemini_subscription': 'Gemini subscription',
          'openai_api': 'OpenAI API (paid)', 'anthropic_api': 'Anthropic API (paid)'}
 
 
@@ -24,8 +25,8 @@ def validate(value):
     if not isinstance(value, dict):
         raise ValueError('Provide a model sequence.')
     rows = value.get('routes')
-    if not isinstance(rows, list) or not 1 <= len(rows) <= 4:
-        raise ValueError('Choose between one and four routes.')
+    if not isinstance(rows, list) or not 1 <= len(rows) <= len(KINDS):
+        raise ValueError('Choose between one and five routes.')
     seen = set()
     clean = []
     for row in rows:
@@ -36,7 +37,8 @@ def validate(value):
             raise ValueError('Each billing route can appear once.')
         if not isinstance(model, str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{1,99}', model):
             raise ValueError('Enter a valid model ID.')
-        if not model.startswith('gpt-' if kind.startswith('openai') else 'claude-'):
+        prefix = 'gpt-' if kind.startswith('openai') else ('gemini-' if kind.startswith('gemini') else 'claude-')
+        if not model.startswith(prefix):
             raise ValueError('The model must match the selected provider.')
         seen.add(kind)
         clean.append({'kind': kind, 'model': model})
@@ -172,6 +174,9 @@ def run(agent, messages, chat):
             if kind == 'anthropic_subscription':
                 from tabularium.models.subscription_runtime import run_claude
                 result = run_claude(agent, messages, chat, route['model'])
+            elif kind == 'gemini_subscription':
+                from tabularium.models.subscription_runtime import run_gemini
+                result = run_gemini(agent, messages, chat, route['model'])
             elif kind == 'anthropic_api':
                 result = agent.run_turn_anthropic(messages, chat)
             else:

@@ -7,6 +7,7 @@ Search order for every agent (Alex, 2026-10-06):
 Each route uses that provider's own live web search:
     openai_*      Responses API with the native web_search tool (plan token or API key)
     anthropic_subscription  Claude Code's built-in WebSearch tool through the Agent SDK
+    gemini_subscription     Antigravity CLI's built-in search_web tool
     anthropic_api           Messages API with the web_search server tool ($10 / 1k searches)
 A route still cooling down in the main router is skipped. A route that fails or returns no
 web-search evidence hands over to the next one. No credentials are stored or returned here.
@@ -155,6 +156,79 @@ def _claude_subscription(agent, query, model):
     return (final.result or "").strip()
 
 
+def _gemini_subscription(agent, query, model):
+    import subprocess
+    from tabularium.models import subscription_runtime as sr
+    from tabularium.models.gemini_subscription import _write_session_files, cleanup_agy_conversation
+    cli = sr.find_gemini_cli()
+    if not cli:
+        raise RuntimeError("Antigravity CLI is not installed")
+    session_dir = Path(agent.RUNTIME_DIR) / "task_state" / "agy_search"
+    settings_file, _ = _write_session_files(
+        session_dir, INSTRUCTIONS, tools=("search_web",), enable_mcp=False)
+    used = False
+    final = None
+    conv_id = None
+    stderr_text = ""
+    lock = sr.GeminiStartLock().acquire()
+    proc = None
+    try:
+        proc = subprocess.Popen(
+            [cli, "--input-format", "stream-json", "--output-format", "stream-json",
+             "--model", model, "--agent", "tabularium", "--settings", str(settings_file),
+             "--disable-slash-commands", "--dangerously-skip-permissions"],
+            cwd=str(session_dir), env=sr.gemini_subscription_env(),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        proc.stdin.write(json.dumps({"event": "user", "message": {"content": f"Search the web for: {query}"}}, ensure_ascii=False) + "\n")
+        proc.stdin.flush()
+        proc.stdin.close()
+        for raw in iter(proc.stdout.readline, ""):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get("event") == "init":
+                conv_id = ev.get("conversation_id") or conv_id
+            elif ev.get("event") == "step_update":
+                if lock.held:
+                    lock.release()
+                step = ev.get("step_update") or {}
+                conv_id = step.get("conversation_id") or conv_id
+                if step.get("step_type") == "tool" and step.get("tool_name") == "search_web":
+                    used = True
+            elif ev.get("event") == "result":
+                if lock.held:
+                    lock.release()
+                final = ev.get("result") or {}
+                conv_id = final.get("conversation_id") or conv_id
+        stderr_text = proc.stderr.read() or ""
+        proc.wait(timeout=10)
+    finally:
+        lock.release()
+        if proc is not None:
+            for stream in (proc.stdout, proc.stderr):
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+        cleanup_agy_conversation(conv_id)
+    if not isinstance(final, dict) or final.get("status") != "SUCCESS":
+        detail = ((final or {}).get("error") or "") + " " + stderr_text
+        if any(x in detail.lower() for x in sr.GEMINI_AUTH_FAILURE_TEXT):
+            raise RuntimeError(sr.GEMINI_SIGN_IN_REASON)
+        raise RuntimeError("Gemini search did not finish: " + str((final or {}).get("error") or "no result")[:160])
+    if not used:
+        raise NoEvidence("answered without searching")
+    _record(agent, model, "subscription", "gemini-cli", final.get("usage"))
+    return (final.get("response") or "").strip()
+
+
 def _anthropic_api(agent, query, model):
     if not agent.ANTHROPIC_API_KEY:
         raise RuntimeError("no Anthropic API key configured")
@@ -177,6 +251,7 @@ PROVIDERS = {
     "openai_subscription": lambda a, q, m: _openai(a, q, m, plan_mode=True),
     "openai_api": lambda a, q, m: _openai(a, q, m, plan_mode=False),
     "anthropic_subscription": _claude_subscription,
+    "gemini_subscription": _gemini_subscription,
     "anthropic_api": _anthropic_api,
 }
 

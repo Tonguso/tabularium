@@ -525,3 +525,15 @@ def run_claude(agent, messages, chat, model, reminded=False, retry=None):
         if not uncertain and any(x in str(exc).lower() for x in AUTH_FAILURE_TEXT):
             raise Unavailable(SIGN_IN_REASON) from exc
         raise
+
+
+from tabularium.models.gemini_subscription import (  # noqa: E402
+    GEMINI_AUTH_FAILURE_TEXT,
+    GEMINI_SIGN_IN_REASON,
+    GeminiStartLock,
+    cleanup_agy_conversation,
+    find_gemini_cli,
+    gemini_auth_status,
+    gemini_subscription_env,
+    run_gemini,
+)

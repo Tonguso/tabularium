@@ -10,7 +10,9 @@ import threading
 import time
 from urllib.parse import urlsplit
 from tabularium.core.agent_runtime import atomic_json
-from tabularium.models.subscription_runtime import find_cli, subscription_env, auth_status
+from tabularium.models.subscription_runtime import (
+    find_cli, subscription_env, auth_status, find_gemini_cli, gemini_subscription_env, gemini_auth_status,
+)
 ROOT = _home()
 STATUS = ROOT/'dashboard/claude_login.json'
 
@@ -57,6 +59,43 @@ def connect_claude():
     return bool(status.get('loggedIn') and status.get('authMethod')=='claude.ai')
 
 
+def connect_gemini():
+    status=gemini_auth_status()
+    if status.get('loggedIn'):
+        return True
+    cli=find_gemini_cli()
+    if not cli:
+        raise RuntimeError('Antigravity CLI is not installed.')
+    report('waiting','Complete the Google authorization page. This one sign-in serves all four agents.')
+    proc=subprocess.Popen([cli,'acp','--login'],env=gemini_subscription_env(),
+        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,
+        creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    opened=False
+    def read_output():
+        nonlocal opened
+        for raw in iter(proc.stdout.readline,b''):
+            line=re.sub(r'\x1b\[[0-9;]*[A-Za-z]','',raw.decode('utf-8','replace'))
+            for url in re.findall(r'https://[^\s<>]+',line):
+                host=(urlsplit(url).hostname or '').lower()
+                if not opened and any(host==d or host.endswith('.'+d) for d in ('accounts.google.com','google.com','antigravity.google')):
+                    try:
+                        os.startfile(url)
+                        opened=True
+                    except OSError:
+                        report('waiting','Google authorization could not open in the default browser. Check your default-browser setting.')
+    reader=threading.Thread(target=read_output,daemon=True)
+    reader.start()
+    try:
+        proc.wait(timeout=600)
+    except subprocess.TimeoutExpired:
+        proc.terminate();proc.wait(timeout=10)
+        raise RuntimeError('Gemini sign-in timed out. No connection was changed.')
+    finally:
+        reader.join(timeout=2)
+        proc.stdout.close()
+    return bool(gemini_auth_status().get('loggedIn'))
+
+
 def connect_all():
     for name in AGENTS:
         plan=ChatGPTPlan(name.capitalize())
@@ -71,4 +110,9 @@ def connect_all():
         raise RuntimeError('Claude subscription sign-in did not complete.')
     for name in AGENTS:
         atomic_json(ROOT/name/'task_state/route_anthropic_subscription.json',{})
-    report('connected','All four agents have OpenAI authorization and access to the shared Claude subscription sign-in.')
+    if find_gemini_cli():
+        if not connect_gemini():
+            raise RuntimeError('Gemini subscription sign-in did not complete.')
+        for name in AGENTS:
+            atomic_json(ROOT/name/'task_state/route_gemini_subscription.json',{})
+    report('connected','All four agents have OpenAI authorization and access to the shared Claude and Gemini subscription sign-ins.')

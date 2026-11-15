@@ -139,7 +139,7 @@ def state():
         agent['commands']=[read_json(p) for p in sorted((folder/'ui_commands').glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)[:3]]
         # Routes currently skipped and why (route_<kind>.json cooldowns): a fallback must be visible, not silent.
         agent['route_blocks']=[]
-        for kind in ('anthropic_subscription','openai_subscription','anthropic_api','openai_api'):
+        for kind in routing.KINDS:
             block=read_json(folder/f'route_{kind}.json')
             if block.get('retry_at',0)>time.time():
                 agent['route_blocks'].append({'kind':kind,'reason':block.get('reason',''),'retry_at':block['retry_at']})

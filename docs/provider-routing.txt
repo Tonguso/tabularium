@@ -2,22 +2,22 @@ PRIMARY MODEL ROUTING
 Dashboard > Models & usage > Provider priority.
 
 Each agent has routing.json: enabled plus an ordered list of kind/model pairs.
-Kinds: openai_subscription, anthropic_subscription, openai_api, anthropic_api.
+Kinds: openai_subscription, anthropic_subscription, gemini_subscription, openai_api, anthropic_api.
 Save reloads at the next foreground or background turn. A running turn keeps its order.
 Sequences are always active. /model reports status only; model selection is dashboard-only.
 
 Initial order:
 Cato and Vit: ChatGPT subscription -> Claude subscription -> OpenAI API -> Anthropic API.
 Cal and Tacitus: Claude subscription -> ChatGPT subscription -> Anthropic API -> OpenAI API.
-GPT routes use gpt-6.1-sol; Claude routes use claude-sonnet-5-5.
+GPT routes use gpt-6.1-sol; Claude routes use claude-sonnet-5-5; Gemini routes use gemini-* slugs (e.g. gemini-4-carbon-high).
 Model availability is checked by the provider when called, not guaranteed by the editor.
 
 AUTHENTICATION
 ChatGPT credentials remain separate for each agent (/openai connect).
-Connect Claude subscription in the dashboard opens Claude Code's official browser login.
-Claude uses this Windows user's shared Claude Code subscription login. It does not borrow
-another agent's ChatGPT token. SDK built-in tools are disabled; only that agent's tools
-are exposed. API-authenticated CLI logins are rejected on the subscription route.
+Connect subscriptions in the dashboard checks OpenAI, Claude Code and Antigravity CLI (agy) sign-ins.
+Claude and Gemini subscriptions use this Windows user's shared CLI logins (claude.exe and agy.exe).
+Neither borrows another agent's ChatGPT token. CLI built-in tools are disabled on primary turns;
+only that agent's tools are exposed over MCP. API-key variables are stripped on subscription routes.
 
 FALLBACK
 Only known authentication/quota/service rejections advance the route order.

@@ -10,7 +10,9 @@ from pathlib import Path
 import threading
 import time
 from tabularium.core.agent_runtime import atomic_json
-from tabularium.models.subscription_runtime import find_cli, subscription_env
+from tabularium.models.subscription_runtime import (
+    find_cli, subscription_env, find_gemini_cli, gemini_subscription_env, GeminiStartLock,
+)
 ROOT=_home()
 CACHE=ROOT/'dashboard/subscription_usage.json'
 LOCK=threading.Lock()
@@ -80,18 +82,51 @@ async def claude_usage():
             'windows':windows,'extra_usage':extra,'updated':time.time()}
 
 
+def gemini_usage():
+    cli=find_gemini_cli()
+    if not cli: raise RuntimeError('Antigravity CLI unavailable')
+    with GeminiStartLock():
+        out=subprocess.run([cli,'-p','/usage','--output-format','json'],capture_output=True,text=True,
+                           encoding='utf-8',errors='replace',timeout=25,env=gemini_subscription_env(),
+                           creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    data=json.loads(out.stdout or '{}')
+    if out.returncode!=0 or data.get('status')!='SUCCESS':
+        raise RuntimeError('Gemini usage unavailable')
+    groups=((data.get('command') or {}).get('data') or {}).get('groups') or []
+    gemini=next((g for g in groups if 'gemini' in str(g.get('name','')).lower()),{})
+    names={'5h':'Five-hour window','weekly':'Weekly allowance'}
+    windows=[]
+    for bucket in gemini.get('buckets') or []:
+        if not isinstance(bucket,dict): continue
+        title=names.get(bucket.get('window')) or bucket.get('name') or 'Allowance'
+        frac=bucket.get('remaining_fraction')
+        rem=round(max(0.0,min(100.0,float(frac)*100.0)),1) if isinstance(frac,(int,float)) else None
+        used=round(100.0-rem,1) if rem is not None else None
+        windows.append({'name':title,'used':used,'remaining':rem,'resets_at':bucket.get('reset_time')})
+    return {'available':bool(windows),'windows':windows,'updated':time.time()}
+
+
 def refresh():
     previous=read_cache()
     result=dict(previous,checked=time.time(),error=None)
+    errors=[]
     try:
         result['openai']=openai_status()
+    except Exception as exc:
+        errors.append('OpenAI:'+type(exc).__name__)
+    try:
         result['claude']=asyncio.run(asyncio.wait_for(claude_usage(),45))
     except Exception as exc:
+        errors.append('Claude:'+type(exc).__name__)
+    try:
+        result['gemini']=gemini_usage()
+    except Exception as exc:
+        errors.append('Gemini:'+type(exc).__name__)
+    if errors:
         # Preserve last successful measurements, visibly stale; do not publish provider error bodies.
-        result['error']='Allowance refresh unavailable ('+type(exc).__name__+'). Last successful figures retained.'
-    finally:
-        try: atomic_json(CACHE,result)
-        finally: LOCK.release()
+        result['error']='Allowance refresh unavailable ('+', '.join(errors)+'). Last successful figures retained.'
+    try: atomic_json(CACHE,result)
+    finally: LOCK.release()
 
 
 def snapshot(force=False):
