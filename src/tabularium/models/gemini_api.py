@@ -80,10 +80,11 @@ def _inline(block):
     return {"text": "[image unavailable]"}
 
 
-def contents(history, signatures=None):
+def contents(history, made=None):
     """Canonical history as Gemini contents. Tool results need the call's name, found in the preceding assistant
-    message; a call made this turn carries its thought signature back (signatures: id -> signature)."""
-    signatures = signatures or {}
+    message; a call made this turn goes back exactly as the model sent it, with its own id and thought signature
+    (made: our call id -> {"id", "signature"})."""
+    made = made or {}
     names = {}
     out = []
     for message in history:
@@ -102,8 +103,11 @@ def contents(history, signatures=None):
                     ident = _attr(block, "id")
                     names[ident] = _attr(block, "name")
                     part = {"functionCall": {"name": _attr(block, "name"), "args": _attr(block, "input") or {}}}
-                    if ident in signatures:
-                        part["thoughtSignature"] = signatures[ident]
+                    if ident in made:
+                        if made[ident].get("id"):
+                            part["functionCall"]["id"] = made[ident]["id"]
+                        if made[ident].get("signature"):
+                            part["thoughtSignature"] = made[ident]["signature"]
                     parts.append(part)
             if parts:
                 out.append({"role": "model", "parts": parts})
@@ -129,7 +133,10 @@ def contents(history, signatures=None):
                 response = {"output": str(inner)}
                 if _attr(block, "is_error"):
                     response["error"] = True
-                parts.append({"functionResponse": {"name": names.get(ident, "tool"), "response": response}})
+                reply = {"name": names.get(ident, "tool"), "response": response}
+                if ident in made and made[ident].get("id"):
+                    reply["id"] = made[ident]["id"]
+                parts.append({"functionResponse": reply})
         parts.extend(images)
         if parts:
             out.append({"role": "user", "parts": parts})
@@ -158,13 +165,13 @@ class GeminiGenerate:
         route = agent._routing.label(agent._routing.ACTIVE.get()) if agent._routing.ACTIVE.get() else f"{self.model} via Gemini API"
         self.system = agent.SYSTEM_PROMPT + (
             f"\n\n[Runtime model: {route} If Alex asks which model is answering, state the active model clearly.]")
-        self.signatures = {}                                     # call id -> thought signature, this turn only
+        self.made = {}                                           # our call id -> {"id", "signature"}, this turn only
         self.schema_in_request = True                            # dropped once if the model rejects schema with tools
 
     def request(self, api_messages):
         body = {
             "systemInstruction": {"parts": [{"text": self.system}]},
-            "contents": contents(api_messages, self.signatures),
+            "contents": contents(api_messages, self.made),
             "tools": [{"functionDeclarations": self.tools}],
             "generationConfig": {"maxOutputTokens": MAX_OUTPUT_TOKENS},
         }
@@ -232,8 +239,7 @@ class GeminiGenerate:
             if "functionCall" in part:
                 call = part["functionCall"]
                 ident = "gem_" + uuid.uuid4().hex[:24]
-                if part.get("thoughtSignature"):
-                    self.signatures[ident] = part["thoughtSignature"]
+                self.made[ident] = {"id": call.get("id"), "signature": part.get("thoughtSignature")}
                 args = call.get("args") or {}
                 blocks.append({"type": "tool_use", "id": ident, "name": call.get("name", ""), "input": args})
                 calls.append((ident, call.get("name", ""), args))

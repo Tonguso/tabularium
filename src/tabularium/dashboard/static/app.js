@@ -124,7 +124,10 @@ const routeModels={
  anthropic:[['claude-sonnet-5-5','Claude Sonnet 5.5'],['claude-opus-5-5','Claude Opus 5.5'],['claude-haiku-4-5','Claude Haiku 4.5'],['claude-fable-5-1','Claude Fable 5.1'],['claude-sonnet-5','Claude Sonnet 5']],
  gemini:[['gemini-4-carbon-high','Gemini 4 Carbon (High)'],['gemini-4-carbon-medium','Gemini 4 Carbon (Medium)'],['gemini-4-hydrogen-high','Gemini 4 Hydrogen (High)'],['gemini-4-hydrogen-xhigh','Gemini 4 Hydrogen (XHigh)'],['gemini-4-argon-high','Gemini 4 Argon (High)'],['gemini-3.8-flash-high','Gemini 3.8 Flash (High)'],['gemini-3.8-flash-medium','Gemini 3.8 Flash (Medium)']]
 };
+// The Gemini API names its models without the CLI's effort suffix (ListModels, 2026-11-15).
+const geminiApiModels=[['gemini-4-carbon','Gemini 4 Carbon'],['gemini-4-argon','Gemini 4 Argon'],['gemini-4-hydrogen','Gemini 4 Hydrogen'],['gemini-3.8-flash','Gemini 3.8 Flash']];
 function routeFamily(kind){return kind.startsWith('openai')?'openai':kind.startsWith('gemini')?'gemini':'anthropic'}
+function modelsFor(kind){return kind==='gemini_api'?geminiApiModels:routeModels[routeFamily(kind)]}
 function routeField(title,control){let label=el('label',undefined,'route-field');label.append(el('span',title),control);return label}
 
 const searchEngines={anysearch:'AnySearch',tavily:'Tavily',model:'Model routes (the agent’s own model sequence)'};
@@ -138,38 +141,35 @@ function searchOrderPanel(d){
  let save=el('button','Save search order','button');save.onclick=()=>confirmAction('Save the search order for all four agents?','Engines are tried top to bottom on every web search. Model routes use each agent’s own model sequence and may cost API searches.',()=>action('/api/search_order',{order:draft}));box.append(save);
  box.append(el('p','Saved: '+(d.search_order||[]).map(e=>searchEngines[e]||e).join(' → '),'model-caption'));return box}
 const routeDrafts={};
-function routeTitle(r){let fam=routeFamily(r.kind);return ((routeModels[fam]||[]).find(([id])=>id===r.model)||[r.model,r.model])[1]+' · '+routeKinds[r.kind]}
+function routeTitle(r){return ((modelsFor(r.kind)||[]).find(([id])=>id===r.model)||[r.model,r.model])[1]+' · '+routeKinds[r.kind]}
 function routingPanel(name,a){
  let form=el('section',undefined,'routing-controls');
  form.append(el('h3','Model'));
  if(current?.claude_login?.status==='connected')form.append(el('p','Claude subscription connected','model-caption'));else{let connect=el('button','Connect subscriptions','button secondary');connect.onclick=()=>action('/api/connect-subscriptions',{});form.append(connect);if(current?.claude_login?.message)form.append(el('p',current.claude_login.message,'model-caption'));}
  let pick=el('select');pick.setAttribute('aria-label',name+' model');let routes=a.routing?.routes||[];
  pick.append(new Option('Default sequence: '+(routes.map(routeTitle).join(' → ')||'none saved'),''));
- for(let kind of Object.keys(routeKinds))for(let [id,title]of routeModels[routeFamily(kind)])pick.append(new Option(title+' · '+routeKinds[kind],kind+'|'+id));
+ for(let kind of Object.keys(routeKinds))for(let [id,title]of modelsFor(kind))pick.append(new Option(title+' · '+routeKinds[kind],kind+'|'+id));
  let o=a.routing_override,want=o?o.kind+'|'+o.model:'';if(o&&![...pick.options].some(x=>x.value===want))pick.append(new Option(o.model+' · '+routeKinds[o.kind]+' (saved)',want));pick.value=want;
  pick.onchange=async()=>{let [kind,model]=pick.value.split('|');pick.disabled=true;try{let d=await api('/api/model',{agent:name,kind:kind||'',model:model||''});toast(d.message);await refresh()}catch(e){toast(e.message,true);pick.disabled=false}};
  form.append(routeField('Running on',pick));
- form.append(el('h3','Model sequence'));
  let draft=routeDrafts[name]||(routeDrafts[name]=JSON.parse(JSON.stringify(a.routing?.routes?.length?a.routing:{enabled:true,routes:[{kind:'openai_subscription',model:'gpt-6.1-sol'},{kind:'anthropic_subscription',model:'claude-sonnet-5-5'},{kind:'openai_api',model:'gpt-6.1-sol'}]})));
- form.append(el('h3','Model sequence'),el('p','Choose how to pay, then the provider and model. Steps run from top to bottom.','muted'));
- if(current?.claude_login?.status==='connected')form.append(el('p','Claude subscription connected','model-caption'));else{let connect=el('button','Connect subscriptions','button secondary');connect.onclick=()=>action('/api/connect-subscriptions',{});form.append(connect);if(current?.claude_login?.message)form.append(el('p',current.claude_login.message,'model-caption'));}
+ form.append(el('h3','Model sequence'),el('p','Each step is one billing route and its model; a route can be used once. Steps run top to bottom, and only ↑ and ↓ change the order.','muted'));
  draft.routes.forEach((route,index)=>{
-  let row=el('div',undefined,'route-row'),billing=el('select'),provider=el('select'),model=el('select');
-  let family=routeFamily(route.kind),method=route.kind.endsWith('subscription')?'subscription':'api';
-  let billingOpts=[['subscription','Subscription'],['api','API · pay per use']];
-  for(let [value,title]of billingOpts){billing.append(new Option(title,value))}billing.value=method;
-  for(let [value,title]of [['openai','OpenAI'],['anthropic','Anthropic'],['gemini','Gemini']]){provider.append(new Option(title,value))}provider.value=family;
-  billing.setAttribute('aria-label',`${name} step ${index+1} billing method`);provider.setAttribute('aria-label',`${name} step ${index+1} provider`);model.setAttribute('aria-label',`${name} step ${index+1} model`);
-  function choose(f,m){let other=draft.routes.findIndex((r,i)=>i!==index&&r.kind===f+'_'+m);if(other>=0){[draft.routes[index],draft.routes[other]]=[draft.routes[other],draft.routes[index]]}else{if(routeFamily(route.kind)!==f)route.model=routeModels[f][0][0];route.kind=f+'_'+m}render(current)}
-  billing.onchange=()=>choose(family,billing.value);provider.onchange=()=>choose(provider.value,method);
-  let choices=[...routeModels[family]];if(!choices.some(([id])=>id===route.model))choices.unshift([route.model,route.model+' (saved)']);
+  // One choice per step, routes used by other steps greyed out: a step never moves because another was edited
+  // (2026-11-15: billing and provider as two selects passed through routes already in use, and the editor swapped
+  // the other step into this place, so every change reordered the sequence).
+  let row=el('div',undefined,'route-row'),kind=el('select'),model=el('select');
+  for(let [value,title]of Object.entries(routeKinds)){let o=new Option(title,value);o.disabled=draft.routes.some((r,i)=>i!==index&&r.kind===value);kind.append(o)}kind.value=route.kind;
+  kind.setAttribute('aria-label',`${name} step ${index+1} billing route`);model.setAttribute('aria-label',`${name} step ${index+1} model`);
+  kind.onchange=()=>{let k=kind.value;if(!modelsFor(k).some(([id])=>id===route.model))route.model=modelsFor(k)[0][0];route.kind=k;render(current)};
+  let choices=[...modelsFor(route.kind)];if(!choices.some(([id])=>id===route.model))choices.unshift([route.model,route.model+' (saved)']);
   for(let [id,title]of choices)model.append(new Option(title,id));model.value=route.model;model.onchange=()=>route.model=model.value;
   let buttons=el('div',undefined,'route-buttons');
   for(let [label,offset]of [['↑',-1],['↓',1]]){let b=el('button',label,'button secondary');b.setAttribute('aria-label','Move route '+(offset<0?'up':'down'));b.disabled=index+offset<0||index+offset>=draft.routes.length;b.onclick=()=>{[draft.routes[index],draft.routes[index+offset]]=[draft.routes[index+offset],draft.routes[index]];render(current)};buttons.append(b)}
   let remove=el('button','Remove','button secondary');remove.disabled=draft.routes.length===1;remove.onclick=()=>{draft.routes.splice(index,1);render(current)};buttons.append(remove);
-  row.append(el('div',index===0?'01 · First choice':String(index+1).padStart(2,'0')+' · Fallback','route-step'),routeField('Billing method',billing),routeField('Provider',provider),routeField('Model',model),buttons);form.append(row);
+  row.append(el('div',index===0?'01 · First choice':String(index+1).padStart(2,'0')+' · Fallback','route-step'),routeField('Billing route',kind),routeField('Model',model),buttons);form.append(row);
  });
- let add=el('button','Add route','button secondary');add.disabled=draft.routes.length>=Object.keys(routeKinds).length;add.onclick=()=>{let kind=Object.keys(routeKinds).find(k=>!draft.routes.some(r=>r.kind===k));if(kind)draft.routes.push({kind,model:routeModels[routeFamily(kind)][0][0]});render(current)};
+ let add=el('button','Add route','button secondary');add.disabled=draft.routes.length>=Object.keys(routeKinds).length;add.onclick=()=>{let kind=Object.keys(routeKinds).find(k=>!draft.routes.some(r=>r.kind===k));if(kind)draft.routes.push({kind,model:modelsFor(kind)[0][0]});render(current)};
  let save=el('button','Save sequence','button');save.onclick=()=>confirmAction('Save '+agentNames[name]+'’s route order?', 'API steps authorize paid inference after earlier routes are unavailable. Existing tasks finish with their starting sequence. Voice, search and advisor billing are separate.',async()=>{try{let d=await api('/api/routing',{agent:name,routing:draft});delete routeDrafts[name];toast(d.message);await refresh()}catch(e){toast(e.message,true)}});
  form.append(add,save);
  if(!a.routing_live)form.append(el('p','Saved settings require an agent restart before they can run.','model-caption'));
@@ -207,4 +207,4 @@ $('refresh-subscriptions').onclick=()=>action('/api/subscriptions/refresh',{});
 window.addEventListener('hashchange',()=>show(location.hash.slice(1),false));
 window.addEventListener('DOMContentLoaded',()=>show(location.hash.slice(1)||'overview',false));
 refresh();
-{const tick=()=>{$('clock').textContent='UTC '+new Date().toLocaleTimeString('en-GB',{timeZone:'UTC',hour12:false})};tick();setInterval(tick,1000)}
+{const zone=(z,s)=>new Date().toLocaleTimeString('en-GB',{timeZone:z,hour12:false,hour:'2-digit',minute:'2-digit',...(s?{second:'2-digit'}:{})});const tick=()=>{const d=new Date();$('clock').textContent=d.toLocaleDateString('en-GB',{timeZone:'UTC',day:'2-digit',month:'short',year:'numeric'}).toUpperCase()+'  LOCAL '+zone('UTC',true)+'  SHANGHAI '+zone('Asia/Shanghai')+'  NEW YORK '+zone('America/New_York')};tick();setInterval(tick,1000)}

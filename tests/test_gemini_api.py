@@ -44,14 +44,15 @@ class Translation(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "and this"}, IMAGE]},
             {"role": "assistant", "content": ""},
         ]
-        out = gemini_api.contents(history, {"gem_1": "sig-A"})
+        out = gemini_api.contents(history, {"gem_1": {"id": "call_9", "signature": "sig-A"}})
         self.assertEqual(out[0], {"role": "user", "parts": [{"text": "Check memory"}]})
         self.assertEqual(out[1], {"role": "model", "parts": [
             {"text": "Looking."},
-            {"functionCall": {"name": "read_memory", "args": {"section": "core"}}, "thoughtSignature": "sig-A"}]})
+            {"functionCall": {"name": "read_memory", "args": {"section": "core"}, "id": "call_9"}, "thoughtSignature": "sig-A"}]})
         self.assertEqual(out[2], {"role": "user", "parts": [
-            {"functionResponse": {"name": "read_memory", "response": {"output": "goals"}}},
+            {"functionResponse": {"name": "read_memory", "response": {"output": "goals"}, "id": "call_9"}},
             {"inlineData": {"mimeType": "image/jpeg", "data": "abc="}}]})
+        self.assertNotIn('"id"', json.dumps(gemini_api.contents(history)))      # earlier turns: name only
         self.assertEqual(out[3]["parts"][1], {"inlineData": {"mimeType": "image/jpeg", "data": "abc="}})
         self.assertEqual(len(out), 4)                                  # the empty assistant message is not sent
         self.assertNotIn("thoughtSignature", json.dumps(gemini_api.contents(history)))   # earlier turns: no signature
@@ -69,14 +70,14 @@ class Provider(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         folder = Path(self.tmp.name)
         self.agent = NS(
-            GEMINI_API_KEY="k", GEMINI_MODEL_DEFAULT="gemini-4-carbon-medium", SYSTEM_PROMPT="Own persona",
+            GEMINI_API_KEY="k", GEMINI_MODEL_DEFAULT="gemini-4-carbon", SYSTEM_PROMPT="Own persona",
             get_tools=lambda _: [{"name": "read_memory", "description": "Read core memory",
                                   "input_schema": {"type": "object", "properties": {"section": {"type": "string"}}}}],
             _routing=routing, _inbox=DurableInbox(folder, lambda *a: None),
             _is_context_window_error=lambda exc: "token" in str(exc).lower() and "exceed" in str(exc).lower(),
             _compact_context_retry=Mock(side_effect=lambda m, c: m[-1:]),
         )
-        self.token = routing.ACTIVE.set({"kind": "gemini_api", "model": "gemini-4-carbon-medium"})
+        self.token = routing.ACTIVE.set({"kind": "gemini_api", "model": "gemini-4-carbon"})
         self.addCleanup(routing.ACTIVE.reset, self.token)
 
     def test_a_function_call_becomes_a_tool_call_with_its_signature_remembered(self):
@@ -85,12 +86,12 @@ class Provider(unittest.TestCase):
             posts.append((url, json, headers))
             return response(candidates=[{"finishReason": "STOP", "content": {"parts": [
                 {"thought": True, "text": "hidden"},
-                {"functionCall": {"name": "read_memory", "args": {"section": "goals"}}, "thoughtSignature": "sig-1"}]}}],
+                {"functionCall": {"name": "read_memory", "args": {"section": "goals"}, "id": "call_7"}, "thoughtSignature": "sig-1"}]}}],
                 usageMetadata={"promptTokenCount": 10, "candidatesTokenCount": 5})
         provider = gemini_api.GeminiGenerate(self.agent, 1, post=post)
         exchange = provider.exchange([{"role": "user", "content": "Check memory"}])
         url, body, headers = posts[0]
-        self.assertIn("gemini-4-carbon-medium:generateContent", url)
+        self.assertIn("gemini-4-carbon:generateContent", url)
         self.assertEqual(headers["x-goog-api-key"], "k")
         self.assertEqual(body["systemInstruction"]["parts"][0]["text"][:11], "Own persona")
         self.assertEqual(body["tools"][0]["functionDeclarations"][0]["name"], "read_memory")
@@ -99,13 +100,15 @@ class Provider(unittest.TestCase):
         ident, name, args = exchange.calls[0]
         self.assertEqual((name, args), ("read_memory", {"section": "goals"}))
         self.assertEqual(exchange.blocks, [{"type": "tool_use", "id": ident, "name": "read_memory", "input": {"section": "goals"}}])
-        self.assertEqual(provider.signatures, {ident: "sig-1"})
+        self.assertEqual(provider.made, {ident: {"id": "call_7", "signature": "sig-1"}})
         self.assertFalse(exchange.truncated); self.assertEqual(exchange.stop, "")
-        # The next request replays the signature on that call, as Gemini 3+ requires within the turn.
+        # The next request replays the call as the model sent it, id and signature, as Gemini 3+ requires within the turn.
         provider.exchange([{"role": "user", "content": "Check memory"},
                            {"role": "assistant", "content": exchange.blocks},
                            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": ident, "content": "goals"}]}])
-        self.assertEqual(posts[1][1]["contents"][1]["parts"][0]["thoughtSignature"], "sig-1")
+        self.assertEqual(posts[1][1]["contents"][1]["parts"][0],
+                         {"functionCall": {"name": "read_memory", "args": {"section": "goals"}, "id": "call_7"}, "thoughtSignature": "sig-1"})
+        self.assertEqual(posts[1][1]["contents"][2]["parts"][0]["functionResponse"]["id"], "call_7")
 
     def test_the_final_answer_is_the_envelope_and_a_cut_off_is_reported(self):
         provider = gemini_api.GeminiGenerate(self.agent, 1, post=lambda *a, **k: response(

@@ -81,7 +81,7 @@ class AgentRuntime(SharedHandlers):
     THREAD_STALE_DAYS   = 7
     ANTHROPIC_MODEL_DEFAULT = "claude-sonnet-5"
     OPENAI_MODEL_DEFAULT    = "gpt-6.1-sol"
-    GEMINI_MODEL_DEFAULT    = "gemini-4-carbon-medium"
+    GEMINI_MODEL_DEFAULT    = "gemini-4-carbon"         # the API name; the CLI adds an effort suffix
     CHATGPT_PLAN_MODEL      = "gpt-6.1-sol"
     ANTHROPIC_MODEL_ALIASES = {
         # Short names → latest of that family
@@ -442,7 +442,8 @@ class AgentRuntime(SharedHandlers):
 
     def run_lesson_digest(self):
         """Weekly: the skill edits awaiting Alex's go, sent by the runtime, so a proposal never depends on the agent
-        remembering to show it (2026-11-01: 40 proposals had sat unseen; Alex: [quote removed]). The dashboard lists the same edits at any time."""
+        remembering to show it (2026-11-01: 40 proposals had sat unseen; Alex: "Cato never proposed any change to
+        me"). The dashboard lists the same edits at any time."""
         from tabularium.channels.owner_telegram import OWNER_CHAT_ID
         from tabularium.core.agent_runtime import atomic_json
         from tabularium.learning import learning
