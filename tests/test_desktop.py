@@ -1,4 +1,4 @@
-"""The desktop tool (tabularium.tools.desktop): taken per task on Alex's yes, released by his next message, the clock, a
+"""The desktop tool (tabularium.tools.desktop): taken per task in the turn Alex's message starts, released by his next message, the clock, a
 credential window or his hand on the mouse; coordinates mapped from the screenshot the model saw."""
 import base64
 import io
@@ -58,24 +58,16 @@ class DesktopTool(unittest.TestCase):
         return self.agent.execute_tool("desktop", inputs, OWNER_CHAT_ID)
 
     def granted(self):
-        """Alex's yes: the runtime runs the parked take with _approving set."""
-        self.agent._approving = ("desktop", {"action": "take", "purpose": "open the printer dialog"})
-        try:
-            return self.run_tool(action="take", purpose="open the printer dialog")
-        finally:
-            self.agent._approving = None
+        """A foreground turn on Alex's message takes the desktop at once (2026-11-15: his instruction is the consent)."""
+        return self.run_tool(action="take", purpose="open the printer dialog")
 
-    def test_take_is_parked_for_his_yes_and_nothing_moves_before_it(self):
-        result = self.run_tool(action="take", purpose="open the printer dialog")
-        self.assertIsInstance(result, Refused)
-        self.assertIn("parked", result)
-        actions = td.pending(self.agent._background, OWNER_CHAT_ID, kind="action")
-        self.assertEqual(len(actions), 1)
-        self.assertEqual(json.loads(actions[0]["action"])["inputs"], {"action": "take", "purpose": "open the printer dialog"})
+    def test_take_needs_a_purpose_and_nothing_moves_before_it(self):
+        self.assertIsInstance(self.run_tool(action="take"), Refused)
+        self.assertEqual(td.pending(self.agent._background, OWNER_CHAT_ID, kind="action"), [])   # nothing parked, ever
         self.assertIsInstance(self.run_tool(action="click", x=1, y=1), Refused)
         self.assertEqual(self.driver.calls, [])
 
-    def test_his_yes_grants_and_the_screenshot_frame_maps_clicks_to_the_screen(self):
+    def test_the_turn_his_message_starts_takes_the_desktop_and_the_screenshot_frame_maps_clicks_to_the_screen(self):
         self.assertIn("Desktop taken", self.granted())
         shot = self.run_tool(action="screenshot", screen=1)
         self.assertEqual(shot[0]["type"], "image")

@@ -162,7 +162,7 @@ nothing has been said to the chat since its ask except the reply of the same tur
 time; an action identical to one already pending is asked again, never parked twice. A yes that arrives while the turn that
 asked is still running settles the ask inside that turn, and the outcome joins the turn in place of the bare word; it is never
 handed to the model as text. The runtime parks, never the agent: the danger
-screen and the desktop grant each park the action they stop, beside any question already pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
+screen parks the action it stops, beside any question already pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
 describe the result as the system's caution; the one way an agent attaches an exact action to a decision is in answer
 to a worker's pending question, and that ask reads as the question and the command. One pending question per task is enforced by a
 unique index. A task's question waits as long as the task does. A conversation question lives until the owner's next
@@ -478,7 +478,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Typed outcomes | A tool's "no" read as "done" | Refused and Failed are distinct types the code can see |
 | Boundary | An agent reading another's memory, or writing a skill or the shell profile past the owner | Every tool that takes a path is held to the agent's own folder and its declared work roots; memory and skills change only through their own gates |
 | Parked actions | A confirmation lost to a timeout or restart; an agent parking a read it was free to run and blaming the system | The exact action is stored and runs only on the owner's yes; only the rails park, an agent has no tool to |
-| Desktop grant | An agent driving the owner's screen unasked, or into a password field | The desktop is taken per task on the owner's yes; the grant ends on his next message, after thirty minutes, or when he moves the mouse; a credential or payment window refuses input |
+| Desktop grant | An agent driving the owner's screen unasked, or into a password field | The desktop is taken per task in the foreground turn the owner's message starts, never by a background worker; the grant ends on his next message, after thirty minutes, or when he moves the mouse; a credential or payment window refuses input |
 | Task lifecycle | Tasks silently changing state | Named operations checked against one table |
 | Status from records | An agent claiming work is running when it is not | Live task status is attached to every turn; contradictions are logged |
 | Requirement verification | A build accepted on its builder's report crashed on first use | Declared checks run on the delivered bytes; verdicts say how the reviewer knows |
@@ -657,6 +657,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-14 | The owner said yes three times to a desktop grant and none bound: the rail's ask was followed by the turn's own reply, so it was no longer the newest message, and each retry parked a duplicate, after which a bare yes bound to none | Every message records the turn it was sent in; a bare yes binds to the newest parked action when nothing has been said since its ask except that turn's reply; an identical pending action is asked again, never parked twice |
 
 | 2026-11-14 | Told to fix something, the coordinator restated the owner's point and asked "is that right?" four times running, because the runtime's rule after repeated corrections, restate once per correction, took each "yes, fix it" as a new correction | The owner's first message after a restatement answers it, whatever its words: it is never counted as a correction, it closes the burst, and a single later correction is acted on |
+
+| 2026-11-15 | Told "continue now", the coordinator again asked the owner's yes for the desktop; the per-take ask had failed to bind twice in two days while he waited, and his instruction already was the consent | The desktop take no longer parks: a foreground turn answering the owner's own message takes the desktop at once; a background worker is still refused, the grant still ends on his next message, after thirty minutes, on release and in a screen corner, and a credential window still refuses input |
 
 | 2026-11-15 | The coordinator's turn parked a desktop grant and sent the ask; the owner's "Yes" six seconds later arrived while that turn was still running, and the follow-up path took it into the turn as plain text, so it never reached the path that runs a parked action; the model could only call the decision tool (refused) and ask the owner to press the card again | The verdict on a parked action has one implementation, and the follow-up path uses it: a plain yes or no during the turn that asked runs the action inside that turn, and its outcome joins the turn's history in place of the bare word |
 

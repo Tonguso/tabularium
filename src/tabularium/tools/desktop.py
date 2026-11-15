@@ -5,8 +5,9 @@ input. What makes this unlike the headless browser is that there is one mouse an
 and with anything else driving the desktop, and that everything on screen is reachable, a bank page as much as a
 settings dialog. So the tool is gated in code, not by prompt:
 
-- The agent takes the desktop per task. `take` is parked as an exact action and runs only on the owner's yes, like a
-  destructive command; his yes records a grant for that chat and starts the turn that uses it.
+- The agent takes the desktop per task, in a foreground turn answering the owner's own message: his instruction is
+  the consent (2026-11-15; until then `take` was parked for a separate yes, and twice in two days that yes failed to
+  bind while he waited). A background worker cannot take it.
 - The grant ends on `release`, on the owner's next message, after GRANT_SECONDS, and is refused while another agent
   holds one.
 - Before every click, keystroke and scroll the foreground window's title is read; a title naming a credential or
@@ -38,7 +39,7 @@ TOOL = {
     "description": (
         "Alex's desktop: screen, mouse and keyboard of his logged-in session. For what has no other way in (a GUI-only "
         "app or dialog); files, settings and programs are usually quicker through execute_command. "
-        "take (purpose) asks Alex for the desktop; it runs only on his yes, and his yes starts the turn that uses it. "
+        "take (purpose) takes the desktop for this turn; Alex's message is the consent, so take it only for work he asked for. "
         "Then screenshot (screen: 0 is the primary monitor) to see, click (x, y in the last screenshot's frame; "
         "button, double), type (text), key (keys such as 'enter', 'ctrl+s', 'alt+tab'), scroll (x, y, direction, "
         "amount), and release when done. Screenshot after acting to see the result; never act on a stale picture. "
@@ -180,7 +181,7 @@ def execute(app, chat, inputs):
 
 def _take(app, chat, inputs):
     if app.BACKGROUND_TASK_ID:
-        return Refused("The desktop is taken in the foreground only, on Alex's yes; a background task has no one to ask. "
+        return Refused("The desktop is taken in the foreground only, in the turn Alex's own message starts. "
                        "Report what needs doing on the screen.")
     purpose = " ".join((inputs.get("purpose") or "").split())
     if not purpose:
@@ -188,10 +189,6 @@ def _take(app, chat, inputs):
     other = holder(app.AGENT_DIR.parent, app.AGENT_DIR.name)
     if other:
         return Refused(f"{other} holds the desktop; one driver at a time. Try later or ask Alex.")
-    if not app._approved("desktop", action="take", purpose=purpose):
-        return app._park(chat, "desktop", {"action": "take", "purpose": purpose},
-                         f"Take the desktop (screen, mouse and keyboard) for: {purpose}\n"
-                         "I stop on your next message; move the mouse into a screen corner to take it back at once.")
     with app._inbox.db() as db:
         job = db.execute("SELECT COALESCE(MAX(id),0) FROM jobs WHERE chat=?", (chat,)).fetchone()[0]
     _save(app.AGENT_DIR, {"chat": chat, "job": int(job), "purpose": purpose, "since": time.time()})
