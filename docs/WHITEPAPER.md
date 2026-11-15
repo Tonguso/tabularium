@@ -656,6 +656,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-14 | Told to fix something, the coordinator restated the owner's point and asked "is that right?" four times running, because the runtime's rule after repeated corrections, restate once per correction, took each "yes, fix it" as a new correction | The owner's first message after a restatement answers it, whatever its words: it is never counted as a correction, it closes the burst, and a single later correction is acted on |
 
+| 2026-11-15 | After the engineer's first delivery failed the owner's acceptance, every repair of that project was the coordinator's own worker, under a skill clause that let it implement what it judged not worth delegating, with the engineer's one worker slot often busy and nothing showing who had done the work | The clause is gone from the skill at the owner's word; the engineer has two slots so a delegation never waits; a coordinator's own worker writing outside its folder marks the task "implemented by itself" on the dashboard, visible, never forbidden |
+
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
 own work, it eventually accepted a failure; each fix made the proof a record the runtime produces itself, and made

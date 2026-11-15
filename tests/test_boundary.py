@@ -64,3 +64,25 @@ class Boundary(unittest.TestCase):
         with patch("tabularium.core.agent_app.subprocess.Popen", side_effect=lambda argv, **kw: seen.append(argv) or Proc()):
             self.agent.execute_tool("execute_command", {"command": "Get-Date"}, 1)
         self.assertIn("-NoProfile", seen[0])
+
+
+class SelfWork(unittest.TestCase):
+    def test_a_coordinators_own_worker_writing_outside_its_folder_marks_the_task(self):
+        # 2026-11-15 (Alex): engineering is the engineer's; the exception is visible on the task, never forbidden.
+        from tabularium.core import boundary
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp); (home / "coordinator").mkdir(); (home / "librarian").mkdir()
+            projects = Path(tempfile.mkdtemp()); (projects / "aperio").mkdir()   # a work root outside the home
+            for name in ("coordinator", "librarian"):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    agent = make_agent(name, home / name)
+                agent.config = dataclasses.replace(agent.config, work_roots=[str(projects)])
+                task = agent._background.start(1, "Fix the ads", "")["id"]
+                agent.BACKGROUND_TASK_ID = str(task)
+                self.assertIsNone(boundary.check(agent, "write_file", {"path": str(projects / "aperio" / "x.js")}))
+                marked = agent._background.get(task).get("self_work") or ""
+                if name == "coordinator":
+                    self.assertEqual(marked, str(Path(*projects.resolve().parts[:2])))
+                else:
+                    self.assertEqual(marked, "")                       # the librarian does not delegate: no mark
+                agent.BACKGROUND_TASK_ID = ""

@@ -29,6 +29,6 @@ ROLES = {
     # 2026-10-08: Cato's two Cal briefs ran one after the other, so Cal takes two; Cato's and Vit's tasks share
     # workbooks and code paths and stay at one.
     "librarian": Role("librarian", entry="librarian", delegates=False, owner_budget=False, request_table="research_requests", workers=2),
-    "engineer": Role("engineer", entry="engineer", delegates=False, owner_budget=False, request_table="engineering_requests"),
+    "engineer": Role("engineer", entry="engineer", delegates=False, owner_budget=False, request_table="engineering_requests", workers=2),   # 2026-11-15: a delegation never waits behind another
 }
 AGENTS = tuple(ROLES)

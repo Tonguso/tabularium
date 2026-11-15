@@ -41,7 +41,9 @@ def refusal(agent, value, write=False):
 
 
 def check(agent, name, inputs):
-    """The guard execute_tool runs for every tool: each path input checked, write tools checked as writes."""
+    """The guard execute_tool runs for every tool: each path input checked, write tools checked as writes. A write by
+    a coordinator's own background worker outside its folder is allowed and marked on the task (2026-11-15)."""
+    own = Path(agent.AGENT_DIR).resolve()
     for key in PATH_INPUTS:
         value = inputs.get(key)
         if not value:
@@ -50,4 +52,12 @@ def check(agent, name, inputs):
             held = refusal(agent, item, write=name in WRITERS)
             if held:
                 return held
+            if name in WRITERS and agent.BACKGROUND_TASK_ID and getattr(getattr(agent.config, "role", None), "delegates", False):
+                p = _resolve(agent, item)
+                if not (p == own or p.is_relative_to(own)):
+                    folder = Path(*p.parts[:2]) if len(p.parts) > 1 else p
+                    try:
+                        agent._background.note_self_work(int(agent.BACKGROUND_TASK_ID), folder)
+                    except (ValueError, AttributeError, OSError):
+                        pass
     return None

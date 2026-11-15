@@ -108,6 +108,8 @@ class TaskStore:
                 db.execute("ALTER TABLE tasks ADD COLUMN attempt TEXT")
             if "release" not in task_columns:                    # the Git commit the worker ran (tabularium.ops.release)
                 db.execute("ALTER TABLE tasks ADD COLUMN release TEXT")
+            if "self_work" not in task_columns:                  # a coordinator's own worker wrote code outside its folder (2026-11-15)
+                db.execute("ALTER TABLE tasks ADD COLUMN self_work TEXT")
             db.execute("CREATE TABLE IF NOT EXISTS worker_failures(task INTEGER PRIMARY KEY, note TEXT, created REAL, notified INTEGER DEFAULT 0)")
             db.execute("CREATE TABLE IF NOT EXISTS decisions(id INTEGER PRIMARY KEY, task INTEGER NOT NULL, chat INTEGER NOT NULL, question TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', answer TEXT, source TEXT, control INTEGER, created REAL NOT NULL, updated REAL NOT NULL)")
             decision_columns = {r[1] for r in db.execute("PRAGMA table_info(decisions)")}
@@ -1016,6 +1018,12 @@ class TaskStore:
             for ident in rows:
                 lifecycle.move(db, ident, "pause", "pausing", "Pausing for a release at the next safe point.", quiet=True)
         return rows
+
+    def note_self_work(self, ident, folder):
+        """A coordinator's own worker wrote a file outside the agent's folder: the task says so on the dashboard
+        (2026-11-15, Alex: engineering is for the engineer; the exception is visible, never forbidden)."""
+        with self.db() as db:
+            db.execute("UPDATE tasks SET self_work=? WHERE id=? AND (self_work IS NULL OR self_work='')", (str(folder), int(ident)))
 
     def failed_for_good(self, task):
         """Record a stop that no automatic rerun will lift; report_worker_failures tells Alex once."""
