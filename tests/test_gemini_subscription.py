@@ -293,6 +293,22 @@ class GeminiBridge(unittest.TestCase):
                     bridge.run_gemini(agent, [{"role": "user", "content": "Hi"}], 1, "gemini-4-carbon-high")
                 self.assertTrue(ctx.exception.quota)
 
+    def test_a_cli_that_produces_no_event_is_skipped_within_the_start_window(self):
+        # 2026-11-15 16:16: agy opened a conversation and produced no step for ten minutes; the owner's message was lost
+        # when the supervisor killed the stalled agent. The route is given START_SECONDS to say anything at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self._make_agent(Path(tmp))
+            def silent(cmd, kwargs, stdin_text):
+                time.sleep(1.5)
+                return ([], 0, "")
+
+            with patch.object(bridge, "find_gemini_cli", return_value="agy.exe"), \
+                 patch("tabularium.models.gemini_subscription.START_SECONDS", 0.3), \
+                 patch("subprocess.Popen", side_effect=_fake_agy_popen(silent)):
+                with self.assertRaises(routing.Unavailable) as ctx:
+                    bridge.run_gemini(agent, [{"role": "user", "content": "Hi"}], 1, "gemini-4-carbon-high")
+                self.assertIn("no event", str(ctx.exception))                 # skipped before the CLI ever spoke
+
 
 class GeminiAllowanceAndSearch(unittest.TestCase):
     def test_gemini_usage_parses_windows_without_credentials(self):
