@@ -81,6 +81,7 @@ class AgentRuntime(SharedHandlers):
     THREAD_STALE_DAYS   = 7
     ANTHROPIC_MODEL_DEFAULT = "claude-sonnet-5"
     OPENAI_MODEL_DEFAULT    = "gpt-6.1-sol"
+    GEMINI_MODEL_DEFAULT    = "gemini-4-carbon-medium"
     CHATGPT_PLAN_MODEL      = "gpt-6.1-sol"
     ANTHROPIC_MODEL_ALIASES = {
         # Short names → latest of that family
@@ -306,6 +307,7 @@ class AgentRuntime(SharedHandlers):
         when the agent is built, not when the module is imported: the process loads its .env first (2026-11-08)."""
         self.ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
         self.OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+        self.GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")        # the Gemini API route (2026-11-15)
         self.TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
         self.ANYSEARCH_API_KEY = os.environ.get("ANYSEARCH_API_KEY", "")
         self.anthropic_client = anthropic.Anthropic(api_key=self.ANTHROPIC_API_KEY, timeout=600.0, max_retries=2)
@@ -1874,6 +1876,10 @@ class AgentRuntime(SharedHandlers):
 
     def run_turn_openai(self, messages: list, chat_id: int) -> str:
         return turn_loop.run(self, messages, chat_id, turn_loop.OpenAIResponses(self, chat_id))
+
+    def run_turn_gemini(self, messages: list, chat_id: int) -> str:
+        from tabularium.models.gemini_api import GeminiGenerate          # the key route, no harness (2026-11-15)
+        return turn_loop.run(self, messages, chat_id, GeminiGenerate(self, chat_id))
 
     def run_turn(self, messages: list, chat_id: int) -> str:
         # The loop guards count within one turn: a failure in Alex's last request must not carry a

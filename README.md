@@ -110,7 +110,7 @@ agent is three values; the rest are optional.
 |---|---|---|
 | `OWNER_TELEGRAM_USER_ID` | yes | Your Telegram user id; the only user the agents answer |
 | `TELEGRAM_BOT_TOKEN` | yes | The coordinator's bot token; one token per agent, never shared |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | one of them | Model access. Both may be set; routing prefers the configured subscription route and falls back to the API |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | one of them | Model access. Any may be set; routing prefers the configured subscription route and falls back to the API routes |
 | `CLAUDE_CODE_OAUTH_TOKEN` | no | Claude subscription route through the Claude Code CLI |
 | `TABULARIUM_HOME` | no | The home folder, when the command is not run inside it (`--home PATH` does the same) |
 | `LIBRARIAN_…`, `ENGINEER_…`, `PRIVATE_TELEGRAM_BOT_TOKEN` | per agent | Tokens for the other slots |
@@ -150,7 +150,7 @@ The code is one package, `src/tabularium/`; an installation's agents and records
 | `core/` | The runtime: engine (turn loop), `agent_app` (tools and handlers), reply envelope, roster, logging |
 | `records/` | The task store (`background_runtime`), lifecycle table, decisions, requirements and proof, outbox, receipts |
 | `channels/` | Telegram with the owner gate; the dashboard's message channel |
-| `models/` | Provider routing, the Claude and ChatGPT subscription routes, usage accounting |
+| `models/` | Provider routing, the Claude, ChatGPT and Gemini subscription routes, the Gemini API route, usage accounting |
 | `tools/` | Web search, page reading, SEC filings, the desktop, spreadsheets, video, the knowledge archive |
 | `memory/` | The memory file, conversation recall, the weekly exam, consolidation, image memory |
 | `learning/` | Lessons, trials, benchmark cases, corrections, the regression benchmark, interaction evaluation |

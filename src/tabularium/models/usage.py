@@ -19,6 +19,8 @@ def normalize(provider, usage):
                       cache_write=get(usage, 'cache_creation_input_tokens'), output=get(usage, 'output_tokens'))
         result['input_total'] = input_total(result)
         return result
+    if provider == 'gemini':                                      # the API route hands counters already in this shape
+        return {k: get(usage, k) for k in FIELDS}
     if provider == 'gemini-cli':
         return dict(input_total=get(usage, 'input_tokens'), cache_read=get(usage, 'cache_read_tokens'),
                     cache_write=None, input_uncached=None, output=get(usage, 'output_tokens'))

@@ -11,7 +11,8 @@ ACTIVE = ContextVar('primary_route', default=None)
 KINDS = {'openai_subscription': 'ChatGPT subscription',
          'anthropic_subscription': 'Claude subscription',
          'gemini_subscription': 'Gemini subscription',
-         'openai_api': 'OpenAI API (paid)', 'anthropic_api': 'Anthropic API (paid)'}
+         'openai_api': 'OpenAI API (paid)', 'anthropic_api': 'Anthropic API (paid)',
+         'gemini_api': 'Gemini API (paid)'}
 
 
 class Unavailable(RuntimeError):
@@ -26,7 +27,7 @@ def validate(value):
         raise ValueError('Provide a model sequence.')
     rows = value.get('routes')
     if not isinstance(rows, list) or not 1 <= len(rows) <= len(KINDS):
-        raise ValueError('Choose between one and five routes.')
+        raise ValueError(f'Choose between one and {len(KINDS)} routes.')
     seen = set()
     clean = []
     for row in rows:
@@ -128,6 +129,8 @@ def provider():
     route = ACTIVE.get()
     if not route:
         return None
+    if route['kind'] == 'gemini_api':
+        return 'gemini'
     return 'openai' if route['kind'].startswith('openai') else ('sdk' if route['kind'].endswith('subscription') else 'anthropic')
 
 
@@ -170,6 +173,8 @@ def run(agent, messages, chat):
                 raise Unavailable('No OpenAI API key configured')
             if kind == 'anthropic_api' and not agent.ANTHROPIC_API_KEY:
                 raise Unavailable('No Anthropic API key configured')
+            if kind == 'gemini_api' and not getattr(agent, 'GEMINI_API_KEY', ''):
+                raise Unavailable('No Gemini API key configured')
             atomic_json(state_path, {'route': route, 'status': 'attempting', 'updated': time.time()})
             if kind == 'anthropic_subscription':
                 from tabularium.models.subscription_runtime import run_claude
@@ -179,6 +184,8 @@ def run(agent, messages, chat):
                 result = run_gemini(agent, messages, chat, route['model'])
             elif kind == 'anthropic_api':
                 result = agent.run_turn_anthropic(messages, chat)
+            elif kind == 'gemini_api':
+                result = agent.run_turn_gemini(messages, chat)
             else:
                 result = agent.run_turn_openai(messages, chat)
             atomic_json(state_path, {'route': route, 'status': 'completed', 'updated': time.time()})

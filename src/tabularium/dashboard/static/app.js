@@ -118,7 +118,7 @@ function renderConversation(d,row){let events=d.events||[],nodes=[];let submit=e
 async function downloadAudit(fmt,params=auditParams()){let p=new URLSearchParams(params);p.delete('offset');p.set('format',fmt);try{let r=await fetch('/api/communications/export?'+p,{cache:'no-store'});if(!r.ok)throw Error('Export unavailable. Narrow filters or check dashboard reload.');let url=URL.createObjectURL(await r.blob()),a=el('a');a.href=url;a.download='inter-agent-audit.'+fmt;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){toast(e.message,true)}}
 $('audit-form').onsubmit=e=>{e.preventDefault();auditOffset=0;loadAudit()};$('audit-prev').onclick=()=>{auditOffset=Math.max(0,auditOffset-30);loadAudit()};$('audit-next').onclick=()=>{auditOffset+=30;loadAudit()};$('audit-close').onclick=()=>{$('audit-detail').hidden=true};for(let fmt of ['json','jsonl','txt'])$('audit-'+fmt).onclick=()=>downloadAudit(fmt);
 // Drafts survive status refreshes. Routes apply at the next new turn, not midway through a task.
-const routeKinds={openai_subscription:'ChatGPT subscription',anthropic_subscription:'Claude subscription',gemini_subscription:'Gemini subscription',openai_api:'OpenAI API · paid',anthropic_api:'Anthropic API · paid'};
+const routeKinds={openai_subscription:'ChatGPT subscription',anthropic_subscription:'Claude subscription',gemini_subscription:'Gemini subscription',openai_api:'OpenAI API · paid',anthropic_api:'Anthropic API · paid',gemini_api:'Gemini API · paid'};
 const routeModels={
  openai:[['gpt-6.1-sol','GPT 6.1 Sol'],['gpt-6-sol','GPT 6 Sol'],['gpt-6-astra','GPT 6 Astra'],['gpt-6-luna','GPT 6 Luna'],['gpt-5.6-sol','GPT 5.6 Sol']],
  anthropic:[['claude-sonnet-5-5','Claude Sonnet 5.5'],['claude-opus-5-5','Claude Opus 5.5'],['claude-haiku-4-5','Claude Haiku 4.5'],['claude-fable-5-1','Claude Fable 5.1'],['claude-sonnet-5','Claude Sonnet 5']],
@@ -156,11 +156,11 @@ function routingPanel(name,a){
  draft.routes.forEach((route,index)=>{
   let row=el('div',undefined,'route-row'),billing=el('select'),provider=el('select'),model=el('select');
   let family=routeFamily(route.kind),method=route.kind.endsWith('subscription')?'subscription':'api';
-  let billingOpts=family==='gemini'?[['subscription','Subscription']]:[['subscription','Subscription'],['api','API · pay per use']];
+  let billingOpts=[['subscription','Subscription'],['api','API · pay per use']];
   for(let [value,title]of billingOpts){billing.append(new Option(title,value))}billing.value=method;
   for(let [value,title]of [['openai','OpenAI'],['anthropic','Anthropic'],['gemini','Gemini']]){provider.append(new Option(title,value))}provider.value=family;
   billing.setAttribute('aria-label',`${name} step ${index+1} billing method`);provider.setAttribute('aria-label',`${name} step ${index+1} provider`);model.setAttribute('aria-label',`${name} step ${index+1} model`);
-  function choose(f,m){if(f==='gemini')m='subscription';let other=draft.routes.findIndex((r,i)=>i!==index&&r.kind===f+'_'+m);if(other>=0){[draft.routes[index],draft.routes[other]]=[draft.routes[other],draft.routes[index]]}else{if(routeFamily(route.kind)!==f)route.model=routeModels[f][0][0];route.kind=f+'_'+m}render(current)}
+  function choose(f,m){let other=draft.routes.findIndex((r,i)=>i!==index&&r.kind===f+'_'+m);if(other>=0){[draft.routes[index],draft.routes[other]]=[draft.routes[other],draft.routes[index]]}else{if(routeFamily(route.kind)!==f)route.model=routeModels[f][0][0];route.kind=f+'_'+m}render(current)}
   billing.onchange=()=>choose(family,billing.value);provider.onchange=()=>choose(provider.value,method);
   let choices=[...routeModels[family]];if(!choices.some(([id])=>id===route.model))choices.unshift([route.model,route.model+' (saved)']);
   for(let [id,title]of choices)model.append(new Option(title,id));model.value=route.model;model.onchange=()=>route.model=model.value;

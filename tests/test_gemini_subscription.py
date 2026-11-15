@@ -138,7 +138,7 @@ class GeminiRouting(unittest.TestCase):
             [{"kind": "gemini_subscription", "model": "gpt-6.1-sol"}],
             [{"kind": "gemini_subscription", "model": "claude-sonnet-5-5"}],
             [{"kind": "openai_subscription", "model": "gemini-4-carbon-high"}],
-            [{"kind": "gemini_api", "model": "gemini-4-carbon-high"}],
+            [{"kind": "gemini_api", "model": "gpt-6.1-sol"}],                  # the API route exists since 2026-11-15
             five + [{"kind": "gemini_subscription", "model": "gemini-3.8-flash-high"}],
         ):
             with self.assertRaises(ValueError):
