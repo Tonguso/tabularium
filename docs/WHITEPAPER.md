@@ -159,7 +159,9 @@ that asked it, and later the answer, its source message and the owner's quoted w
 directly. A parked action (send this email, run this command) stores the exact inputs and runs only on a yes, whenever
 it comes; a late yes is still a yes, and a restart forgets nothing. A bare yes answers the newest parked action when
 nothing has been said to the chat since its ask except the reply of the same turn; a reply to the ask settles it at any
-time; an action identical to one already pending is asked again, never parked twice. The runtime parks, never the agent: the danger
+time; an action identical to one already pending is asked again, never parked twice. A yes that arrives while the turn that
+asked is still running settles the ask inside that turn, and the outcome joins the turn in place of the bare word; it is never
+handed to the model as text. The runtime parks, never the agent: the danger
 screen and the desktop grant each park the action they stop, beside any question already pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
 describe the result as the system's caution; the one way an agent attaches an exact action to a decision is in answer
 to a worker's pending question, and that ask reads as the question and the command. One pending question per task is enforced by a
@@ -655,6 +657,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-14 | The owner said yes three times to a desktop grant and none bound: the rail's ask was followed by the turn's own reply, so it was no longer the newest message, and each retry parked a duplicate, after which a bare yes bound to none | Every message records the turn it was sent in; a bare yes binds to the newest parked action when nothing has been said since its ask except that turn's reply; an identical pending action is asked again, never parked twice |
 
 | 2026-11-14 | Told to fix something, the coordinator restated the owner's point and asked "is that right?" four times running, because the runtime's rule after repeated corrections, restate once per correction, took each "yes, fix it" as a new correction | The owner's first message after a restatement answers it, whatever its words: it is never counted as a correction, it closes the burst, and a single later correction is acted on |
+
+| 2026-11-15 | The coordinator's turn parked a desktop grant and sent the ask; the owner's "Yes" six seconds later arrived while that turn was still running, and the follow-up path took it into the turn as plain text, so it never reached the path that runs a parked action; the model could only call the decision tool (refused) and ask the owner to press the card again | The verdict on a parked action has one implementation, and the follow-up path uses it: a plain yes or no during the turn that asked runs the action inside that turn, and its outcome joins the turn's history in place of the bare word |
 
 | 2026-11-15 | After the engineer's first delivery failed the owner's acceptance, every repair of that project was the coordinator's own worker, under a skill clause that let it implement what it judged not worth delegating, with the engineer's one worker slot often busy and nothing showing who had done the work | The clause is gone from the skill at the owner's word; the engineer has two slots so a delegation never waits; a coordinator's own worker writing outside its folder marks the task "implemented by itself" on the dashboard, visible, never forbidden |
 

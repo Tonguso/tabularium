@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from agent_harness import make_agent
+from tabularium.channels.owner_telegram import OWNER_CHAT_ID, OWNER_USER_ID
 from tabularium.records import task_decisions
 CHAT = 1
 
@@ -57,6 +58,38 @@ class BareYes(unittest.TestCase):
             self.assertEqual(self.agent._settle_by_reply(message("yes")), (True, ""))
         self.assertEqual(ran, ["Remove-Item -Recurse D:\\Baskets\\old"])
         self.assertEqual(task_decisions.pending(self.agent._background, CHAT, kind="action"), [])
+
+    def test_a_yes_that_arrives_during_the_turn_that_asked_runs_the_action_inside_that_turn(self):
+        # 2026-11-15 14:41: the turn parked a desktop grant (#502) and sent the ask; "Yes" came six seconds later and
+        # joined the still-running turn as text, so the model could only call task_decision (refused) and ask again.
+        chat = OWNER_CHAT_ID                                                # follow-ups are the owner's messages only
+        self.agent._inbox.local.job = 61
+        with self.agent._inbox.db() as db:
+            for ident, text, status in ((61, "赶紧继续", "running"), (62, "Yes", "pending")):
+                payload = {"message_id": ident, "date": int(time.time()), "text": text, "chat": {"id": chat, "type": "private"},
+                           "from": {"id": OWNER_USER_ID, "is_bot": False, "first_name": "H"}}
+                db.execute("INSERT INTO jobs(id,chat,message,handler,payload,status,created) VALUES (?,?,?,?,?,?,?)",
+                           (ident, chat, ident, "handle_message", json.dumps(payload), status, time.time()))
+        self.agent.execute_tool("execute_command", {"command": "Remove-Item -Recurse D:\\Baskets\\old"}, chat)
+        self.agent.outbox().flush(chat)
+        parked = task_decisions.pending(self.agent._background, chat, kind="action")[0]
+        messages = [{"role": "user", "content": "[2026-11-15 Sunday 14:40] 赶紧继续"}]; api = list(messages)
+        self.agent.conversations[chat] = messages
+        ran = []
+        class Proc:
+            pid, returncode = 1, 0
+            def communicate(self, timeout=None):
+                return b"removed", b""
+        with patch("tabularium.core.agent_app.subprocess.Popen", side_effect=lambda argv, **kw: ran.append(argv[-1]) or Proc()):
+            fresh = self.agent._background_boundary(messages, api, chat)
+        self.assertEqual(ran, ["Remove-Item -Recurse D:\\Baskets\\old"])
+        self.assertEqual(len(fresh), 1)
+        self.assertIn("Yes", fresh[0]["content"])
+        self.assertIn(f"[Parked action #{parked['id']} (execute_command): Alex said yes. Tool returned: ", fresh[0]["content"])
+        self.assertIn('"stdout": "removed"', fresh[0]["content"])
+        self.assertEqual(task_decisions.pending(self.agent._background, chat, kind="action"), [])
+        with self.agent._inbox.db() as db:
+            self.assertEqual(db.execute("SELECT status FROM jobs WHERE id=62").fetchone()[0], "done")   # never its own turn
 
 
 if __name__ == "__main__":

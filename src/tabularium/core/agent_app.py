@@ -1000,6 +1000,59 @@ class AgentApp(engine.AgentRuntime):
             return line
         return "Done. " + body[:300]
 
+    def _run_parked(self, chat, decision, yes, source):
+        """Alex's verdict on a parked action, carried out once: his no declines it, his yes runs the exact parked
+        call with the gates told it is approved. Returns the recorded outcome, or None when the action was already
+        settled (a second yes runs nothing). The one path for a verdict however it arrives: as its own turn
+        (_settle_by_reply) or inside the turn that asked (_settle_follow_up)."""
+        from tabularium.records import task_decisions as td
+        action = json.loads(decision["action"])
+        if not yes:
+            if not td.settle_action(self._background, chat, decision["id"], False, source):
+                return None
+            outcome = "Cancelled; it was not run."
+        elif not td.settle_action(self._background, chat, decision["id"], True, source, "running"):
+            return None
+        else:
+            self._approving = (action["tool"], action["inputs"])
+            try:
+                result = self.execute_tool(action["tool"], action["inputs"], chat)
+                outcome = ("Not completed. " if self.unproductive(result) else "Tool returned: ") + str(result)[:4000]
+            except Exception as exc:
+                outcome = f"Execution interrupted; outcome unknown. {type(exc).__name__}: {exc}"
+            finally:
+                self._approving = None
+        td.finish_action(self._background, chat, decision["id"], outcome)
+        return outcome
+
+    def _settle_follow_up(self, chat, message):
+        """A plain yes or no that arrives while the turn that asked is still running answers that ask here, inside
+        the turn (2026-11-15 14:41: the turn parked a desktop grant and sent the ask; Alex's "Yes" six seconds later
+        joined the turn as text, the model could only ask again). Returns the history entry that replaces the bare
+        word, or None when the message is an ordinary follow-up."""
+        from tabularium.records import task_decisions as td
+        text = (getattr(message, "text", None) or "").strip()
+        yes = td.verdict(text)
+        if yes is None:
+            return None
+        ref = getattr(message, "reply_to_message", None)
+        if ref is not None:
+            decision = td.by_message(self._background, chat, ref.message_id)
+            if not decision or decision["kind"] != "action":
+                return None
+        else:
+            actions = td.pending(self._background, chat, kind="action")
+            if not actions or not self.outbox().ask_is_current(chat, actions[-1]["id"]):
+                return None
+            decision = actions[-1]
+        source = json.dumps({"message_id": message.message_id, "quote": text[:500]}, ensure_ascii=False)
+        outcome = self._run_parked(chat, decision, yes, source)
+        if outcome is None:
+            return None
+        tool = json.loads(decision["action"])["tool"]
+        return (f"{self.compose_turn(message, nudge=False)}\n[Parked action #{decision['id']} ({tool}): "
+                f"Alex said {'yes' if yes else 'no'}. {outcome}]")
+
     def _settle_by_reply(self, message):
         """Alex's reply identifies a candidate question. Exact actions can be approved directly by a plain
         yes/no, when exactly one action is parked. Returns (handled, note): handled means the message was a verdict on
@@ -1043,22 +1096,9 @@ class AgentApp(engine.AgentRuntime):
                 return False, (f"\n[This message replies to parked action #{decision['id']} without a plain yes or no; "
                                "it still waits. Ask him plainly whether to run it.]")
             action = json.loads(decision["action"])
-            if not yes:
-                if not td.settle_action(self._background, chat, decision["id"], False, source):
-                    return True, ""
-                outcome = "Cancelled; it was not run."
-            elif not td.settle_action(self._background, chat, decision["id"], True, source, "running"):
+            outcome = self._run_parked(chat, decision, yes, source)
+            if outcome is None:
                 return True, ""                                   # already settled: a second yes runs nothing
-            else:
-                self._approving = (action["tool"], action["inputs"])
-                try:
-                    result = self.execute_tool(action["tool"], action["inputs"], chat)
-                    outcome = ("Not completed. " if self.unproductive(result) else "Tool returned: ") + str(result)[:4000]
-                except Exception as exc:
-                    outcome = f"Execution interrupted; outcome unknown. {type(exc).__name__}: {exc}"
-                finally:
-                    self._approving = None
-            td.finish_action(self._background, chat, decision["id"], outcome)
             if yes and action["tool"] == "desktop" and outcome.startswith("Tool returned"):
                 # A desktop grant is for the work that follows: his yes is the message that starts that turn.
                 return False, f"\n[Parked action #{decision['id']} (desktop take): Alex said yes. {outcome}]"

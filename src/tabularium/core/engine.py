@@ -2058,7 +2058,9 @@ class AgentRuntime(SharedHandlers):
         if job:
             taken = []
             for ident, message in self._inbox.follow_ups(chat_id, job):
-                content = self.compose_turn(message, nudge=False)
+                # A plain yes or no to this turn's own ask runs the parked action now; the outcome joins the turn
+                # (2026-11-15 14:41: a desktop grant's "Yes" arrived as text and the model could only ask again).
+                content = self._settle_follow_up(chat_id, message) or self.compose_turn(message, nudge=False)
                 if not isinstance(content, str):          # a reply to a photo stays its own turn
                     break
                 entry = {"role": "user", "content": content}
