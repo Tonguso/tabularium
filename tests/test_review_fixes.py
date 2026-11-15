@@ -58,7 +58,11 @@ class Release(unittest.TestCase):
         self.root = Path(self.tmp.name)
         git = lambda *a: subprocess.run(["git", "-C", str(self.root), *a], capture_output=True, check=True)
         git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t")
-        (self.root / "engine.py").write_text("x = 1\n", encoding="utf-8")
+        self.engine = self.root / "src" / "tabularium" / "engine.py"
+        self.engine.parent.mkdir(parents=True)
+        self.engine.write_text("x = 1\n", encoding="utf-8")
+        (self.root / "coordinator").mkdir()
+        (self.root / "coordinator" / "routing.json").write_text('{"routes": []}\n', encoding="utf-8")
         git("add", "."); git("commit", "-q", "-m", "one")
         self.head = git("rev-parse", "HEAD").stdout.decode().strip()
 
@@ -66,9 +70,19 @@ class Release(unittest.TestCase):
         self.assertEqual(release.commit(self.root), self.head)
         self.assertEqual(release.commit(self.root / "missing"), "")
 
+    def test_the_homes_data_is_not_release_source(self):
+        # 2026-11-15: a sequence saved on the dashboard during a release failed it, three times in one day; the release
+        # ships src/tabularium, and an agent's routing.json is data the running agent reads live.
+        before = release.identity(self.root)
+        (self.root / "coordinator" / "routing.json").write_text('{"routes": [1]}\n', encoding="utf-8")
+        self.assertEqual(release.uncommitted(self.root), [])
+        self.assertTrue(release.same_source(before, release.identity(self.root)))
+        self.engine.write_text("x = 3\n", encoding="utf-8")
+        self.assertFalse(release.same_source(before, release.identity(self.root)))
+
     def test_release_refuses_uncommitted_changes(self):
-        (self.root/'engine.py').write_text('x = 2\n',encoding='utf-8')
-        self.assertEqual(release.uncommitted(self.root),['engine.py'])
+        self.engine.write_text('x = 2\n',encoding='utf-8')
+        self.assertEqual(release.uncommitted(self.root),['src/tabularium/engine.py'])
         with patch.object(release, 'REPO', self.root):          # the release's checkout is the package's, not the home
             self.assertRaisesRegex(RuntimeError,'Commit tracked changes',agent_control.request_restart,['coordinator'],root=self.root)
         self.assertFalse((self.root/'coordinator/task_state/drain').exists())

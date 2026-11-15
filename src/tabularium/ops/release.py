@@ -17,6 +17,12 @@ MARKER = "RELEASE.json"           # written beside the package in a snapshot: th
 SNAPSHOTS = ".release"            # <home>/.release/<commit>/src/tabularium
 PIDS = ".pids"                    # <snapshot>/.pids/<pid>: the processes running this snapshot; it is never pruned under them
 KEEP_SNAPSHOTS = 2
+# What a release is: the package it ships (archive() packs exactly this) and the suite that certifies it. Agent folders
+# are the home's data, read live by the running agents: the dashboard writes routing.json there and agents edit their
+# own skills. Counted as source they failed every release that met a dashboard save (three on 2026-11-15) and could stop
+# an agent at startup ('Source changed during agent startup').
+SHIPPED = "src/tabularium/"
+CERTIFIED = (SHIPPED, "tests/")
 
 ROOT = _home()
 
@@ -90,7 +96,8 @@ def commit(checkout=None):
 
 
 def uncommitted(checkout=None):
-    """Tracked files changed since the last commit (git status --porcelain, untracked excluded); [] when clean."""
+    """Tracked release files (SHIPPED and its suite) changed since the last commit; [] when clean. The home's data in
+    the agent folders is not a release file, whatever git tracks."""
     repo = Path(checkout) if checkout else REPO
     if repo is None:
         return []
@@ -98,7 +105,8 @@ def uncommitted(checkout=None):
                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if out.returncode:
         raise RuntimeError("git status failed: " + out.stderr.strip()[:300])
-    return [line[3:] for line in out.stdout.splitlines() if line.strip()]
+    changed = [line[3:].split(" -> ")[-1].strip('"') for line in out.stdout.splitlines() if line.strip()]
+    return [name for name in changed if name.startswith(CERTIFIED)]
 
 
 def identity(checkout=None):
@@ -119,7 +127,7 @@ def identity(checkout=None):
     if result.returncode:
         raise RuntimeError('Cannot identify release source')
     for name in sorted(result.stdout.decode('utf-8').split('\0')):
-        if not name or name.startswith(('docs/', 'tests/', 'public/')):
+        if not name.startswith(SHIPPED):                          # the shipped package only, as archive() packs it
             continue
         if Path(name).suffix not in ('.py', '.bat', '.json', '.js', '.html', '.css'):
             continue
