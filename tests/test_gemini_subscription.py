@@ -284,6 +284,11 @@ class GeminiBridge(unittest.TestCase):
             self.assertTrue(body.startswith("# This session\n"), body[:80])
             self.assertIn("`finish` call delivers your reply and ends the turn", body)
             self.assertLess(body.index("# This session"), body.index("Own persona"))
+            # 2026-11-15 18:10: the CLI loads MCP tools lazily and tells the model to read each schema from a file it
+            # cannot reach; the definition carries the catalogue, with each tool's arguments.
+            self.assertIn("## read_memory\nRead core memory\n  - section: string, optional", body)
+            self.assertLess(body.index("# Your tools"), body.index("Own persona"))
+            self.assertEqual(captured["env"]["AGY_CLI_DISABLE_AUTO_UPDATE"], "true")   # no updater child, no console flash
             self.assertEqual(messages[1]["content"][0]["id"], messages[2]["content"][0]["tool_use_id"])
             self.assertEqual(messages[2]["content"][0]["content"], "Completed read_memory:goals")
             self.assertEqual(agent.save_conversation.call_count, 2)

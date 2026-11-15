@@ -69,6 +69,10 @@ def gemini_subscription_env():
         GOOGLE_GENAI_USE_VERTEXAI='',
         USERPROFILE=home,
         HOME=home,
+        # The CLI spawns a background updater on every run; under CREATE_NO_WINDOW that child gets a console of its
+        # own, which is the window that flashed on Alex's screen at every message (2026-11-15). The value must be
+        # the word true: 1 and yes are ignored (checked against the CLI's own log).
+        AGY_CLI_DISABLE_AUTO_UPDATE='true',
     )
 
 
@@ -197,7 +201,31 @@ def cleanup_agy_conversation(conversation_id):
                 pass
 
 
-def _write_session_files(session_dir, system_prompt, port=None, secret='', tools=('finish',), enable_mcp=True, schema=None):
+def tool_catalogue(mcp_tools):
+    """The agent's tools as the session definition states them. The CLI loads MCP tools lazily: the model gets the
+    names only and is told to read each tool's schema from a file in the CLI's app folder, which it has no tool to
+    read (2026-11-15 18:10: Cato's first two calls of the turn were read_file on those paths, refused by the boundary,
+    and it never found out what delegate or background_task take). The other routes declare the tools natively; here
+    the definition carries them."""
+    lines = ['# Your tools', 'Call each through call_mcp_tool on server "agent" with these arguments; there is no schema file to read.', '']
+    for tool in mcp_tools:
+        schema = tool.get('inputSchema') or {}
+        required = set(schema.get('required') or [])
+        args = []
+        for name, spec in (schema.get('properties') or {}).items():
+            kind = spec.get('type') or ('one of ' + ', '.join(map(str, spec.get('enum', []))) if spec.get('enum') else 'value')
+            if spec.get('enum') and spec.get('type'):
+                kind += ' (' + ', '.join(map(str, spec['enum'])) + ')'
+            note = (spec.get('description') or '').strip()
+            args.append(f'  - {name}: {kind}{"" if name in required else ", optional"}{": " + note if note else ""}')
+        lines.append(f'## {tool["name"]}')
+        lines.append((tool.get('description') or '').strip())
+        lines.extend(args or ['  (no arguments)'])
+        lines.append('')
+    return '\n'.join(lines) + '\n'
+
+
+def _write_session_files(session_dir, system_prompt, port=None, secret='', tools=('finish',), enable_mcp=True, schema=None, catalogue=''):
     # Write a minimal valid git repository stop so agy's go-git never walks up into parent folders.
     git_dir = session_dir / '.git'
     git_dir.mkdir(parents=True, exist_ok=True)
@@ -232,7 +260,7 @@ def _write_session_files(session_dir, system_prompt, port=None, secret='', tools
         + (tool_lines + '\n' if tools else '')
         + '---\n'
     )
-    (agent_dir / 'agent.md').write_text(frontmatter + SESSION_CONTRACT + system_prompt, encoding='utf-8')
+    (agent_dir / 'agent.md').write_text(frontmatter + SESSION_CONTRACT + catalogue + system_prompt, encoding='utf-8')
     settings_file = session_dir / 'settings.json'
     settings_file.write_text(json.dumps({
         'modelProvider': '',
@@ -482,6 +510,7 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
         tools=('finish',),
         enable_mcp=True,
         schema=reply_envelope.SCHEMA,
+        catalogue=tool_catalogue(mcp_tools),
     )
 
     usage_id = agent._inbox.record_event('response', model, 'subscription', 'gemini-cli', role='sdk_total', partial=True)
