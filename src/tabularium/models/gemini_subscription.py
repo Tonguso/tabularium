@@ -8,6 +8,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -21,10 +22,25 @@ from tabularium.core.wire_budget import (
 )
 from tabularium.models.provider_routing import Unavailable
 
+AGY_HOME = _home() / 'logs' / 'agy_home'
+# The Antigravity CLI is a coding-agent harness: around the agent definition it puts its own instructions, among them a
+# `finish` tool described as "only call this once you are confident the task is complete and correct", task management,
+# artifacts and a workspace. Under that framing the model treated the owner's message as a task to complete before
+# speaking: sixty tool calls, no reply, the turn ended on the round limit (2026-11-15 17:41). The agent definition
+# therefore opens by stating what this session is, in the harness's own terms.
+SESSION_CONTRACT = (
+    "# This session\n"
+    "This is one turn of a running chat with the owner, not a coding task. The `finish` call delivers your reply and "
+    "ends the turn: call it as soon as you have the reply this turn owes, which is an answer, a question, or the note "
+    "that the work has been handed on. Long work does not happen in this session: it goes to `background_task` or "
+    "`delegate` through the MCP server \"agent\", and this turn replies that it has. The harness's own workspace, "
+    "artifacts, messaging and task-management features are not used here; the MCP tools on server \"agent\" are the "
+    "only tools, and the reply is the JSON object the schema describes.\n\n"
+)
 GEMINI_SIGN_IN_REASON = 'Gemini subscription sign-in expired'
 GEMINI_AUTH_FAILURE_TEXT = (
-    'authentication required', 'not logged in', 'not authenticated', 'login required',
-    'unauthenticated', 'invalid_grant', 'token has been expired or revoked', 're-authenticate',
+    'authentication required', 'not logged in', 'not logged into antigravity', 'not authenticated',
+    'login required', 'unauthenticated', 'invalid_grant', 'token has been expired or revoked', 're-authenticate',
 )
 
 
@@ -41,8 +57,19 @@ def find_gemini_cli():
 
 
 def gemini_subscription_env():
-    # Strip API/Vertex variables so agy never bills a key instead of the Google subscription.
-    return dict(os.environ, GEMINI_API_KEY='', GOOGLE_API_KEY='', GOOGLE_GENAI_USE_VERTEXAI='')
+    # Strip API/Vertex variables so agy never bills a key, and isolate USERPROFILE/HOME under logs/agy_home so
+    # host desktop customizations (~/.gemini/config/skills.json, rules, plugins) never leak into agent prompts
+    # and transient CLI SQLite transcripts stay inside the installation. Windows keyring auth works unchanged.
+    AGY_HOME.mkdir(parents=True, exist_ok=True)
+    home = str(AGY_HOME)
+    return dict(
+        os.environ,
+        GEMINI_API_KEY='',
+        GOOGLE_API_KEY='',
+        GOOGLE_GENAI_USE_VERTEXAI='',
+        USERPROFILE=home,
+        HOME=home,
+    )
 
 
 def gemini_auth_status():
@@ -70,7 +97,7 @@ class GeminiStartLock:
 
     PATH = _home() / 'logs' / 'gemini_cli_start.lock'
 
-    def __init__(self, timeout=180):
+    def __init__(self, timeout=45):
         self.timeout, self.handle, self.held = timeout, None, False
 
     def acquire(self):
@@ -112,16 +139,70 @@ class GeminiStartLock:
         self.release()
 
 
+def _kill_process_tree(proc):
+    """Terminate agy and any child language-server process still holding its pipes open."""
+    if proc is None or proc.poll() is not None:
+        return
+    if os.name == 'nt' and getattr(proc, 'pid', None):
+        try:
+            subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                capture_output=True, timeout=5,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+            proc.wait(timeout=2)
+            return
+        except Exception:
+            pass
+    try:
+        proc.terminate()
+        proc.wait(timeout=3)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _read_agy_log(log_file, limit=262_144):
+    try:
+        return Path(log_file).read_text(encoding='utf-8', errors='replace')[:limit]
+    except OSError:
+        return ''
+
+
+def _extract_log_conversation_id(log_text):
+    match = re.search(r'Created conversation ([0-9a-fA-F-]{36})', log_text or '')
+    return match.group(1) if match else None
+
+
 def cleanup_agy_conversation(conversation_id):
-    """Remove agy's transient headless transcript folder so agent histories stay inside the agent home."""
-    if isinstance(conversation_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{8,80}', conversation_id):
-        brain = Path.home() / '.gemini' / 'antigravity-cli' / 'brain' / conversation_id
+    """Remove agy's transient headless transcript files so agent histories stay inside the agent home."""
+    if not (isinstance(conversation_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{8,80}', conversation_id)):
+        return
+    for root in {AGY_HOME, Path.home()}:
+        cli_dir = root / '.gemini' / 'antigravity-cli'
+        brain = cli_dir / 'brain' / conversation_id
         if brain.exists():
             shutil.rmtree(brain, ignore_errors=True)
+        for extra in (
+            cli_dir / 'conversations' / f'{conversation_id}.db',
+            cli_dir / 'conversations' / f'{conversation_id}.db-shm',
+            cli_dir / 'conversations' / f'{conversation_id}.db-wal',
+            cli_dir / 'presence' / f'{conversation_id}.lock',
+        ):
+            try:
+                extra.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def _write_session_files(session_dir, system_prompt, port=None, secret='', tools=('finish',), enable_mcp=True, schema=None):
-    (session_dir / '.git').mkdir(parents=True, exist_ok=True)      # stop agy walking up into repo rules
+    # Write a minimal valid git repository stop so agy's go-git never walks up into parent folders.
+    git_dir = session_dir / '.git'
+    git_dir.mkdir(parents=True, exist_ok=True)
+    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+    (git_dir / 'config').write_text('[core]\n\trepositoryformatversion = 0\n', encoding='utf-8')
     agents_root = session_dir / '.agents'
     agents_root.mkdir(parents=True, exist_ok=True)
     if enable_mcp and port:
@@ -143,13 +224,15 @@ def _write_session_files(session_dir, system_prompt, port=None, secret='', tools
         '---\n'
         'name: tabularium\n'
         'description: Tabularium session agent\n'
-        f'enableMcpTools: {"true" if enable_mcp else "false"}\n'
+        'inheritCustomizations: false\n'
+        + ('inheritMcp: true\n' if enable_mcp else '')
+        + f'enableMcpTools: {"true" if enable_mcp else "false"}\n'
         'commandExecutionPolicy: "off"\n'
         f'tools:{"" if tools else tool_lines}\n'
         + (tool_lines + '\n' if tools else '')
         + '---\n'
     )
-    (agent_dir / 'agent.md').write_text(frontmatter + system_prompt, encoding='utf-8')
+    (agent_dir / 'agent.md').write_text(frontmatter + SESSION_CONTRACT + system_prompt, encoding='utf-8')
     settings_file = session_dir / 'settings.json'
     settings_file.write_text(json.dumps({
         'modelProvider': '',
@@ -157,6 +240,7 @@ def _write_session_files(session_dir, system_prompt, port=None, secret='', tools
         'showTips': False,
         'showFeedbackSurvey': False,
         'historySize': 0,
+        'useG1Credits': False,
     }), encoding='utf-8')
     schema_file = None
     if schema is not None:
@@ -387,7 +471,9 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
 
     server = _LoopbackMCPServer(('127.0.0.1', 0), MCPHandler)
     threading.Thread(target=server.serve_forever, daemon=True, name='gemini-mcp-bridge').start()
-    session_dir = Path(agent.RUNTIME_DIR) / 'task_state' / 'agy_session'
+    temp_session = tempfile.TemporaryDirectory(prefix='tabularium_agy_', ignore_cleanup_errors=True)
+    session_dir = Path(temp_session.name)
+    log_file = session_dir / 'agy.log'
     settings_file, schema_file = _write_session_files(
         session_dir,
         agent.SYSTEM_PROMPT + f'\n[Active model: {model}, Gemini subscription.]',
@@ -442,11 +528,13 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
     final = None
     raised = None
     stderr_text = ''
+    log_text = ''
     try:
         proc = subprocess.Popen(
             [cli, '--input-format', 'stream-json', '--output-format', 'stream-json',
              '--model', model, '--agent', 'tabularium', '--json-schema', str(schema_file),
-             '--settings', str(settings_file), '--disable-slash-commands', '--dangerously-skip-permissions'],
+             '--settings', str(settings_file), '--log-file', str(log_file),
+             '--disable-slash-commands', '--dangerously-skip-permissions'],
             cwd=str(session_dir), env=gemini_subscription_env(),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding='utf-8', errors='replace',
@@ -515,6 +603,8 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
                 activity['at'] = time.time()
                 ev_type = payload.get('event')
                 if ev_type == 'init':
+                    if start_lock.held:
+                        start_lock.release()
                     conversation_id = payload.get('conversation_id') or conversation_id
                 elif ev_type == 'step_update':
                     if start_lock.held:
@@ -544,14 +634,7 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
                 done.set()
         if proc is not None:
             if proc.poll() is None:
-                try:
-                    proc.terminate()
-                    proc.wait(timeout=3)
-                except Exception:
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
+                _kill_process_tree(proc)
             else:
                 try:
                     proc.wait(timeout=2)
@@ -567,23 +650,27 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
             server.server_close()
         except Exception:
             pass
+        log_text = _read_agy_log(log_file)
+        conversation_id = conversation_id or _extract_log_conversation_id(log_text)
         record_usage(final.get('usage') if isinstance(final, dict) else None)
         cleanup_agy_conversation(conversation_id)
+        temp_session.cleanup()
 
     if raised is not None:
         if isinstance(raised, SessionLimit) and uncertain:
             raise RuntimeError('Session limit with an unsettled tool; inspect receipts.') from raised
         raise raised
+    combined_err = (stderr_text + '\n' + log_text[-4000:]).strip()
     if final is None:
         if not uncertain:
-            classified = _classify_gemini_failure(stderr_text)
+            classified = _classify_gemini_failure(combined_err)
             if classified is not None:
                 raise classified
         raise RuntimeError('Gemini subscription ended without a completion record; no automatic replay.')
     if final.get('status') != 'SUCCESS':
         if uncertain:
             raise RuntimeError('Gemini stopped with an uncertain tool outcome; inspect saved receipts.')
-        detail = (final.get('error') or '') + ' ' + stderr_text
+        detail = (final.get('error') or '') + ' ' + combined_err
         classified = _classify_gemini_failure(detail)
         if classified is not None:
             raise classified

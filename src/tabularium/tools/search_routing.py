@@ -157,43 +157,90 @@ def _claude_subscription(agent, query, model):
 
 
 def _gemini_subscription(agent, query, model):
+    import queue
     import subprocess
+    import tempfile
+    import threading
     from tabularium.models import subscription_runtime as sr
-    from tabularium.models.gemini_subscription import _write_session_files, cleanup_agy_conversation
+    from tabularium.models.gemini_subscription import (
+        _extract_log_conversation_id, _kill_process_tree, _read_agy_log,
+        _write_session_files, cleanup_agy_conversation,
+    )
     cli = sr.find_gemini_cli()
     if not cli:
         raise RuntimeError("Antigravity CLI is not installed")
-    session_dir = Path(agent.RUNTIME_DIR) / "task_state" / "agy_search"
+    temp_session = tempfile.TemporaryDirectory(prefix="tabularium_agy_search_", ignore_cleanup_errors=True)
+    session_dir = Path(temp_session.name)
+    log_file = session_dir / "agy.log"
     settings_file, _ = _write_session_files(
         session_dir, INSTRUCTIONS, tools=("search_web",), enable_mcp=False)
     used = False
     final = None
     conv_id = None
     stderr_text = ""
+    log_text = ""
+    events = queue.Queue()
     lock = sr.GeminiStartLock().acquire()
     proc = None
     try:
         proc = subprocess.Popen(
             [cli, "--input-format", "stream-json", "--output-format", "stream-json",
              "--model", model, "--agent", "tabularium", "--settings", str(settings_file),
+             "--log-file", str(log_file), "--print-timeout", "90s",
              "--disable-slash-commands", "--dangerously-skip-permissions"],
             cwd=str(session_dir), env=sr.gemini_subscription_env(),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace",
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        proc.stdin.write(json.dumps({"event": "user", "message": {"content": f"Search the web for: {query}"}}, ensure_ascii=False) + "\n")
-        proc.stdin.flush()
-        proc.stdin.close()
-        for raw in iter(proc.stdout.readline, ""):
-            line = raw.strip()
-            if not line:
-                continue
+
+        def pump_stdout():
             try:
-                ev = json.loads(line)
-            except ValueError:
+                for raw in iter(proc.stdout.readline, ""):
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    try:
+                        events.put(("stream", json.loads(line)))
+                    except ValueError:
+                        continue
+            finally:
+                events.put(("eof", None))
+
+        def pump_stderr():
+            nonlocal stderr_text
+            try:
+                stderr_text = proc.stderr.read() or ""
+            except Exception:
+                pass
+
+        def feed_stdin():
+            try:
+                proc.stdin.write(json.dumps({"event": "user", "message": {"content": f"Search the web for: {query}"}}, ensure_ascii=False) + "\n")
+                proc.stdin.flush()
+                proc.stdin.close()
+            except (OSError, ValueError):
+                pass
+
+        threading.Thread(target=pump_stdout, daemon=True, name="gemini-search-stdout").start()
+        stderr_thread = threading.Thread(target=pump_stderr, daemon=True, name="gemini-search-stderr")
+        stderr_thread.start()
+        threading.Thread(target=feed_stdin, daemon=True, name="gemini-search-stdin").start()
+
+        deadline = time.time() + 95
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise RuntimeError("Gemini search timed out")
+            try:
+                kind, ev = events.get(timeout=min(1.0, remaining))
+            except queue.Empty:
                 continue
+            if kind == "eof":
+                break
             if ev.get("event") == "init":
+                if lock.held:
+                    lock.release()
                 conv_id = ev.get("conversation_id") or conv_id
             elif ev.get("event") == "step_update":
                 if lock.held:
@@ -207,19 +254,27 @@ def _gemini_subscription(agent, query, model):
                     lock.release()
                 final = ev.get("result") or {}
                 conv_id = final.get("conversation_id") or conv_id
-        stderr_text = proc.stderr.read() or ""
-        proc.wait(timeout=10)
+        stderr_thread.join(timeout=2)
     finally:
         lock.release()
         if proc is not None:
+            if proc.poll() is None:
+                _kill_process_tree(proc)
+            else:
+                try:
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
             for stream in (proc.stdout, proc.stderr):
                 try:
                     stream.close()
                 except Exception:
                     pass
-        cleanup_agy_conversation(conv_id)
+        log_text = _read_agy_log(log_file)
+        cleanup_agy_conversation(conv_id or _extract_log_conversation_id(log_text))
+        temp_session.cleanup()
     if not isinstance(final, dict) or final.get("status") != "SUCCESS":
-        detail = ((final or {}).get("error") or "") + " " + stderr_text
+        detail = ((final or {}).get("error") or "") + " " + stderr_text + " " + log_text[-4000:]
         if any(x in detail.lower() for x in sr.GEMINI_AUTH_FAILURE_TEXT):
             raise RuntimeError(sr.GEMINI_SIGN_IN_REASON)
         raise RuntimeError("Gemini search did not finish: " + str((final or {}).get("error") or "no result")[:160])

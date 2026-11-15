@@ -164,6 +164,18 @@ class GeminiRouting(unittest.TestCase):
 
 
 class GeminiBridge(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(temp.cleanup)
+        self._lock_dir = Path(temp.name)
+        for target, val in (
+            ("tabularium.models.gemini_subscription.GeminiStartLock.PATH", self._lock_dir / "gemini_start.lock"),
+            ("tabularium.models.gemini_subscription.AGY_HOME", self._lock_dir / "agy_home"),
+        ):
+            p = patch(target, val)
+            p.start()
+            self.addCleanup(p.stop)
+
     def _make_agent(self, folder):
         inbox = DurableInbox(folder, lambda *args: None)
         return NS(
@@ -266,6 +278,12 @@ class GeminiBridge(unittest.TestCase):
             self.assertIn("Completed read_memory:goals", captured["call_res"]["content"][0]["text"])
             self.assertIn("enableMcpTools: true", captured["agent_md"])
             self.assertIn("- finish", captured["agent_md"])
+            # 2026-11-15 17:41: under the harness's "finish once the task is complete" framing the model worked sixty
+            # tool rounds without replying. The definition opens with the session contract, before the persona.
+            body = captured["agent_md"].split("---\n", 2)[2]
+            self.assertTrue(body.startswith("# This session\n"), body[:80])
+            self.assertIn("`finish` call delivers your reply and ends the turn", body)
+            self.assertLess(body.index("# This session"), body.index("Own persona"))
             self.assertEqual(messages[1]["content"][0]["id"], messages[2]["content"][0]["tool_use_id"])
             self.assertEqual(messages[2]["content"][0]["content"], "Completed read_memory:goals")
             self.assertEqual(agent.save_conversation.call_count, 2)
@@ -328,8 +346,145 @@ class GeminiBridge(unittest.TestCase):
             self.assertFalse(worker.is_alive(), "the route deadlocked on its own pipes")
             self.assertEqual(out.get("reply"), "All done")
 
+    def test_concurrent_turns_use_distinct_git_isolated_temp_sessions_and_isolated_home(self):
+        from tabularium.models import gemini_subscription as gs
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            agy_home = folder / "isolated_agy_home"
+            agent = self._make_agent(folder)
+            barrier = threading.Barrier(2, timeout=10)
+            seen = []
+            seen_lock = threading.Lock()
+            envelope = {
+                "reply": "OK", "modality": "text", "work": "none", "task_outcome": "none",
+                "question": "", "decision_task_id": 0, "decision_id": 0, "status_claims": [],
+                "correction": [], "not_correction": [], "answers": [], "request": "done",
+            }
+
+            def concurrent_script(cmd, kwargs, stdin_text):
+                cwd = Path(kwargs["cwd"])
+                def stream():
+                    cid = f"conv-{threading.get_ident()}"
+                    yield {"event": "init", "conversation_id": cid}
+                    barrier.wait()
+                    head = (cwd / ".git" / "HEAD").read_text(encoding="utf-8") if (cwd / ".git" / "HEAD").is_file() else ""
+                    settings = json.loads((cwd / "settings.json").read_text(encoding="utf-8"))
+                    mcp_cfg = json.loads((cwd / ".agents" / "mcp_config.json").read_text(encoding="utf-8"))
+                    with seen_lock:
+                        seen.append({
+                            "cwd": cwd,
+                            "head": head,
+                            "settings": settings,
+                            "port": mcp_cfg["mcpServers"]["agent"]["serverUrl"],
+                            "env": kwargs["env"],
+                        })
+                    yield {"event": "result", "result": {
+                        "conversation_id": cid, "status": "SUCCESS",
+                        "response": json.dumps(envelope), "structured_output": envelope,
+                        "usage": {"input_tokens": 10, "cache_read_tokens": 0, "output_tokens": 2},
+                    }}
+                return (stream(), 0, "")
+
+            with patch.object(bridge, "find_gemini_cli", return_value="agy.exe"), \
+                 patch.object(gs, "AGY_HOME", agy_home, create=True), \
+                 patch("subprocess.Popen", side_effect=_fake_agy_popen(concurrent_script)):
+                errs = []
+                def call_one(chat_id):
+                    try:
+                        bridge.run_gemini(agent, [{"role": "user", "content": "Hi"}], chat_id, "gemini-4-carbon-medium")
+                    except BaseException as exc:
+                        errs.append(exc)
+                t1 = threading.Thread(target=call_one, args=(1,), daemon=True)
+                t2 = threading.Thread(target=call_one, args=(2,), daemon=True)
+                t1.start(); t2.start()
+                t1.join(timeout=15); t2.join(timeout=15)
+                self.assertEqual(errs, [])
+
+            self.assertEqual(len(seen), 2)
+            self.assertNotEqual(seen[0]["cwd"], seen[1]["cwd"])
+            self.assertNotEqual(seen[0]["port"], seen[1]["port"])
+            for item in seen:
+                self.assertFalse(item["cwd"].is_relative_to(folder))
+                self.assertFalse(item["cwd"].exists(), "temp session dir must be removed on exit")
+                self.assertIn("ref: refs/heads/", item["head"])
+                self.assertIs(item["settings"].get("useG1Credits"), False)
+                self.assertEqual(Path(item["env"]["USERPROFILE"]), agy_home)
+                self.assertEqual(Path(item["env"]["HOME"]), agy_home)
+
+    def test_pre_init_log_only_failure_classifies_auth_and_cleans_up_conversation_files(self):
+        from tabularium.models import gemini_subscription as gs
+        cid = "11111111-2222-3333-4444-555555555555"
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            agy_home = folder / "agy_home"
+            cli_root = agy_home / ".gemini" / "antigravity-cli"
+            brain_dir = cli_root / "brain" / cid
+            conv_db = cli_root / "conversations" / f"{cid}.db"
+            lock_file = cli_root / "presence" / f"{cid}.lock"
+            agent = self._make_agent(folder)
+
+            def crash_before_init(cmd, kwargs, stdin_text):
+                self.assertIn("--log-file", cmd)
+                log_path = Path(cmd[cmd.index("--log-file") + 1])
+                brain_dir.mkdir(parents=True, exist_ok=True)
+                (brain_dir / "transcript.jsonl").write_text("{}", encoding="utf-8")
+                conv_db.parent.mkdir(parents=True, exist_ok=True)
+                conv_db.write_bytes(b"sqlite")
+                lock_file.parent.mkdir(parents=True, exist_ok=True)
+                lock_file.write_text("", encoding="utf-8")
+                log_path.write_text(
+                    f"I1115 16:16:17 manager.go:454] Created conversation {cid}\n"
+                    "E1115 16:16:17 auth.go:91] error getting token source: You are not logged into Antigravity.\n",
+                    encoding="utf-8",
+                )
+                return ([], 1, "")
+
+            with patch.object(bridge, "find_gemini_cli", return_value="agy.exe"), \
+                 patch.object(gs, "AGY_HOME", agy_home, create=True), \
+                 patch("subprocess.Popen", side_effect=_fake_agy_popen(crash_before_init)):
+                with self.assertRaises(routing.Unavailable) as ctx:
+                    bridge.run_gemini(agent, [{"role": "user", "content": "Hi"}], 1, "gemini-4-carbon-medium")
+                self.assertIn("sign-in", str(ctx.exception).lower())
+
+            self.assertFalse(brain_dir.exists())
+            self.assertFalse(conv_db.exists())
+            self.assertFalse(lock_file.exists())
+
+    def test_cleanup_kills_process_tree_when_cli_is_still_running(self):
+        from tabularium.models import gemini_subscription as gs
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self._make_agent(Path(tmp))
+            agent._abort_requested[1] = False
+
+            class HungProc:
+                pid = 999999
+                stdin = NS(write=lambda d: None, flush=lambda: None, close=lambda: None)
+                stdout = NS(readline=lambda: (_ for _ in ()).throw(RuntimeError("boom")), close=lambda: None)
+                stderr = NS(read=lambda: "", close=lambda: None)
+                def poll(self): return None
+                def wait(self, timeout=None): return 0
+
+            with patch.object(bridge, "find_gemini_cli", return_value="agy.exe"), \
+                 patch.object(gs, "AGY_HOME", Path(tmp) / "agy_home", create=True), \
+                 patch("subprocess.Popen", return_value=HungProc()), \
+                 patch.object(gs, "_kill_process_tree", create=True) as kill_tree:
+                with self.assertRaises(RuntimeError):
+                    bridge.run_gemini(agent, [{"role": "user", "content": "Hi"}], 1, "gemini-4-carbon-medium")
+                kill_tree.assert_called_once()
+
 
 class GeminiAllowanceAndSearch(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(temp.cleanup)
+        self._lock_dir = Path(temp.name)
+        for target, val in (
+            ("tabularium.models.gemini_subscription.GeminiStartLock.PATH", self._lock_dir / "gemini_start.lock"),
+            ("tabularium.models.gemini_subscription.AGY_HOME", self._lock_dir / "agy_home"),
+        ):
+            p = patch(target, val)
+            p.start()
+            self.addCleanup(p.stop)
     def test_gemini_usage_parses_windows_without_credentials(self):
         sample = {
             "status": "SUCCESS",
@@ -376,6 +531,57 @@ class GeminiAllowanceAndSearch(unittest.TestCase):
                  patch("subprocess.Popen", side_effect=_fake_agy_popen(with_tool)):
                 out = search_routing.PROVIDERS["gemini_subscription"](agent, "test query", "gemini-3.8-flash-high")
             self.assertIn("https://example.com", out)
+
+    def test_gemini_native_search_does_not_deadlock_on_pipes_and_cleans_up_temp_session(self):
+        import subprocess as sp, sys
+        from tabularium.models import gemini_subscription as gs
+        cid = "22222222-3333-4444-5555-666666666666"
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            agy_home = folder / "agy_home"
+            conv_db = agy_home / ".gemini" / "antigravity-cli" / "conversations" / f"{cid}.db"
+            conv_db.parent.mkdir(parents=True, exist_ok=True)
+            conv_db.write_bytes(b"sqlite")
+            agent = NS(AGENT_DIR=folder, RUNTIME_DIR=folder, _inbox=NS(record_event=Mock()))
+            fake = folder / "fake_search_agy.py"
+            fake.write_text(
+                "import json, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "if '--log-file' in args:\n"
+                f"    pathlib.Path(args[args.index('--log-file') + 1]).write_text('Created conversation {cid}\\n', encoding='utf-8')\n"
+                "sys.stderr.write('e' * 400_000); sys.stderr.flush()\n"
+                "line = sys.stdin.readline()\n"
+                "for ev in [\n"
+                "    {'event': 'step_update', 'step_update': {'state': 'DONE', 'step_type': 'tool', 'tool_name': 'search_web'}},\n"
+                "    {'event': 'result', 'result': {'status': 'SUCCESS', 'response': 'Found https://example.org', 'usage': {'input_tokens': 50, 'output_tokens': 10}}},\n"
+                "]:\n"
+                "    sys.stdout.write(json.dumps(ev) + '\\n'); sys.stdout.flush()\n",
+                encoding="utf-8",
+            )
+            real_popen = sp.Popen
+            seen_cwds = []
+
+            def launch(argv, **kw):
+                seen_cwds.append(Path(kw["cwd"]))
+                return real_popen([sys.executable, "-X", "utf8", str(fake)] + list(argv[1:]), **kw)
+
+            box = {}
+            def run():
+                with patch.object(bridge, "find_gemini_cli", return_value="agy.exe"), \
+                     patch.object(gs, "AGY_HOME", agy_home, create=True), \
+                     patch("subprocess.Popen", side_effect=launch):
+                    box["out"] = search_routing.PROVIDERS["gemini_subscription"](
+                        agent, "query " * 20_000, "gemini-3.8-flash-high")
+
+            worker = threading.Thread(target=run, daemon=True)
+            worker.start()
+            worker.join(timeout=20)
+            self.assertFalse(worker.is_alive(), "search_routing._gemini_subscription deadlocked on pipes")
+            self.assertIn("https://example.org", box.get("out", ""))
+            self.assertEqual(len(seen_cwds), 1)
+            self.assertFalse(seen_cwds[0].is_relative_to(folder))
+            self.assertFalse(seen_cwds[0].exists())
+            self.assertFalse(conv_db.exists())
 
 
 if __name__ == "__main__":
