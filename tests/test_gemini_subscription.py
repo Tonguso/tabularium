@@ -293,21 +293,40 @@ class GeminiBridge(unittest.TestCase):
                     bridge.run_gemini(agent, [{"role": "user", "content": "Hi"}], 1, "gemini-4-carbon-high")
                 self.assertTrue(ctx.exception.quota)
 
-    def test_a_cli_that_produces_no_event_is_skipped_within_the_start_window(self):
-        # 2026-11-15 16:16: agy opened a conversation and produced no step for ten minutes; the owner's message was lost
-        # when the supervisor killed the stalled agent. The route is given START_SECONDS to say anything at all.
+    def test_a_long_prompt_and_a_talkative_cli_do_not_deadlock_on_the_pipes(self):
+        # 2026-11-15 16:16: Cato's first Gemini turn wrote a 500 KB prompt into agy's stdin before anything read agy's
+        # stdout and stderr; agy filled its output pipe, both sides blocked for good, the supervisor killed the agent
+        # and the owner's message was lost. Real pipes and a real child here: the readers run before the prompt is fed.
+        import subprocess as sp, sys
         with tempfile.TemporaryDirectory() as tmp:
             agent = self._make_agent(Path(tmp))
-            def silent(cmd, kwargs, stdin_text):
-                time.sleep(1.5)
-                return ([], 0, "")
+            envelope = {"reply": "All done", "modality": "text", "work": "none", "task_outcome": "none", "question": "",
+                        "decision_task_id": 0, "decision_id": 0, "status_claims": [], "correction": [], "not_correction": [],
+                        "answers": [], "request": "done"}
+            fake = Path(tmp) / "fake_agy.py"
+            fake.write_text(
+                "import json, sys\n"
+                "sys.stderr.write('x' * 400_000); sys.stderr.flush()          # more than any pipe buffer, before reading stdin\n"
+                "line = sys.stdin.readline()\n"
+                f"env = {json.dumps(envelope)}\n"
+                "for ev in [{'event': 'init', 'conversation_id': 'c1'},\n"
+                "           {'event': 'step_update', 'step_update': {'state': 'DONE', 'step_type': 'agent_response',\n"
+                "            'usage': {'input_tokens': 10, 'cache_read_tokens': 0, 'output_tokens': 5, 'total_tokens': 15}}},\n"
+                "           {'event': 'result', 'result': {'conversation_id': 'c1', 'status': 'SUCCESS', 'response': json.dumps(env),\n"
+                "            'structured_output': env, 'usage': {'input_tokens': 10, 'cache_read_tokens': 0, 'output_tokens': 5, 'total_tokens': 15}}}]:\n"
+                "    sys.stdout.write(json.dumps(ev) + '\\n'); sys.stdout.flush()\n", encoding="utf-8")
+            real_popen = sp.Popen
+            messages = [{"role": "user", "content": "filler " * 80_000}]       # a 500 KB prompt, like a day's transcript
+            out = {}
 
-            with patch.object(bridge, "find_gemini_cli", return_value="agy.exe"), \
-                 patch("tabularium.models.gemini_subscription.START_SECONDS", 0.3), \
-                 patch("subprocess.Popen", side_effect=_fake_agy_popen(silent)):
-                with self.assertRaises(routing.Unavailable) as ctx:
-                    bridge.run_gemini(agent, [{"role": "user", "content": "Hi"}], 1, "gemini-4-carbon-high")
-                self.assertIn("no event", str(ctx.exception))                 # skipped before the CLI ever spoke
+            def run():
+                with patch.object(bridge, "find_gemini_cli", return_value="agy.exe"), \
+                     patch("subprocess.Popen", side_effect=lambda argv, **kw: real_popen([sys.executable, "-X", "utf8", str(fake)] + list(argv[1:]), **kw)):
+                    out["reply"] = bridge.run_gemini(agent, messages, 1, "gemini-4-carbon-high")
+
+            worker = threading.Thread(target=run, daemon=True); worker.start(); worker.join(timeout=60)
+            self.assertFalse(worker.is_alive(), "the route deadlocked on its own pipes")
+            self.assertEqual(out.get("reply"), "All done")
 
 
 class GeminiAllowanceAndSearch(unittest.TestCase):

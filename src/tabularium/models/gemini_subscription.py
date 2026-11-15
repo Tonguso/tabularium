@@ -21,7 +21,6 @@ from tabularium.core.wire_budget import (
 )
 from tabularium.models.provider_routing import Unavailable
 
-START_SECONDS = 60          # no stream event at all for this long after launch: the route never started (2026-11-15 16:16)
 GEMINI_SIGN_IN_REASON = 'Gemini subscription sign-in expired'
 GEMINI_AUTH_FAILURE_TEXT = (
     'authentication required', 'not logged in', 'not authenticated', 'login required',
@@ -453,9 +452,16 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
             text=True, encoding='utf-8', errors='replace',
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
         )
-        proc.stdin.write(json.dumps({'event': 'user', 'message': {'content': prompt_text}}, ensure_ascii=False) + '\n')
-        proc.stdin.flush()
-        proc.stdin.close()
+        def feed_stdin():
+            # Written on its own thread, after the readers are running. Written first on the turn thread, the whole
+            # prompt sat in a pipe nobody drained while agy filled its own output pipe: both blocked for good, the turn
+            # never started and the supervisor killed the agent (2026-11-15 16:16, Cato's first Gemini turn).
+            try:
+                proc.stdin.write(json.dumps({'event': 'user', 'message': {'content': prompt_text}}, ensure_ascii=False) + '\n')
+                proc.stdin.flush()
+                proc.stdin.close()
+            except (OSError, ValueError):
+                pass                                            # agy exited first; its stderr says why
 
         def pump_stdout():
             try:
@@ -482,20 +488,15 @@ def run_gemini(agent, messages, chat, model, reminded=False, retry=None):
         threading.Thread(target=pump_stdout, daemon=True, name='gemini-stdout').start()
         stderr_thread = threading.Thread(target=pump_stderr, daemon=True, name='gemini-stderr')
         stderr_thread.start()
+        threading.Thread(target=feed_stdin, daemon=True, name='gemini-stdin').start()
 
-        launched, started = time.time(), False
         while True:
             try:
                 kind, payload = events.get(timeout=1.0)
             except queue.Empty:
-                if not started and time.time() - launched > START_SECONDS:
-                    # 2026-11-15 16:16: the CLI opened a conversation and produced no step for ten minutes; the turn
-                    # waited out the silence limit, the supervisor killed the agent and the owner's message was lost.
-                    raise Unavailable(f'Gemini produced no event within {START_SECONDS} seconds of launch; route skipped', 60)
                 if _sr.stream_silent(activity, time.time()):
                     raise Unavailable(f'Gemini stream silent for {_sr.SILENCE_SECONDS // 60} minutes; connection presumed hung', 60)
                 continue
-            started = True
             if kind == 'call':
                 fn, args, done, box = payload
                 try:
