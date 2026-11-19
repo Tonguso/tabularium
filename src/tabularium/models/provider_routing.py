@@ -150,8 +150,24 @@ def failure(exc):
         return Unavailable('Provider rate or usage limit reached', 300)
     if status in (500, 502, 503, 529):
         return Unavailable('Provider is temporarily unavailable', 120)
-    # Do not turn policy, bad models, context errors, timeouts or unknown tool outcomes into billing switches.
+    # Do not turn policy, bad models, context errors or unknown tool outcomes into billing switches.
     return None
+
+
+def timed_out_before_acting(exc, agent):
+    """A provider timeout that cannot have had an effect, so the next route may answer it.
+
+    Timeouts stay off the hand-off list above because a request that timed out may still have run and
+    executed tools, and repeating those on another route is not safe. When this turn has executed no tool
+    there is nothing to repeat (2026-11-19: Alex's 20:40 questions died on a Claude Code timeout at step
+    zero and the whole turn stopped, though three further routes were configured)."""
+    if not any(word in str(exc).lower() for word in ('timed out', 'timeout')):
+        return None
+    if getattr(getattr(agent, '_inbox', None), 'local', None) is None:
+        return None
+    if getattr(agent._inbox.local, 'tool_ids', None):
+        return None
+    return Unavailable('Provider timed out before any tool ran', 60)
 
 
 def run(agent, messages, chat):
@@ -192,7 +208,7 @@ def run(agent, messages, chat):
             atomic_json(cooldown_path, {})
             return result
         except Exception as exc:
-            rejected = failure(exc)
+            rejected = failure(exc) or timed_out_before_acting(exc, agent)
             if rejected is None:
                 atomic_json(state_path, {'route': route, 'status': 'stopped', 'reason': 'Error requires attention; no automatic replay', 'updated': time.time()})
                 raise

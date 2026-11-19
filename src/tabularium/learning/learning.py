@@ -514,7 +514,11 @@ def approve(root, chat, key, source_id, quote, skip_trial=False, reason=''):
     return out
 
 
-GO = re.compile(r"^Skill edit (lesson-\w+): (apply it, no trial needed|apply it|drop it|draft a case first)\.?\s*$")
+VERDICTS = ('apply it, no trial needed', 'apply it', 'drop it', 'draft a case first')
+# Alex's verdict typed by hand in Telegram. The dashboard's buttons do not come through here: they carry key
+# and verdict as fields on the message (2026-11-19), so a note he adds, or a second click folded into the same
+# bubble, cannot change what he decided.
+GO = re.compile(r"^Skill edit (lesson-\w+): (" + "|".join(VERDICTS) + r")\.?\s*$")
 
 
 def settle_go(root, chat, key, verdict, source_id, quote, store, system_prompt=''):

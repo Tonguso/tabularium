@@ -49,10 +49,10 @@ class FollowUps(unittest.TestCase):
         self.assertEqual(len(fresh), 1)
         self.assertTrue(fresh[0]["content"].endswith("随着结果的变化再调整"), fresh)
         self.assertIs(messages[-1], fresh[0]); self.assertIs(api[-1], fresh[0])
-        self.assertEqual(status(self.inbox, 2), "done")                       # never run as its own task
+        self.assertEqual(status(self.inbox, 2), "running")                    # claimed by this turn; it settles with it (2026-11-19)
         self.assertEqual(self.agent._background_boundary(messages, api, CHAT), [])
         saved = json.loads(self.agent._conversation_path(CHAT).read_text(encoding="utf-8"))
-        self.assertTrue(saved[-1]["content"].endswith("随着结果的变化再调整"))   # saved before the job was marked done
+        self.assertTrue(saved[-1]["content"].endswith("随着结果的变化再调整"))   # saved before the job is settled
 
     def test_only_messages_after_the_running_job_and_only_text(self):
         insert(self.inbox, 5, "earlier, still pending", created=time.time() - 100)
@@ -60,7 +60,7 @@ class FollowUps(unittest.TestCase):
         self.inbox.local.job = 6
         fresh = self.agent._background_boundary([], [], CHAT)
         self.assertEqual([e["content"][-5:] for e in fresh], ["later"])
-        self.assertEqual((status(self.inbox, 5), status(self.inbox, 7)), ("pending", "done"))
+        self.assertEqual((status(self.inbox, 5), status(self.inbox, 7)), ("pending", "running"))
 
     def test_bubbles_typed_within_three_seconds_are_one_message(self):
         from telebot.types import Message

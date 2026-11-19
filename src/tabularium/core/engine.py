@@ -24,8 +24,8 @@ from tabularium.memory.memory_context import read_view, WorkingMemory, current_c
 from tabularium.learning.learning import record as record_lesson
 from tabularium.core import turn_loop
 from tabularium.core.wire_budget import MAX_IMAGES, bound_result
-from tabularium.core.outcome import Refused, Failed
-from tabularium.core.context_window import archive_preview, prepare_context, clear_cache_markers, wire_size, REQUEST_BYTES
+from tabularium.core.outcome import Refused, Failed, AlreadyShown
+from tabularium.core.context_window import ARCHIVE_MARKER, archive_preview, prepare_context, clear_cache_markers, wire_size, REQUEST_BYTES
 from tabularium.records.background_runtime import TaskStopped
 from tabularium.memory.memory_store import memory_lock, atomic_text, append_unique, reconcile, record_fact
 from tabularium.records.action_evidence import verify_artifact
@@ -296,6 +296,10 @@ class AgentRuntime(SharedHandlers):
     TOOL_BUDGET_WARN_AT = 42
     OVERLOAD_FALLBACK_MODELS = ["claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5"]
     WORKER_REQUEST_BYTES = 160_000
+    # Inside a turn the request only grows, so its prefix stays cached; past this ceiling it is cut once to 60% of it
+    # and grows again from there. Well above working size (task 232's largest request was about 540 KB), far below
+    # where a provider refuses (2026-11-19: from 2026-11-15 nothing bounded a turn between its start and that refusal).
+    STEP_CEILING_BYTES = 600_000
     ALWAYS_SKILLS: tuple = ()
     MAX_IMAGES_PER_TURN = MAX_IMAGES
     REPLY_QUOTE_CHARS = 400
@@ -338,6 +342,7 @@ class AgentRuntime(SharedHandlers):
         self._completion_feedback = {}
         self._truncations = {}
         self._core_versions = {}
+        self._episode_reads = {}
 
     def drain_flag(self):
         return self.AGENT_DIR / "task_state" / "drain"
@@ -1570,6 +1575,10 @@ class AgentRuntime(SharedHandlers):
         try:
             result = self._execute_tool_unguarded(name, inputs, chat_id)
             result = bound_result(result, self.AGENT_DIR / "context_archive" / "results")
+            if name == "read_file":
+                result = self._dedup_episode_read(chat_id, inputs, result)
+            elif name == "skill":
+                result = self._dedup_episode_skill(chat_id, inputs, result)
         except TaskStopped:
             raise                      # worker control flow, not a tool failure
         except Exception as exc:
@@ -1583,6 +1592,89 @@ class AgentRuntime(SharedHandlers):
         history.append((key, hashlib.sha256(core.encode("utf-8", "replace")).hexdigest()))
         del history[:-self._REPEAT_LIMIT]
         return self._note_outcome(name, result, chat_id)
+
+    def _dedup_episode_read(self, chat_id, inputs, result):
+        """Within one episode, an unchanged file span already shown above returns a compact reference instead of
+        injecting a second copy into the prompt."""
+        import hashlib
+        from tabularium.learning.trials import overridden
+        if not isinstance(inputs, dict) or "path" not in inputs or self.unproductive(result) or not isinstance(result, str):
+            return result
+        if result.startswith(ARCHIVE_MARKER):
+            return result
+        try:
+            raw = overridden(inputs["path"]) or inputs["path"]
+            p = Path(raw)
+            if not p.is_file():
+                return result
+            data = p.read_bytes()
+            text_len = len(data.decode("utf-8"))
+            start = int(inputs.get("offset", 0) or 0)
+            limit = int(inputs.get("limit", 8000) if inputs.get("limit") is not None else 8000)
+            end = min(start + limit, text_len)
+            resolved = str(p.resolve())
+        except (OSError, UnicodeDecodeError, ValueError, TypeError):
+            return result
+        digest = hashlib.sha256(data).hexdigest()
+        state = self._episode_state(chat_id)
+        key = (resolved, digest)
+        for seen_start, seen_end, read_no in state["spans"].get(key, ()):
+            if seen_start <= start and end <= seen_end:
+                return AlreadyShown(f"[Unchanged since read #{read_no} in this session "
+                                    f"(characters {start}:{end} of {text_len}); use the text already shown above.]")
+        state["seq"] += 1
+        state["spans"].setdefault(key, []).append((start, end, state["seq"]))
+        return result
+
+    def _episode_state(self, chat_id):
+        return self._episode_reads.setdefault(chat_id, {"seq": 0, "spans": {}, "skills": {}})
+
+    def _dedup_episode_skill(self, chat_id, inputs, result):
+        """A skill already loaded in this episode, unchanged, is not loaded into the request again (2026-11-19: task
+        232 loaded engineering-workflow 15 times in 10 episodes). Skills are never compacted, so the text stays above."""
+        import hashlib
+        name = str((inputs or {}).get("name") or "")
+        if not name or not isinstance(result, str) or not result.startswith("# Skill: "):
+            return result
+        body = (self.discover_skills().get(name) or {}).get("body")
+        if body is None:
+            return result
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        skills = self._episode_state(chat_id).setdefault("skills", {})
+        if skills.get(name) == digest:
+            return AlreadyShown(f"[Skill {name} is already loaded above in this session, unchanged; follow that text.]")
+        skills[name] = digest
+        return result
+
+    def loaded_skills(self, chat_id) -> list:
+        """The skills this episode holds, in load order."""
+        return list((self._episode_reads.get(chat_id) or {}).get("skills", {}))
+
+    def carry_skills(self, chat_id, messages, names) -> None:
+        """A new episode opens with the skills the last one held, in full, so the worker does not spend calls loading
+        them again; they count as loaded in the new episode."""
+        import hashlib
+        installed, blocks = self.discover_skills(), []
+        skills = self._episode_state(chat_id).setdefault("skills", {})
+        for name in names:
+            found = installed.get(name)
+            if not found:
+                continue
+            blocks.append(f"# Skill: {name}\n(loaded from {found['path']})\n\n{found['body']}")
+            skills[name] = hashlib.sha256(found["body"].encode("utf-8")).hexdigest()
+        if blocks and messages and isinstance(messages[-1].get("content"), str):
+            messages[-1] = {**messages[-1], "content": messages[-1]["content"] + "\n\nSkills this task had loaded, in "
+                            "full; they are loaded in this session too:\n\n" + "\n\n".join(blocks)}
+
+    def _bound_request(self, messages: list, chat_id: int) -> list:
+        """The request as sent this step: unchanged up to STEP_CEILING_BYTES, so the cached prefix holds; past it, cut
+        once to 60% of the ceiling. Spans read earlier may now be previews, so they no longer count as shown."""
+        if wire_size(messages) <= self.STEP_CEILING_BYTES:
+            return messages
+        bounded = prepare_context(messages, self.AGENT_DIR / "context_archive" / str(chat_id), budget_bytes=self.STEP_CEILING_BYTES)
+        self._episode_state(chat_id)["spans"] = {}
+        print(f"[context] Request passed {self.STEP_CEILING_BYTES:,} bytes; cut to {wire_size(bounded):,}.")
+        return bounded
 
     def unproductive(self, result):
         """True for a refusal or a failure: a result the model cannot build on. The kind is in the type (tabularium.core.outcome)."""
@@ -1873,6 +1965,7 @@ class AgentRuntime(SharedHandlers):
                 "The request still exceeds the model context limit, and reducing it further would "
                 "remove task instructions, findings or recent results. History is preserved; "
                 "I stopped rather than silently forget the task.")
+        self._episode_state(chat_id)["spans"] = {}          # skills are never compacted; they stay loaded
         return compact
 
     def run_turn_openai(self, messages: list, chat_id: int) -> str:
@@ -1888,6 +1981,7 @@ class AgentRuntime(SharedHandlers):
         self._completion_feedback.pop(chat_id, None)
         self._repeat_calls.pop(chat_id, None)
         self._unproductive_streak.pop(chat_id, None)
+        self._episode_reads.pop(chat_id, None)
         from tabularium.core.session_lifecycle import continue_turn
         result = continue_turn(self, messages, chat_id, lambda: self._routing.run(self, messages, chat_id))
         if self.BACKGROUND_TASK_ID:
@@ -2143,12 +2237,25 @@ class AgentRuntime(SharedHandlers):
             # A failed request must not remove a user message or a completed tool result.
             # The agent cannot answer, so the runtime does, in plain words; the cause goes to the log and the task record.
             print(f'[turn] stopped: {type(e).__name__}: {e}')
-            self.send_message(chat_id, "Sorry, something went wrong and I stopped before finishing that. I haven't "
-                                       "repeated anything I'd already done. Tell me when you want me to try again.")
+            self.send_message(chat_id, self._stopped_note(messages))
             return None
         finally:
             self._abort_requested.pop(chat_id, None)
             self.save_conversation(chat_id)
+
+    def _stopped_note(self, messages) -> str:
+        """What the runtime says when the agent could not run, in the language Alex just wrote in.
+
+        2026-11-19: a Chinese conversation got this in English and read as the agent ignoring the question."""
+        text = ''
+        for entry in reversed(messages or []):
+            if entry.get('role') == 'user':
+                content = entry.get('content')
+                text = content if isinstance(content, str) else ' '.join(
+                    b.get('text', '') for b in content if isinstance(b, dict)) if isinstance(content, list) else ''
+                break
+        from tabularium.core.agent_runtime import runtime_words
+        return runtime_words('stopped', text)
 
     def _run_image_turn(self, chat_id: int, images: list, caption: str | None, sent=None) -> None:
         """One turn carrying any number of images."""

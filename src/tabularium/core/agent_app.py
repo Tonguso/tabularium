@@ -1070,10 +1070,13 @@ class AgentApp(engine.AgentRuntime):
         text = (getattr(message, "text", None) or "").strip()
         ref = getattr(message, "reply_to_message", None)
         from tabularium.learning import learning
-        go = learning.GO.match(text)
-        if go and self.config.role.learns:                        # a skill-edit verdict is settled in code, like a parked action
+        edit = getattr(message, 'skill_edit', None)               # the dashboard's buttons carry key and verdict as fields
+        if edit is None:
+            go = learning.GO.match(text)                          # typed by hand in Telegram
+            edit = {'key': go.group(1), 'verdict': go.group(2)} if go else None
+        if edit and self.config.role.learns:                      # a skill-edit verdict is settled in code, like a parked action
             try:
-                outcome = learning.settle_go(self.AGENT_DIR, chat, go.group(1), go.group(2),
+                outcome = learning.settle_go(self.AGENT_DIR, chat, edit['key'], edit['verdict'],
                                              self._recall.note(chat, text, "dashboard"), text, self._background, self.SYSTEM_PROMPT)
             except ValueError as exc:
                 outcome = f"Not done: {exc}"
@@ -1083,7 +1086,7 @@ class AgentApp(engine.AgentRuntime):
                                          {"role": "assistant", "content": f"[{outcome}]"}]
             self.save_conversation(chat)
             return True, ""
-        declared = getattr(message, 'decision_id', 0) if getattr(message, 'channel', '') == 'dashboard' else 0
+        declared = getattr(message, 'decision_id', None) if getattr(message, 'channel', '') == 'dashboard' else None
         decision = next((d for d in td.pending(self._background, chat) if d['id'] == declared), None) if declared else (td.by_message(self._background, chat, ref.message_id) if ref is not None else None)
         if declared and decision is None:
             self.send_message(chat, 'That question is no longer pending. No action was repeated; refresh Messaging.')

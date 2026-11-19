@@ -30,6 +30,11 @@ from tabularium.core.outcome import Refused
 import re
 
 ACTIVE = ("queued", "starting", "running", "cancelling", "pausing")
+READ_ONLY_ACTIONS = frozenset({
+    "read_file", "search_archived", "read_memory", "skill", "task_checkpoint", "task_evidence",
+    "list_images", "search_conversations", "read_conversation_excerpt", "list_research_reports",
+    "read_research_reports", "email_status", "verify_artifact", "view_image", "browser_screenshot", "browser_close",
+})
 TERMINAL = ("finished", "cancelled", "superseded")       # cancel on these is a no-op, said so in the summary
 # A worker whose delivery waits on an in-flight Cal/Vit request parks here. It holds no worker slot,
 # so queued tasks can run; the monitor polls delegate status (no model tokens) and requeues it.
@@ -359,6 +364,14 @@ class TaskStore:
             current = {k: value[k] for k in ("completed", "next_action", "evidence", "blocker", "facts", "guesses", "decisions") if value.get(k)}
             if current:
                 lines += ["Current checkpoint (agent record, not new user authorization):", json.dumps(current, ensure_ascii=False)]
+        episodes_dir = self.directory(ident) / "task_state" / "episodes"
+        episodes = sorted(episodes_dir.glob("episode_*.json")) if episodes_dir.exists() else []
+        if episodes:
+            lines += ["Archived prior episodes (raw tool transcripts on disk; read_file only if an exact earlier detail is needed):",
+                      json.dumps([str(p) for p in episodes], ensure_ascii=False)]
+            settled = self.settled_actions_summary(ident)
+            if settled:
+                lines += ["Settled actions from prior episodes (already executed; do not repeat side effects):", settled]
         from tabularium.records import verification
         case = self.preset_case(ident)
         if case is not None:
@@ -914,7 +927,10 @@ class TaskStore:
                 value[key] = previous[key]
         from tabularium.records import verification   # All checkpoint validation precedes the durable declaration; progress is no longer its owner.
         if completion_items is not None:
-            verification.declare(self, ident, completion_items)
+            if not isinstance(completion_items, list):
+                raise ValueError("completion_items must be a list.")
+            if completion_items:
+                verification.declare(self, ident, completion_items)
         atomic_json(self.directory(ident)/"checkpoint.json",value)
         if lesson.strip():
             from tabularium.learning.learning import propose, similar
@@ -968,6 +984,104 @@ class TaskStore:
             if record.get("status") == "started":
                 out.append(record.get("tool", "?"))
         return out
+
+    def archive_episode(self, ident, messages, reason):
+        """Persist a finished episode's raw conversation on disk before starting the next episode cleanly."""
+        folder = self.directory(ident) / "task_state" / "episodes"
+        folder.mkdir(parents=True, exist_ok=True)
+        num = len(list(folder.glob("episode_*.json"))) + 1
+        path = folder / f"episode_{num:03d}.json"
+        atomic_json(path, {"episode": num, "reason": str(reason), "saved_at": time.time(),
+                           "message_count": len(messages), "messages": messages})
+        return num, path
+
+    def episode_seed(self, ident, chat, memory_seed=(), *, continuation=False):
+        """Build the clean starting message list for an initial or rolled-over worker episode."""
+        task = self.get(ident)
+        folder = self.directory(ident)
+        ctx_path = folder / "context.json"
+        context = json.loads(ctx_path.read_text(encoding="utf-8")) if ctx_path.exists() else {"context": ""}
+        ctx = str(context.get("context") or "")
+        if (context.get("eval") or {}).get("benchmark") or context.get("trial"):
+            ctx += f"\nEvaluation output directory: {folder / 'trial_output'}. Write the requested deliverables there."
+        from tabularium.learning.learning import task_type_for
+        # A trial arm gets no lesson hints: the proposed edit is the only difference between its two runs.
+        lessons = "" if context.get("trial") else self.lessons(chat, task_type_for(task["request"]))
+        lesson_block = ("\n\nLessons from earlier tasks, each labelled with its status:\n" + lessons) if lessons else ""
+        if not continuation:
+            prompt = task["request"] + "\n\nTask context:\n" + ctx + lesson_block
+        else:
+            prompt = (
+                "Continue from the current task contract, settled action receipts, and proof status in this fresh session. "
+                "Prior episode transcripts are archived on disk; do not repeat completed side effects or resend emails."
+                + ("\n\nTask context:\n" + ctx if ctx else "")
+                + lesson_block
+            )
+        return list(memory_seed) + [{"role": "user", "content": prompt}]
+
+    def settled_actions_summary(self, ident, limit=40):
+        """Compact summary of settled mutating, check, and external actions plus touched git working tree state."""
+        folder = self.directory(ident) / "task_state" / "actions"
+        entries, repos = [], []
+        for path in sorted(folder.glob("*.json")) if folder.exists() else []:
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            tool = record.get("tool", "")
+            inputs = record.get("inputs") if isinstance(record.get("inputs"), dict) else {}
+            if tool in ("write_file", "edit_file", "run_checks"):
+                raw_target = inputs.get("cwd") if tool == "run_checks" else inputs.get("path")
+                if raw_target:
+                    try:
+                        p = Path(str(raw_target)).resolve()
+                        for cand in ([p] if p.is_dir() else []) + list(p.parents):
+                            if (cand / ".git").exists():
+                                if cand not in repos:
+                                    repos.append(cand)
+                                break
+                    except OSError:
+                        pass
+            if tool in READ_ONLY_ACTIONS:
+                continue
+            item = {"tool": tool, "status": record.get("status", "?")}
+            for field in ("path", "cwd", "kind", "target", "task_id", "item", "requirement_id", "to", "action", "command"):
+                if inputs.get(field) is not None:
+                    item[field] = str(inputs[field])[:160]
+            raw_res = record.get("result")
+            parsed = None
+            if isinstance(raw_res, str) and raw_res.startswith("{"):
+                try:
+                    parsed = json.loads(raw_res)
+                except ValueError:
+                    parsed = None
+            if isinstance(parsed, dict):
+                for k in ("exit", "passed", "status", "reused", "exists", "bytes", "archive"):
+                    if k in parsed:
+                        item[k] = parsed[k]
+            elif record.get("error"):
+                item["error"] = str(record["error"])[:160]
+            elif raw_res is not None:
+                item["outcome"] = str(raw_res)[:160]
+            entries.append(item)
+        parts = []
+        if entries:
+            if len(entries) > limit:
+                parts.append(f"Earlier settled actions omitted: {len(entries) - limit}")
+            parts.extend(json.dumps(e, ensure_ascii=False) for e in entries[-limit:])
+        for repo in repos[:3]:
+            try:
+                proc = subprocess.run(
+                    ["git", "-C", str(repo), "status", "--short"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=2,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                if proc.returncode == 0:
+                    lines = proc.stdout.strip().splitlines()[:30]
+                    parts.append(f"Git working tree ({repo}): " + ("; ".join(lines) if lines else "clean"))
+            except (OSError, subprocess.SubprocessError):
+                pass
+        return "\n".join(parts)
 
     def retry_interrupted(self):
         """Requeue a worker that crashed (status interrupted by a worker error) when its own records show nothing
@@ -1348,14 +1462,18 @@ def worker(ident, agent_dir, role, attempt=None):
             saved = agent._conversation_path(chat).exists()
             messages = agent.load_conversation(chat)
             if not saved:
-                context = json.loads((folder / "context.json").read_text(encoding="utf-8"))
-                if (context.get("eval") or {}).get("benchmark") or context.get("trial"):
-                    context["context"] += f"\nEvaluation output directory: {folder / 'trial_output'}. Write the requested deliverables there."
-                from tabularium.learning.learning import task_type_for
-                # A trial arm gets no lesson hints: the proposed edit is the only difference between its two runs.
-                lessons = "" if context.get("trial") else store.lessons(chat, task_type_for(task["request"]))
-                messages.append({"role": "user", "content": task["request"] + "\n\nTask context:\n" + context["context"]
-                                 + ("\n\nLessons from earlier tasks, each labelled with its status:\n" + lessons if lessons else "")})
+                messages = store.episode_seed(ident, chat, messages)
+            elif (getattr(agent, "BACKGROUND_TASK_ID", "") and callable(getattr(agent, "load_memory_context", None))
+                  and any(isinstance(m.get("content"), list) for m in messages)):
+                serialised = agent._serialise_messages(messages)
+                answering = any(u["text"].startswith("Decision #") and "answered." in u["text"] for u in store.pending_controls(ident))
+                if answering and len(json.dumps(serialised, ensure_ascii=False)) <= getattr(agent, "WORKER_REQUEST_BYTES", 160_000) // 2:
+                    from tabularium.learning.learning import task_type_for
+                    lessons = "" if task_context.get("trial") else store.lessons(chat, task_type_for(task["request"]))
+                    messages.append({"role": "user", "content": "Continue from the current task contract and its proof status. Inspect actions with missing outcomes before repeating them; never automatically resend emails." + ("\n\nLessons from earlier tasks, each labelled with its status:\n" + lessons if lessons else "")})
+                else:
+                    store.archive_episode(ident, serialised, "worker_restart")
+                    messages = store.episode_seed(ident, chat, agent.load_memory_context(), continuation=True)
             else:
                 from tabularium.learning.learning import task_type_for
                 lessons = "" if task_context.get("trial") else store.lessons(chat, task_type_for(task["request"]))

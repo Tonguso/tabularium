@@ -106,7 +106,7 @@ def decode(payload):
         date=payload['date'], text=payload['text'], caption=payload['text'], media_group_id=None,
         attachment=payload.get('attachment'),
         reply_to_message=None, quote=None, channel='dashboard',
-        decision_id=payload.get('decision_id', 0), json=payload)
+        decision_id=payload.get('decision_id') or None, skill_edit=payload.get('skill_edit'), json=payload)
 
 
 def read_rows(path, query, args=()):

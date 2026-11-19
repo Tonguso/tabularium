@@ -1,6 +1,7 @@
 """Session boundaries are not task completion. Continue only from durable, settled evidence."""
 import json
 from tabularium.core.agent_runtime import atomic_json
+from tabularium.core.outcome import AlreadyShown, Failed, Refused
 
 
 class TaskWaiting(Exception):
@@ -47,7 +48,15 @@ def continue_turn(agent, messages, chat, run):
                     pending.append(str(path))
             if pending or calls - after:
                 raise RuntimeError("Session ended with an unknown action outcome; inspect receipts before resuming.") from exc
-            if not after - before:
+            new_ids = after - before
+            new_results = [
+                b.get("content", "")
+                for m in messages if isinstance(m.get("content"), list)
+                for b in m["content"]
+                if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in new_ids
+            ]
+            real_progress = any(not isinstance(c, (Refused, Failed, AlreadyShown)) for c in new_results)
+            if not new_ids or not real_progress:
                 raise RuntimeError("Session limit without completed tool progress; stopped instead of restarting a loop.") from exc
             sessions += 1
             atomic_json(agent.RUNTIME_DIR / "task_state" / "session_checkpoint.json",
@@ -55,4 +64,16 @@ def continue_turn(agent, messages, chat, run):
                          "completed_actions": sorted(after), "pending_actions": [],
                          "task_checkpoint": str(agent.RUNTIME_DIR / "checkpoint.json")})
             agent._inbox.record_event("session_boundary", str(exc), role="runtime")
-            # Same worker, same loop guards, same canonical history. No action is replayed here.
+            if (getattr(agent, "BACKGROUND_TASK_ID", "") and getattr(agent, "_background", None) is not None
+                    and callable(getattr(agent, "load_memory_context", None))):
+                ident = int(agent.BACKGROUND_TASK_ID)
+                serialised = agent._serialise_messages(messages) if hasattr(agent, "_serialise_messages") else list(messages)
+                agent._background.archive_episode(ident, serialised, str(exc))
+                held = agent.loaded_skills(chat) if hasattr(agent, "loaded_skills") else []
+                messages[:] = agent._background.episode_seed(ident, chat, agent.load_memory_context(), continuation=True)
+                for attr in ("_repeat_calls", "_episode_reads", "_window_anchor"):
+                    if hasattr(agent, attr):
+                        getattr(agent, attr).pop(chat, None)
+                if held:
+                    agent.carry_skills(chat, messages, held)
+                agent.save_conversation(chat)

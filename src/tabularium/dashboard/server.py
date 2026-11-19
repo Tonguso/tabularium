@@ -340,7 +340,7 @@ class Handler(BaseHTTPRequestHandler):
                 if name not in AGENTS:raise ValueError('Unknown agent')
                 if not messaging.ready(ROOT/name,media=value.get('attachment') is not None):raise ValueError('This agent is offline or has not loaded Messaging. Your message was not queued.')
                 inbox=DurableInbox(ROOT/name, lambda *args: None)
-                self.send(inbox.accept_dashboard(value.get('client_id'),value.get('text'),value.get('decision_id',0),attachment=value.get('attachment')))
+                self.send(inbox.accept_dashboard(value.get('client_id'),value.get('text'),value.get('decision_id'),skill_edit=value.get('skill_edit'),attachment=value.get('attachment')))
                 return
             if self.path=='/api/subscriptions/refresh':
                 subscription_snapshot(force=True)

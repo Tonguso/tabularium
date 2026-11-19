@@ -213,7 +213,7 @@ class GeminiGenerate:
                     context_retries += 1
                     print(f"[context] Gemini request exceeded the model window; compacted history to {len(api_messages)} messages and retrying.")
                     continue
-                if exc.status_code in (429, 500, 502, 503) and attempt < 2:
+                if exc.status_code in (429, 500, 502, 503, 504) and attempt < 2:
                     wait = 10 * (2 ** attempt)
                     print(f"Gemini {exc.status_code}, retrying in {wait}s (attempt {attempt + 1}/3)...")
                     time.sleep(wait)

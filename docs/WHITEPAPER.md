@@ -670,6 +670,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-19 | The owner sent a video and the runtime answered "Processing video..." before the agent said a word; other paths answered him in system language too: "File type not supported", "Voice error", "Task stopped with an error", subscription notices | When something about the owner's message cannot be passed on as it is, the agent is told what he sent and what became of it, and replies itself; the runtime writes only when the agent cannot run, in plain first-person words |
 
+| 2026-11-19 | A review of the day's fixes found that, after the episode redesign, nothing bounded a turn's request between its start and the provider's refusal; a skill already loaded was loaded again, and every new episode dropped them all; two of the runtime's three notices stayed English when the owner wrote Chinese | Past a ceiling well above working size a request is cut once and grows again, so its prefix stays cached; a loaded skill is shown once per episode and carried into the next; a result already shown is a kind of its own, never progress; the runtime's own words come from one table in both languages |
+
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
 own work, it eventually accepted a failure; each fix made the proof a record the runtime produces itself, and made

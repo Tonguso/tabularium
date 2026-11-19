@@ -89,7 +89,7 @@ class BareYes(unittest.TestCase):
         self.assertIn('"stdout": "removed"', fresh[0]["content"])
         self.assertEqual(task_decisions.pending(self.agent._background, chat, kind="action"), [])
         with self.agent._inbox.db() as db:
-            self.assertEqual(db.execute("SELECT status FROM jobs WHERE id=62").fetchone()[0], "done")   # never its own turn
+            self.assertEqual(db.execute("SELECT status FROM jobs WHERE id=62").fetchone()[0], "running")   # never its own turn; settles with this one
 
 
 if __name__ == "__main__":

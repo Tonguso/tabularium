@@ -4,7 +4,7 @@ import json
 import re
 from tabularium.core.outcome import Failed
 
-INLINE_CHARS = 4000
+INLINE_CHARS = 16000
 EXCERPT_CHARS = 2200
 DIAGNOSTIC = re.compile(r"(?i)(\b(?:error|failed|failure|traceback|fatal|warning|exception)\b|^FAIL:|^E\s+)")
 

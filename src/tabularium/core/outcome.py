@@ -13,3 +13,8 @@ class Refused(str):
 
 class Failed(str):
     """The tool acted and failed; the text is the error."""
+
+
+class AlreadyShown(str):
+    """The tool's answer is already in the request above, unchanged (a file span read earlier in the episode, a skill
+    already loaded); the text points there. Not progress: a session of these is a loop (2026-11-19)."""

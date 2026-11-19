@@ -5,6 +5,7 @@ import functools
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 import threading
@@ -42,6 +43,36 @@ def atomic_json(path, value):
 
 
 FOLLOW_UP_SECONDS = 3     # bubbles Alex types this close together are one message (2026-10-16)
+
+
+_CJK = re.compile(r'[\u4e00-\u9fff]')
+# What the runtime says when the agent cannot: plain, first person, in the language of the owner's message. One table
+# (2026-11-19): the crash notice was made bilingual while the inbox's failure and restart notices stayed English.
+RUNTIME_WORDS = {
+    'stopped': ("Sorry, something went wrong and I stopped before finishing that. I haven't repeated anything I'd "
+                "already done. Tell me when you want me to try again.",
+                '抱歉，出了点问题，我没能把那条做完。已经做过的事我没有重复。您想让我再试一次时告诉我。'),
+    'failed': ("Sorry, something went wrong on my side and I didn't get to that message. I haven't retried it; send it "
+               "again if you still need it.",
+               '抱歉，我这边出了问题，没来得及处理那条消息。我没有自动重试；如果还需要，请再发一次。'),
+    'restarted': ("I was restarted in the middle of something, so I stopped there. I've held your other messages rather "
+                  "than risk repeating anything. Send /pending to see them, and tell me what to pick up.",
+                  '我刚才做到一半被重启了，所以停在了那里。为了不重复操作，您其他的消息我先保留着。发送 /pending 可以查看，然后告诉我从哪里继续。'),
+}
+
+
+def runtime_words(kind, sample=''):
+    """RUNTIME_WORDS[kind] in Chinese when `sample`, the owner's message, is mostly Chinese; else in English."""
+    sample = sample or ''
+    return RUNTIME_WORDS[kind][len(_CJK.findall(sample)) / max(len(sample.strip()), 1) > 0.15]
+
+
+def _payload_text(payload):
+    try:
+        value = json.loads(payload or '{}')
+    except ValueError:
+        return ''
+    return value.get('text') or value.get('caption') or ''
 
 
 class DurableInbox:
@@ -205,21 +236,32 @@ class DurableInbox:
                 self.wake.set()
         return accept
 
-    def accept_dashboard(self, client_id, text, decision_id=0, attachment=None):
-        """Authenticated dashboard ingress. Signed IDs reserve legacy positive Telegram references."""
+    def accept_dashboard(self, client_id, text, decision_id=None, skill_edit=None, attachment=None):
+        """Authenticated dashboard ingress. Signed IDs reserve legacy positive Telegram references.
+
+        Absent is None, never 0: a question identity and 'no question asked' had the same value, so a verdict
+        sent with decision_id 0 passed the check here and was then queued as ordinary chat (2026-11-19)."""
         from tabularium.channels.owner_telegram import OWNER_CHAT_ID
         if not isinstance(client_id, str) or not 1 <= len(client_id) <= 100:
             raise ValueError('Invalid message identity')
         if not isinstance(text, str) or (not text.strip() and attachment is None) or len(text) > 4000:
             raise ValueError('Write a message of 1-4000 characters')
-        if type(decision_id) is not int or decision_id < 0:
+        if decision_id is not None and (type(decision_id) is not int or decision_id < 1):
             raise ValueError('Invalid question identity')
+        if skill_edit is not None:
+            from tabularium.learning.learning import VERDICTS
+            if (not isinstance(skill_edit, dict) or set(skill_edit) != {'key', 'verdict'}
+                    or not isinstance(skill_edit.get('key'), str) or not re.fullmatch(r'lesson-\w+', skill_edit['key'])
+                    or skill_edit.get('verdict') not in VERDICTS):
+                raise ValueError('Invalid skill edit verdict')
+            if decision_id is not None:
+                raise ValueError('A message carries one verdict')
         if attachment is not None:
             from tabularium.channels.messaging import attachment_path, attachment_kind
             path = attachment_path(self.directory.parent, attachment)
             attachment = {'id': path.name, 'name': attachment['name'], 'size': path.stat().st_size,
                           'kind': attachment_kind(attachment['name'])}
-            if decision_id:
+            if decision_id is not None or skill_edit is not None:
                 raise ValueError('Answer the question with text first, then send the attachment separately')
         db = sqlite3.connect(self.database, timeout=30)
         try:
@@ -227,14 +269,18 @@ class DurableInbox:
             row = db.execute("SELECT id,message,payload FROM jobs WHERE chat=? AND json_extract(payload,'$.channel')='dashboard' AND json_extract(payload,'$.client_id')=?", (OWNER_CHAT_ID, client_id)).fetchone()
             if row:
                 old = json.loads(row[2])
-                if old['text'] != text or old.get('decision_id', 0) != decision_id or old.get('attachment') != attachment:
+                # Rows written before 2026-11-19 stored 0 for 'no question'; it reads back as absent.
+                if (old['text'] != text or (old.get('decision_id') or None) != decision_id
+                        or old.get('skill_edit') != skill_edit or old.get('attachment') != attachment):
                     raise ValueError('Message identity already used for different content')
                 return {'job': row[0], 'message_id': row[1]}
             now = time.time()
-            payload = {'channel': 'dashboard', 'client_id': client_id, 'text': text,
-                       'date': now, 'decision_id': decision_id, 'attachment': attachment}
+            payload = {'channel': 'dashboard', 'client_id': client_id, 'text': text, 'date': now,
+                       'decision_id': decision_id, 'skill_edit': skill_edit, 'attachment': attachment}
             cursor = db.execute('INSERT INTO jobs(chat,message,handler,payload,status,created) VALUES (?,NULL,?,?,?,?)',
-                (OWNER_CHAT_ID, 'handle_dashboard_media' if attachment else ('handle_dashboard_reply' if decision_id else 'handle_message'), '{}', 'pending', now))
+                (OWNER_CHAT_ID, 'handle_dashboard_media' if attachment else
+                 ('handle_dashboard_reply' if decision_id is not None or skill_edit is not None else 'handle_message'),
+                 '{}', 'pending', now))
             ident = cursor.lastrowid
             payload['message_id'] = -ident
             db.execute('UPDATE jobs SET message=?,payload=? WHERE id=?', (-ident, json.dumps(payload), ident))
@@ -298,10 +344,15 @@ class DurableInbox:
         return out
 
     def absorb(self, ids):
-        """Follow-ups a turn has taken and saved to history: finished by that turn, never run on their own."""
+        """Follow-ups a turn has taken into its history: claimed by that turn, never run on their own.
+
+        They settle with that turn, not before it (2026-11-19). Marking them done on pickup meant a turn that
+        then crashed left the message neither answered nor failed, so recovery_note, which lists only
+        interrupted/held/failed, could never surface it: Alex's second question of 20:40 was lost that way."""
         if ids:
             with self.db() as db:
-                db.executemany("UPDATE jobs SET status='done' WHERE id=? AND status='pending'", [(i,) for i in ids])
+                db.executemany("UPDATE jobs SET status='running' WHERE id=? AND status='pending'", [(i,) for i in ids])
+            self.local.absorbed = list(getattr(self.local, 'absorbed', None) or []) + list(ids)
 
     def gather(self, chat, ident, created, message):
         """Wait until FOLLOW_UP_SECONDS have passed since the first bubble, then fold the bubbles sent meanwhile into it.
@@ -381,13 +432,14 @@ class DurableInbox:
 
     def start(self):
         with self.db() as db:
-            chats = [r[0] for r in db.execute("SELECT DISTINCT chat FROM jobs WHERE status='running'")]
+            interrupted = {}
+            for chat, payload in db.execute("SELECT chat, payload FROM jobs WHERE status='running' ORDER BY id"):
+                interrupted[chat] = _payload_text(payload) or interrupted.get(chat, '')
             db.execute("UPDATE jobs SET status='interrupted' WHERE status='running'")
-            for chat in chats:
+            for chat in interrupted:
                 db.execute("UPDATE jobs SET status='held' WHERE chat=? AND status='pending'", (chat,))
-        for chat in chats:
-            self.notify(chat, "I was restarted in the middle of something, so I stopped there. I've held your other "
-                              "messages rather than risk repeating anything. Send /pending to see them, and tell me what to pick up.")
+        for chat, sample in interrupted.items():
+            self.notify(chat, runtime_words('restarted', sample))
         self.worker = threading.Thread(target=self.run, daemon=True, name='durable-inbox')
         self.worker.start()
 
@@ -406,6 +458,7 @@ class DurableInbox:
                 continue
             ident, chat, name, payload, created = row
             ids = [ident]
+            message = None
             try:
                 fn, album = self.handlers['handle_message' if name == 'handle_dashboard_reply' else name]
                 message = decode(json.loads(payload))
@@ -436,7 +489,7 @@ class DurableInbox:
                     continue
                 self.active_chat = chat
                 self.active_job = ident
-                self.local.job, self.local.failed = ident, False
+                self.local.job, self.local.failed, self.local.absorbed = ident, False, []
                 self.progress('task_started', deadline_seconds=2100)
                 try:
                     fn(batch if album else message)
@@ -446,16 +499,18 @@ class DurableInbox:
             except Exception as exc:
                 status = 'failed'
                 print(f'[inbox] Task #{ident} failed: {type(exc).__name__}: {exc}')
-                self.notify(chat, "Sorry, something went wrong on my side and I didn't get to that message. "
-                                  "I haven't retried it; send it again if you still need it.")
+                sample = (getattr(message, 'text', None) or getattr(message, 'caption', None) or '') if message else _payload_text(payload)
+                self.notify(chat, runtime_words('failed', sample))
             finally:
                 self.active_chat = None
                 self.active_job = None
                 self.local.job = None
                 self.local.turn_messages = []
                 self.progress('idle')
+            settled = list(ids) + [i for i in (getattr(self.local, 'absorbed', None) or []) if i not in ids]
+            self.local.absorbed = []
             with self.db() as db:
-                db.executemany('UPDATE jobs SET status=? WHERE id=? AND status IN (\'running\',\'pending\')', [(status, i) for i in ids])
+                db.executemany('UPDATE jobs SET status=? WHERE id=? AND status IN (\'running\',\'pending\')', [(status, i) for i in settled])
 
 
 def recover_tool_history(messages, directory):

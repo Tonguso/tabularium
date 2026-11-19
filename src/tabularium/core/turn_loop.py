@@ -54,8 +54,9 @@ def run(agent, messages, chat_id, provider):
     unblocked_asked = False
     decision_asked = False
     # Trim FIRST, on the raw in-memory list whose dict objects are stable (that is what the window anchor keys on),
-    # then sanitise only the window that is actually sent.
-    api_messages = agent._sanitise_tool_history(agent.trim_history(messages, chat_id))
+    # then sanitise and prepare the starting window once per episode so the sent prefix never mutates mid-turn.
+    api_messages = agent._prepare_request_context(
+        agent._sanitise_tool_history(agent.trim_history(messages, chat_id)), chat_id)
 
     def save(message):
         messages.append(message)
@@ -73,7 +74,7 @@ def run(agent, messages, chat_id, provider):
         if agent._abort_requested.pop(chat_id, False):
             return end("Stopped.", complete=False)
 
-        api_messages = agent._prepare_request_context(api_messages, chat_id)
+        api_messages = agent._bound_request(api_messages, chat_id)
         exchange = provider.exchange(api_messages)
         if isinstance(exchange, str):                      # the provider ended the turn with a message of its own
             return end(exchange, complete=False)
@@ -329,7 +330,7 @@ class OpenAIResponses:
                     print(f"[context] Request exceeded model window; compacted history to {len(api_messages)} messages and retrying.")
                     continue
                 status = getattr(e, "status_code", None)
-                if status in (429, 500, 502, 503) and attempt < 2:
+                if status in (429, 500, 502, 503, 504) and attempt < 2:
                     wait = 10 * (2 ** attempt)
                     print(f"OpenAI {status}, retrying in {wait}s (attempt {attempt + 1}/3)...")
                     time.sleep(wait)

@@ -62,7 +62,7 @@ class Efficiency(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [])
 
     def test_middle_failure_and_complete_artifact_survive_verbose_output(self):
-        output = "passed fixture\n" * 500 + "ERROR: balance mismatch expected 73 got 71\n" + "passed fixture\n" * 500
+        output = "passed fixture\n" * 1200 + "ERROR: balance mismatch expected 73 got 71\n" + "passed fixture\n" * 1200
         result = command_result(output, "WARNING: partial data\n", 1, self.root)
         self.assertIsInstance(result, Failed)
         data = json.loads(result)
@@ -92,7 +92,7 @@ class Efficiency(unittest.TestCase):
     def test_worker_can_retrieve_its_log_and_legacy_agent_archive(self):
         agent = make_agent("librarian", self.root, background=True)
         for directory in [agent.RUNTIME_DIR / "context_archive" / "results", agent.AGENT_DIR / "context_archive" / "results"]:
-            result = json.loads(command_result("noise\n" * 1000 + "unique_failure expected 73\n", "", 1, directory))
+            result = json.loads(command_result("noise\n" * 3000 + "unique_failure expected 73\n", "", 1, directory))
             found = agent._execute_tool_unguarded("search_archived", {"query":"unique_failure", "path":result["archive"]}, 1)
             self.assertIn("unique_failure", found)
 
