@@ -7,6 +7,7 @@ judge coverage; missing evidence stays unverified. Only matching benchmark finge
 from io import BytesIO, StringIO
 import csv
 import hashlib
+import math
 import sqlite3
 import uuid
 import json
@@ -23,7 +24,7 @@ GRADE_SCHEMA = {"type": "object", "properties": {
         "id": {"type": "string"}, "met": {"type": "boolean"}, "reason": {"type": "string"}},
         "required": ["id", "met", "reason"], "additionalProperties": False}}},
     "required": ["items"], "additionalProperties": False}
-EVALUATOR_VERSION = 3
+EVALUATOR_VERSION = 4
 BENCHMARK = Path(__file__).with_name("benchmark_cases.json")
 
 
@@ -43,6 +44,13 @@ def validate_case(case):
         check = requirement.get("check") or {}
         if check.get("kind") not in ("json", "text", "csv", "xlsx", "judgment"):
             raise ValueError("Unknown requirement check kind.")
+        if "type" in check:
+            numeric_type, expected = check["type"], check.get("expected")
+            if (numeric_type not in ("integer", "number") or check["kind"] not in ("json", "xlsx")
+                    or type(expected) not in (int, float)
+                    or (type(expected) is float and not math.isfinite(expected))
+                    or (numeric_type == "integer" and type(expected) is not int)):
+                raise ValueError("Numeric type must be integer or number, with a matching numeric expected value.")
         if check["kind"] == "judgment":
             if not check.get("rubric"):
                 raise ValueError("Subjective checks need an independent rubric.")
@@ -83,6 +91,20 @@ def fingerprint(cases):
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def same_value(actual, expected):
+    """Compare values, keeping booleans distinct from numbers at every depth."""
+    if type(actual) in (int, float) and type(expected) in (int, float):
+        return (all(type(v) is int or math.isfinite(v) for v in (actual, expected))
+                and actual == expected)
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(actual, dict):
+        return actual.keys() == expected.keys() and all(same_value(actual[k], expected[k]) for k in actual)
+    if isinstance(actual, list):
+        return len(actual) == len(expected) and all(same_value(a, b) for a, b in zip(actual, expected))
+    return actual == expected
+
+
 def artifact_check(check, output_dir):
     if output_dir is None:
         raise ValueError("No delivered artifact directory.")
@@ -111,8 +133,9 @@ def artifact_check(check, output_dir):
             actual = book[check["sheet"]][check["cell"]].value
         finally:
             book.close()
-    # bool is an int subclass; false must not silently equal 0.
-    passed = json.dumps(actual, sort_keys=True, allow_nan=False) == json.dumps(check["expected"], sort_keys=True, allow_nan=False)
+    passed = same_value(actual, check["expected"])
+    if check.get("type") == "integer":
+        passed = passed and type(actual) is int
     return dict(status="passed" if passed else "failed", actual=actual, expected=check["expected"],
                 evidence=dict(path=str(path), sha256=digest))
 
@@ -270,11 +293,18 @@ def generation_usage(folder):
     result["known"] = result["turns"] > 0 and result["unknown_usage"] == 0
     path = Path(folder) / "task_state" / "inbox.sqlite3"
     result["routes"] = []
+    result["releases"] = []
     if path.exists():
         db = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
         try:
             result["routes"] = [dict(provider=p, model=m, billing=b) for p,m,b in
                                 db.execute("SELECT DISTINCT provider,model,billing FROM usage_events WHERE kind='response'")]
+            for (raw,) in db.execute("SELECT metrics FROM usage_events WHERE kind='response' ORDER BY id"):
+                identity = json.loads(raw or '{}').get('release')
+                if not isinstance(identity, dict) or not identity.get('digest'):
+                    identity = None
+                if identity not in result["releases"]:
+                    result["releases"].append(identity)
         finally:
             db.close()
     return result
@@ -299,8 +329,8 @@ def run(agent_root, store, chat, cases, judge, k=1, sample=0, starter=start_reru
         validate_case(case)
     record = {"started": time.time(), "agent": Path(agent_root).name, "k": k, "cases": [],
               "benchmark": fingerprint(chosen), "evaluator_version": EVALUATOR_VERSION}
-    from tabularium.ops.release import commit
-    record["release"] = commit()
+    from tabularium.ops.release import LOADED
+    record["evaluator_release"] = dict(LOADED)
     record["route"] = primary_route(agent_root)
     if execution is not None:
         record["execution"] = execution
@@ -324,7 +354,7 @@ def run(agent_root, store, chat, cases, judge, k=1, sample=0, starter=start_reru
             if status != "finished":
                 g.update(passed=False, quality=0, note=f"run ended {status}",
                          items=[dict(id=r["id"], status="unverified", reason=f"run ended {status}") for r in case["requirements"]])
-            g.update(task=ident, status=status, generation_usage=usage)
+            g.update(task=ident, status=status, generation_usage=usage, releases=usage.pop("releases", []))
             attempts.append(g)
             log(f"{case['id']} attempt {n}: {status}, {'pass' if g['passed'] else 'fail'}: {g['note'][:80]}")
         record["cases"].append({"id": case["id"], "source_task": case.get("source_task"), "attempts": attempts,
@@ -350,6 +380,12 @@ def run(agent_root, store, chat, cases, judge, k=1, sample=0, starter=start_reru
     record["pass_1"] = round(sum(sum(a["passed"] for a in c["attempts"]) / len(c["attempts"])
                                  for c in record["cases"]), 2)
     attempts = [a for c in record["cases"] for a in c["attempts"]]
+    identities = []
+    for attempt in attempts:
+        for identity in attempt["releases"] or [None]:
+            if identity not in identities:
+                identities.append(identity)
+    record["release"] = identities[0] if len(identities) == 1 else None
     record["quality"] = sum(a["quality"] for a in attempts) / len(attempts)
     record["generation_usage"] = {field: sum(a["generation_usage"][field] for a in attempts) if all(a["generation_usage"][field] is not None for a in attempts) else None
                                   for field in ("input_total", "cache_read", "output", "estimated_effective_tokens", "turns")}

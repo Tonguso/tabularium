@@ -664,6 +664,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-15 | After the engineer's first delivery failed the owner's acceptance, every repair of that project was the coordinator's own worker, under a skill clause that let it implement what it judged not worth delegating, with the engineer's one worker slot often busy and nothing showing who had done the work | The clause is gone from the skill at the owner's word; the engineer has two slots so a delegation never waits; a coordinator's own worker writing outside its folder marks the task "implemented by itself" on the dashboard, visible, never forbidden |
 
+| 2026-11-15 | A benchmark failed three correct answers: the case asked for a growth rate, the worker wrote 20.0, and the checker, which compared values by their JSON spelling to keep true apart from 1, expected 20; the same run recorded no release, because workers run from release snapshots that have no Git history | Checks compare values, not their spelling: 20 equals 20.0 at any depth, true stays apart from 1, and a case that needs a whole number says so. Each model response records the release that produced it, and a run names its tested release only when all its responses agree |
+
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
 own work, it eventually accepted a failure; each fix made the proof a record the runtime produces itself, and made

@@ -446,3 +446,24 @@ All four agents restarted and have fresh matching health and Telegram polling.
 The separate running dashboard process was not restarted; its old aggregate reader
 still omits partial subtotals until its next restart. Persisted accounting and the
 agents' usage summaries use the replacement now.
+
+## Numeric contracts and executed versions (2026-11-18)
+
+Objective JSON and workbook checks compare numeric values exactly: 20 and 20.0 are equivalent,
+including inside objects and lists. Booleans remain distinct from 0 and 1, strings are not coerced,
+and nonfinite values cannot pass. Exact equality does not introduce rounding tolerances.
+A numeric check may declare `"type": "integer"` to require an integer representation rather than
+a decimal or boolean. `"type": "number"` permits either numeric representation. Invalid numeric
+contracts are rejected before a case runs. Invoice pence now explicitly require integers.
+
+Every response's existing usage receipt records the generating process's loaded release identity
+(commit and source digest), including subscription routes. Each benchmark attempt retains the distinct
+`releases` from those receipts. A run's `release` identifies the tested worker code only when every
+attempt's receipts identify the same version. Mixed versions, missing receipts and legacy receipts
+without provenance leave that field null; the observed versions remain on each attempt.
+`evaluator_release` separately identifies the loaded grading code, never the checkout's current HEAD.
+This works for immutable release snapshots without a .git directory and detects a run spanning versions.
+No new model calls or usage estimates are introduced. Existing result files are preserved.
+
+Evaluator version 4 changes the benchmark fingerprint, so scores produced under the old comparison
+rules cannot silently be compared with the new scores. The invoice case also advances to version 2.

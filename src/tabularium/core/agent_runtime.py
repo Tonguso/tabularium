@@ -79,6 +79,8 @@ class DurableInbox:
             if 'input_total' not in known and any(k in known for k in FIELDS[1:4]):
                 known['input_total'] = sum(known.get(k, 0) for k in FIELDS[1:4])
             payload = dict.fromkeys(FIELDS) | {'known_subtotals': known}
+        if kind == 'response':
+            payload['release'] = self.health['release']
         if details is not None:
             payload['details'] = details
         db = None
