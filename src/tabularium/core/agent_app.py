@@ -289,7 +289,8 @@ class AgentApp(engine.AgentRuntime):
         from tabularium.core.agent_runtime import DurableInbox, atomic_json, recover_tool_history
         self.atomic_json = atomic_json
         self.recover_tool_history = recover_tool_history
-        self._inbox = DurableInbox(self.RUNTIME_DIR, lambda chat, text: self.send_message(chat, text))
+        self._inbox = DurableInbox(self.RUNTIME_DIR, lambda chat, text: self.send_message(chat, text),
+                                   tell=lambda message, note: self._run_note_turn(message.chat.id, message, note))
         # Silence telebot's noisy connection-drop tracebacks (VPN/network resets). It still auto-reconnects.
         logging.getLogger("TeleBot").setLevel(logging.CRITICAL)
 
@@ -1544,7 +1545,7 @@ class AgentApp(engine.AgentRuntime):
             try:
                 media_type, encoded, _ = self._image_for_model(downloaded)
             except Exception:
-                self.send_message(chat_id, f"{file_name} could not be read as an image.")
+                self._run_note_turn(chat_id, message, f"[Alex sent an image file, {file_name}, but it could not be opened as an image.]")
                 return
             self._last_photo[chat_id] = downloaded
             caption = f"[Alex sent an image file: {file_name}]" + (" " + message.caption if message.caption else "")
@@ -1552,68 +1553,34 @@ class AgentApp(engine.AgentRuntime):
             self._run_image_turn(chat_id, [(media_type, encoded)], reply_note + caption, message.date)
             return
 
-        lock = self.get_chat_lock(chat_id)
-        lock.acquire()
-
+        downloaded = self.fetch_file(doc)
+        _DOC_LIMIT = 50_000
         try:
-            downloaded = self.fetch_file(doc)
-
             if ext == ".docx":
-                try:
-                    from docx import Document
-                    document = Document(io.BytesIO(downloaded))
-                    text = "\n".join(p.text for p in document.paragraphs if p.text.strip())
-                except ImportError:
-                    self.send_message(chat_id, "python-docx not installed. Run: pip install python-docx")
-                    return
+                from docx import Document
+                document = Document(io.BytesIO(downloaded))
+                text = "\n".join(p.text for p in document.paragraphs if p.text.strip())
             elif ext == ".xlsx" and self.config.xlsx_uploads:
                 from tabularium.tools.spreadsheet_upload import save_workbook
                 text = save_workbook(self.AGENT_DIR, file_name, downloaded)
             elif ext == ".txt":
                 text = downloaded.decode("utf-8", errors="replace")
             elif ext == ".pdf":
-                try:
-                    import pypdf
-                    pdf = pypdf.PdfReader(io.BytesIO(downloaded))
-                    text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-                except ImportError:
-                    self.send_message(chat_id, "pypdf not installed. Run: pip install pypdf")
-                    return
+                import pypdf
+                pdf = pypdf.PdfReader(io.BytesIO(downloaded))
+                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
             else:
-                self.send_message(chat_id, f"File type '{ext}' not supported. Send an image, or {self.config.document_types}.")
-                return
-
-            _DOC_LIMIT = 50_000
-            truncated = False
-            if len(text) > _DOC_LIMIT:
-                text = text[:_DOC_LIMIT]
-                truncated = True
-
-            caption = message.caption or ""
-            content = f"{self._ts(message)} {self._reply_context(message, with_image=False)[0]}[Alex uploaded a file: {file_name}]\n\n{text}"
-            if truncated:
-                content += f"\n\n[File truncated — only the first {_DOC_LIMIT:,} characters were included.]"
-            if caption:
-                content += f"\n\nAlex's note: {caption}"
-
-            if truncated:
-                self.send_message(chat_id, f"File is large — truncated to {_DOC_LIMIT:,} characters.")
-
-            messages = self.conversations[chat_id]
-            messages.append({"role": "user", "content": content})
-            if self._inbox.destination(chat_id) != 'dashboard':
-                self.bot.send_chat_action(chat_id, "typing")
-            reply = self._run_turn_with_guard(messages, chat_id)
-            if reply is None:
-                return
-            self.save_conversation(chat_id)
-            self.send_message(chat_id, reply)
-            self.maybe_speak(chat_id, reply, from_voice=False)
-
+                text = None
+                note = (f"[Alex sent a file, {file_name}. Files of type {ext or 'without an extension'} cannot be read "
+                        f"here; images and {self.config.document_types} can.]")
         except Exception as e:
-            self.send_message(chat_id, f"Error reading file: {e}")
-        finally:
-            lock.release()
+            text = None
+            note = f"[Alex sent a file, {file_name}, but it could not be read ({type(e).__name__}: {e}).]"
+        if text is not None:
+            note = f"[Alex uploaded a file: {file_name}]\n\n{text[:_DOC_LIMIT]}"
+            if len(text) > _DOC_LIMIT:
+                note += f"\n\n[File truncated: only the first {_DOC_LIMIT:,} of {len(text):,} characters are included.]"
+        self._run_note_turn(chat_id, message, note)
 
     def compose_turn(self, message, nudge: bool = True):
         """The user content for one text message: timestamp, reply context and Alex's text. That is all that is

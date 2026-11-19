@@ -2141,7 +2141,10 @@ class AgentRuntime(SharedHandlers):
         except Exception as e:
             self._inbox.fail_current()
             # A failed request must not remove a user message or a completed tool result.
-            self.send_message(chat_id, f'Task stopped: {e}. The request and tool records are preserved.')
+            # The agent cannot answer, so the runtime does, in plain words; the cause goes to the log and the task record.
+            print(f'[turn] stopped: {type(e).__name__}: {e}')
+            self.send_message(chat_id, "Sorry, something went wrong and I stopped before finishing that. I haven't "
+                                       "repeated anything I'd already done. Tell me when you want me to try again.")
             return None
         finally:
             self._abort_requested.pop(chat_id, None)
@@ -2168,6 +2171,32 @@ class AgentRuntime(SharedHandlers):
                 originals.append(saved["path"])
             content.append({"type": "text", "text": f"{self._ts(sent)} {note}\nSaved originals: " + "; ".join(originals)})
 
+            messages = self.conversations[chat_id]
+            messages.append({"role": "user", "content": content})
+            self.save_conversation(chat_id)
+            if self._inbox.destination(chat_id) != 'dashboard':
+                self.bot.send_chat_action(chat_id, "typing")
+            reply = self._run_turn_with_guard(messages, chat_id)
+            if reply is None:
+                return
+            self.save_conversation(chat_id)
+            self.send_message(chat_id, reply)
+            self.maybe_speak(chat_id, reply, from_voice=False)
+        finally:
+            lock.release()
+
+    def _run_note_turn(self, chat_id: int, message, note: str) -> None:
+        """A turn about something Alex sent: `note` says what he sent and what became of it (a file's text, or why a
+        video, file or voice message could not be read), and the agent answers in its own words. The runtime never
+        writes that reply itself; until 2026-11-19 it sent "Processing video...", "File type '.foo' not supported" or
+        "Voice error: ..." in system language beside the agent's voice."""
+        caption = getattr(message, "caption", None) or ""
+        content = f"{self._ts(message)} {self._reply_context(message, with_image=False)[0]}{note}"
+        if caption:
+            content += f"\n\nAlex's note: {caption}"
+        lock = self.get_chat_lock(chat_id)
+        lock.acquire()
+        try:
             messages = self.conversations[chat_id]
             messages.append({"role": "user", "content": content})
             self.save_conversation(chat_id)

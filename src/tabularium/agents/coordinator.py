@@ -420,17 +420,19 @@ class CatoApp(AgentApp):
         self.ensure_initialised(chat_id)
         ref, kind = _video.video_ref(message)
         if _video.too_big(getattr(ref, "file_size", None)):
-            self.send_message(chat_id, _video.TOO_BIG_TEXT)
+            self._run_note_turn(chat_id, message, _video.TOO_BIG_NOTE)
             return
-        self.send_message(chat_id, "Processing video…")
+        if self._inbox.destination(chat_id) != 'dashboard':
+            self.bot.send_chat_action(chat_id, "typing")      # Alex sees Cato busy; the runtime says nothing itself
         try:
             path = _video.download(self.bot, ref, message.date)
             result = _video.process_video(path)
         except _video.TooBig:
-            self.send_message(chat_id, _video.TOO_BIG_TEXT)
+            self._run_note_turn(chat_id, message, _video.TOO_BIG_NOTE)
             return
         except Exception as e:
-            self.send_message(chat_id, f"Video processing failed: {e}. Nothing was passed to the conversation.")
+            self._run_note_turn(chat_id, message, f"[Alex sent a video, but processing it failed ({type(e).__name__}: {e}). "
+                                                  "Nothing from it is available to you.]")
             return
         text = _video.describe(result, message.caption or "")
         picks = [result["sheet"]] + [p for _, p in _video.pick_attachments(result["frames"])]

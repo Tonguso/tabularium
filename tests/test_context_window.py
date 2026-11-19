@@ -197,8 +197,7 @@ class ContextTests(unittest.TestCase):
         with patch.dict(sys.modules, {'openai': NS(OpenAI=lambda **kw: NS())}):
             self.assertEqual(agent.run_turn_openai(history(10), 7), 'finished')
         self.assertEqual([r[0] for r in routes],[True,False,False])
-        self.assertEqual(len(notices),1)
-        self.assertIn("paid OpenAI API",notices[0])
+        self.assertEqual(notices,[])          # 2026-11-19: the agent is told of the switch; the runtime sends no notice
         self.assertLess(wire_size(routes[-1][1]),wire_size(routes[-2][1]))
         for _,items in routes: self.assertIn('CURRENT TASK:',json.dumps(items))
 

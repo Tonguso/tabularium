@@ -314,11 +314,6 @@ class OpenAIResponses:
                     f"\n\n[Runtime model: {self.model} via OpenAI API; ChatGPT plan quota was reached. "
                     "If Alex asks which model is answering, state the active model clearly.]")
                 self.client = self.OpenAIClient(api_key=agent.OPENAI_API_KEY, timeout=600.0, max_retries=2)
-                try:
-                    agent.send_message(chat_id, f"ChatGPT subscription limit reached. I'm continuing this task "
-                                                f"with {self.model} via the paid OpenAI API.")
-                except Exception as notice_error:
-                    print(f"[billing] Could not deliver fallback notice: {type(notice_error).__name__}")
                 continue  # Same task/history; do not repeat completed tool actions.
             except Exception as e:
                 if self.plan_mode and getattr(e, "status_code", None) == 401 and auth_retries < 1:
@@ -346,10 +341,8 @@ class OpenAIResponses:
             try:
                 if agent._chatgpt_plan.mark_plan_available() and not agent._routing.ACTIVE.get():
                     print("[billing] Subscription request succeeded; returned to ChatGPT plan usage.")
-                    agent.send_message(chat_id, f"ChatGPT subscription is available again. I'm back on "
-                                                f"{self.model} through your subscription.")
             except Exception as notice_error:
-                print(f"[billing] Could not record or notify subscription recovery: {type(notice_error).__name__}")
+                print(f"[billing] Could not record subscription recovery: {type(notice_error).__name__}")
         u = getattr(response, "usage", None)
         agent._inbox.record_event("response", self.model, "subscription" if self.plan_mode else "api", "openai", u)
         if u is not None:

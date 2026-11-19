@@ -46,8 +46,8 @@ class SizeLimit(unittest.TestCase):
         self.assertFalse(vi.too_big(vi.MAX_BYTES))
         self.assertTrue(vi.too_big(vi.MAX_BYTES + 1))
         self.assertFalse(vi.too_big(None))
-        self.assertIn("20 MB", vi.TOO_BIG_TEXT)
-        self.assertIn("local folder", vi.TOO_BIG_TEXT)
+        self.assertIn("20 MB", vi.TOO_BIG_NOTE)
+        self.assertIn("P:\\", vi.TOO_BIG_NOTE)
 
     def test_download_path_naming(self):
         with tempfile.TemporaryDirectory() as tmp:

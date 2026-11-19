@@ -58,11 +58,13 @@ class ImageFiles(unittest.TestCase):
         self.assertEqual(src["media_type"], "image/jpeg")
         self.assertLessEqual(max(img.size), self.rt.VIEW_IMAGE_MAX_EDGE)
 
-    def test_other_file_types_are_still_refused_politely(self):
+    def test_an_unreadable_file_type_is_the_agents_to_explain(self):
+        # 2026-11-19: the runtime answered "File type '.foo' not supported" itself; now the agent is told and replies
         self.payload = b"not an image"
         self.rt.handle_document(self.document("notes.foo", "application/octet-stream", caption=""))
-        self.assertEqual(self.seen, [])
-        self.assertIn("not supported", self.sent[0])
+        self.assertIn("notes.foo", self.seen[0]["content"])
+        self.assertIn("cannot be read here", self.seen[0]["content"])
+        self.assertEqual(self.sent, ["OK"])                           # only the agent's own reply
 
     def test_a_file_over_telegrams_20_mb_cap_is_named_to_owner_not_an_internal_error(self):
         """2026-10-26: a 20.4 MB screenshot sent as a file failed twice as "Task #2163 stopped with an error"."""
@@ -73,10 +75,10 @@ class ImageFiles(unittest.TestCase):
         self.rt.bot.get_file = lambda fid: (_ for _ in ()).throw(AssertionError("must not download"))
         with self.assertRaises(FileTooBig) as caught:
             self.rt.handle_document(doc)
-        self.assertIn("Screenshot_2026_10_26.jpg is 20.4 MB", str(caught.exception))
+        self.assertIn("Screenshot_2026_10_26.jpg, 20.4 MB", str(caught.exception))
         self.assertIn("at most 20 MB", str(caught.exception))
         self.assertEqual(self.seen, [])
-        # the inbox turns it into one sentence to Alex and a done job, never "stopped with an error"
+        # the inbox gives the note to the agent, who tells Alex; never "stopped with an error" (test_runtime_voice)
         from tabularium.core import agent_runtime
         src = Path(agent_runtime.__file__).read_text(encoding="utf-8")
         self.assertIn("except FileTooBig as exc:", src)

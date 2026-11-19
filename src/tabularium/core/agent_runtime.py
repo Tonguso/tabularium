@@ -49,12 +49,13 @@ class DurableInbox:
     is not a new task: it continues that turn (follow_ups, taken by engine._background_boundary at the next tool
     boundary), and bubbles typed within FOLLOW_UP_SECONDS of each other are one message (gather)."""
 
-    def __init__(self, directory, send, bypass=None):
+    def __init__(self, directory, send, bypass=None, tell=None):
         self.directory = Path(directory) / 'task_state'
         self.directory.mkdir(exist_ok=True)
         self.database = self.directory / 'inbox.sqlite3'
         self.send, self.bypass = send, bypass
         self.handlers = {}
+        self.tell = tell              # tell(message, note): a turn about a file Alex sent that could not be read
         self.wake = threading.Event()
         self.shutdown = threading.Event()
         self.local = threading.local()
@@ -385,7 +386,8 @@ class DurableInbox:
             for chat in chats:
                 db.execute("UPDATE jobs SET status='held' WHERE chat=? AND status='pending'", (chat,))
         for chat in chats:
-            self.notify(chat, 'A task was interrupted by shutdown. Its request and tool records are saved. I have held older queued messages to avoid replaying actions. Use /pending to see them, then tell me what to continue.')
+            self.notify(chat, "I was restarted in the middle of something, so I stopped there. I've held your other "
+                              "messages rather than risk repeating anything. Send /pending to see them, and tell me what to pick up.")
         self.worker = threading.Thread(target=self.run, daemon=True, name='durable-inbox')
         self.worker.start()
 
@@ -436,15 +438,16 @@ class DurableInbox:
                 self.active_job = ident
                 self.local.job, self.local.failed = ident, False
                 self.progress('task_started', deadline_seconds=2100)
-                fn(batch if album else message)
+                try:
+                    fn(batch if album else message)
+                except FileTooBig as exc:                       # a fact about his message, for the agent to tell him
+                    self.tell(message, str(exc))
                 status = 'failed' if self.local.failed else 'done'
-            except FileTooBig as exc:                           # Alex's to fix, said plainly; not a runtime failure
-                status = 'done'
-                self.notify(chat, str(exc))
             except Exception as exc:
                 status = 'failed'
                 print(f'[inbox] Task #{ident} failed: {type(exc).__name__}: {exc}')
-                self.notify(chat, f'Task #{ident} stopped with an error. Its request is saved; it was not automatically replayed.')
+                self.notify(chat, "Sorry, something went wrong on my side and I didn't get to that message. "
+                                  "I haven't retried it; send it again if you still need it.")
             finally:
                 self.active_chat = None
                 self.active_job = None

@@ -22,7 +22,8 @@ TELEGRAM_FILE_CAP = 20 * 1024 * 1024       # the Bot API refuses getFile above t
 
 
 class FileTooBig(Exception):
-    """An incoming file Telegram will not let a bot download. str(exc) is the sentence for Alex.
+    """An incoming file Telegram will not let a bot download. str(exc) is the note the agent gets about his message;
+    the inbox runs a turn on it, so the agent tells him in its own words (2026-11-19).
 
     2026-10-26: a 20.4 MB screenshot sent "as file" failed twice as "Task #2163 stopped with an error", and Cato
     guessed at the cause. The size is known before the download, so the gate is one place for every incoming file
@@ -31,14 +32,14 @@ class FileTooBig(Exception):
 
 class SharedHandlers:
     def fetch_file(self, ref, what="That file"):
-        """Download one incoming Telegram file (photo size, document, voice) or raise FileTooBig with the sentence."""
+        """Download one incoming Telegram file (photo size, document, voice) or raise FileTooBig with the note."""
         if getattr(ref, 'channel', None) == 'dashboard':
             from tabularium.channels.messaging import attachment_path
             return attachment_path(self.AGENT_DIR, ref.attachment).read_bytes()
         size = getattr(ref, "file_size", None) or 0
         name = getattr(ref, "file_name", None) or what
-        notice = (f"{name} is {size / 1048576:.1f} MB; Telegram lets a bot download at most 20 MB, so I cannot read it. "
-                  "Send it as a photo (Telegram compresses it) or a smaller file.")
+        notice = (f"[Alex sent {name}, {size / 1048576:.1f} MB. Telegram lets a bot download at most 20 MB, so it could "
+                  "not be read. It would get through as a photo, which Telegram compresses, or as a smaller file.]")
         if size > TELEGRAM_FILE_CAP:
             raise FileTooBig(notice)
         try:
@@ -370,14 +371,15 @@ class SharedHandlers:
         elif kind == 'video':
             from tabularium.tools import video_intake
             self.ensure_initialised(message.chat.id)
-            self.send_message(message.chat.id, 'Processing video…')
             try:
                 result = video_intake.process_video(path)
-                picks = [result['sheet']] + [p for _, p in video_intake.pick_attachments(result['frames'])]
-                images = [self._image_for_model(Path(p).read_bytes())[:2] for p in picks]
-                self._run_image_turn(message.chat.id, images, video_intake.describe(result, message.caption or ''), message.date)
-            except video_intake.VideoError:
-                self.send_message(message.chat.id, 'I could not process that video. It is saved; try a shorter MP4 clip.')
+            except video_intake.VideoError as e:
+                self._run_note_turn(message.chat.id, message, f"[Alex sent a video, but it could not be processed ({e}). "
+                                                              "It is saved; a shorter MP4 clip would get through.]")
+                return
+            picks = [result['sheet']] + [p for _, p in video_intake.pick_attachments(result['frames'])]
+            images = [self._image_for_model(Path(p).read_bytes())[:2] for p in picks]
+            self._run_image_turn(message.chat.id, images, video_intake.describe(result, message.caption or ''), message.date)
         else:
             message.document = local
             self.handle_document(message)
@@ -470,16 +472,12 @@ class SharedHandlers:
         self.ensure_initialised(chat_id)
 
         if not self.OPENAI_API_KEY:
-            self.send_message(chat_id, "Voice transcription requires OPENAI_API_KEY in .env.")
+            self._run_note_turn(chat_id, message, "[Alex sent a voice message, but it could not be transcribed: "
+                                                  "transcription needs OPENAI_API_KEY in .env, and none is set.]")
             return
-
-        lock = self.get_chat_lock(chat_id)
-        lock.acquire()
-
+        downloaded = self.fetch_file(message.voice, "That voice message")
         try:
             from openai import OpenAI as OAClient
-            downloaded = self.fetch_file(message.voice, "That voice message")
-
             audio = io.BytesIO(downloaded)
             audio.name = getattr(message.voice, "file_name", None) or "voice.ogg"
             if audio.name.endswith(".weba"):
@@ -488,10 +486,16 @@ class SharedHandlers:
                 model=self.STT_MODEL, file=audio
             )
             text = self._clean_transcript(transcript.text)
-            if not text:
-                self.send_message(chat_id, "Couldn't transcribe the voice message.")
-                return
+        except Exception as e:
+            self._run_note_turn(chat_id, message, f"[Alex sent a voice message, but transcribing it failed ({type(e).__name__}: {e}).]")
+            return
+        if not text:
+            self._run_note_turn(chat_id, message, "[Alex sent a voice message, but no words could be made out in it.]")
+            return
 
+        lock = self.get_chat_lock(chat_id)
+        lock.acquire()
+        try:
             self._inbox.local.turn_messages = [(message.message_id, text)]
             # Keep transcription internal; Alex does not want a text echo.
 
@@ -511,8 +515,6 @@ class SharedHandlers:
             if self._inbox.destination(chat_id) == 'dashboard':
                 self.save_conversation(chat_id)
             self.deliver_voice_reply(chat_id, reply)
-        except Exception as e:
-            self.send_message(chat_id, f"Voice error: {e}")
         finally:
             lock.release()
 

@@ -31,8 +31,8 @@ _FFMPEG_FALLBACK = (r"C:\Users\owner\AppData\Local\Microsoft\WinGet\Packages"
                     r"\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe")
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-TOO_BIG_TEXT = ("That video is over Telegram's 20 MB limit for bots, so I can't download it. "
-                "Please save it to a local folder and send me the path, or send a compressed version.")
+TOO_BIG_NOTE = ("[Alex sent a video over Telegram's 20 MB limit for bots, so it could not be downloaded. It would get "
+                "through saved to D: or P:\\ with the path sent, or compressed.]")
 _MIME_EXT = {"video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
              "video/x-matroska": ".mkv", "video/x-msvideo": ".avi", "video/mpeg": ".mpg"}
 

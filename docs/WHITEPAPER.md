@@ -668,6 +668,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-19 | Voice notes through ElevenLabs were made from the reply as formatted for Telegram, so bold tags and escaped symbols such as &amp; reached the voice; the OpenAI path stripped them, with its own copy of the cleaning | One step makes the spoken text for both services: the reply as plain text, after the rules every reply gets |
 
+| 2026-11-19 | The owner sent a video and the runtime answered "Processing video..." before the agent said a word; other paths answered him in system language too: "File type not supported", "Voice error", "Task stopped with an error", subscription notices | When something about the owner's message cannot be passed on as it is, the agent is told what he sent and what became of it, and replies itself; the runtime writes only when the agent cannot run, in plain first-person words |
+
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
 own work, it eventually accepted a failure; each fix made the proof a record the runtime produces itself, and made
