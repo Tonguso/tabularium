@@ -666,6 +666,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-15 | A benchmark failed three correct answers: the case asked for a growth rate, the worker wrote 20.0, and the checker, which compared values by their JSON spelling to keep true apart from 1, expected 20; the same run recorded no release, because workers run from release snapshots that have no Git history | Checks compare values, not their spelling: 20 equals 20.0 at any depth, true stays apart from 1, and a case that needs a whole number says so. Each model response records the release that produced it, and a run names its tested release only when all its responses agree |
 
+| 2026-11-19 | Voice notes through ElevenLabs were made from the reply as formatted for Telegram, so bold tags and escaped symbols such as &amp; reached the voice; the OpenAI path stripped them, with its own copy of the cleaning | One step makes the spoken text for both services: the reply as plain text, after the rules every reply gets |
+
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
 own work, it eventually accepted a failure; each fix made the proof a record the runtime produces itself, and made

@@ -82,8 +82,8 @@ class Config:
     xlsx_uploads: bool = False                  # accept .xlsx documents (spreadsheet_upload)
     document_types: str = ".docx, .txt, or .pdf"
     tts: str = "elevenlabs"                     # 'elevenlabs' | 'openai'
-    voice_env: str = ""                         # ElevenLabs voice id env var
-    tts_voice: str = ""                         # OpenAI TTS voice
+    voice_env: str = ""                         # env var that overrides the ElevenLabs voice id
+    tts_voice: str = ""                         # the voice: an OpenAI voice name, or an ElevenLabs voice id
     tts_instructions: str = ""
     background_refusals: bool = False           # Cato: workers refuse polling other agents' task_state and delivering early
     work_roots: tuple = ()                      # folders outside its own the agent may read and write (agent.toml); never
@@ -848,6 +848,13 @@ class AgentApp(engine.AgentRuntime):
     def _tts_key_name(self) -> str:
         return "OPENAI_API_KEY" if self.config.tts == "openai" else "ELEVENLABS_API_KEY"
 
+    def _speech_text(self, text: str) -> str:
+        """What is spoken: the reply as plain text, after the name and punctuation rules every reply gets. Telegram's
+        formatting is display only; until 2026-11-19 the ElevenLabs path sent it to the voice, tags and &amp; included,
+        while the OpenAI path stripped it."""
+        import html
+        return html.unescape(re.sub(r"<[^>]+>", "", self.sanitise_for_telegram(text))).strip()
+
     def _speak(self, chat_id: int, text: str) -> bool:
         if self.config.tts == "openai":
             return self._speak_openai(chat_id, text)
@@ -855,7 +862,7 @@ class AgentApp(engine.AgentRuntime):
 
     def _speak_elevenlabs(self, chat_id: int, text: str) -> bool:
         """Send ElevenLabs speech as an Ogg/Opus voice note; failure falls back to text."""
-        clean = self.sanitise_for_telegram(text).strip()
+        clean = self._speech_text(text)
         key = os.environ.get("ELEVENLABS_API_KEY", "")
         if not clean or len(clean) > TTS_MAX_CHARS or not key:
             return False
@@ -871,7 +878,7 @@ class AgentApp(engine.AgentRuntime):
             elif english and not chinese:
                 payload["language_code"] = "en"
             # Mixed-language passages use the model's multilingual pronunciation.
-            voice_id = os.environ.get(self.config.voice_env, "c6SfcYrb2t09NHXiT80T")
+            voice_id = os.environ.get(self.config.voice_env or "", "") or self.config.tts_voice or "c6SfcYrb2t09NHXiT80T"
             response = requests.post(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
                 headers={"xi-api-key": key},
@@ -903,9 +910,9 @@ class AgentApp(engine.AgentRuntime):
             return False
 
     def _speak_openai(self, chat_id: int, text: str) -> bool:
-        import html, math
-        clean = html.unescape(re.sub(r"<[^>]+>", "", self.sanitise_for_telegram(text))).strip()
-        if not clean or len(clean) > 4096 or not self.OPENAI_API_KEY: return False
+        import math
+        clean = self._speech_text(text)
+        if not clean or len(clean) > TTS_MAX_CHARS or not self.OPENAI_API_KEY: return False
         try:
             from openai import OpenAI
             from mutagen.oggopus import OggOpus
