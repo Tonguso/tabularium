@@ -27,6 +27,7 @@ def _fake_agy_popen(script_fn):
     def factory(cmd, **kwargs):
         out_r, out_w = io.StringIO(), []
         stdin_buf = io.StringIO()
+        closed = threading.Event()
 
         class Stdin:
             def write(self, data):
@@ -36,7 +37,7 @@ def _fake_agy_popen(script_fn):
                 pass
 
             def close(self):
-                pass
+                closed.set()
 
         lines = []
         done = threading.Event()
@@ -44,10 +45,9 @@ def _fake_agy_popen(script_fn):
 
         def run():
             try:
-                # Wait briefly for prompt write
-                deadline = time.time() + 2
-                while not stdin_buf.getvalue() and time.time() < deadline:
-                    time.sleep(0.01)
+                # Like agy, read the prompt once stdin is closed. A fixed two-second wait failed in the release gate
+                # (2026-11-19): under the suite's load the prompt thread started later, and the fake read nothing.
+                closed.wait(60)
                 events, rc, err = script_fn(cmd, kwargs, stdin_buf.getvalue())
                 state["rc"] = rc
                 state["stderr"] = err
