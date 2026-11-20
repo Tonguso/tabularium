@@ -8,6 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]
 from tabularium.records.project_store import ProjectStore
 from tabularium.records.background_runtime import TaskStore
 from tabularium.memory.conversation_recall import query_terms
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 class ProjectEngine(unittest.TestCase):
     def setUp(self):
@@ -42,7 +43,7 @@ class ProjectEngine(unittest.TestCase):
             self.store.manage(1,"save",kind="lesson",key="example",data=data)
     def test_checkpoint_persists_and_missing_result_is_not_claimed(self):
         tasks=TaskStore(self.root)
-        t=tasks.start(1,"Read research")
+        t=tasks.start(1,"Read research", completion_items=WORK)
         tasks.checkpoint(1,t["id"],"Read first source","Read second",["source.txt"])
         self.assertIsNone(tasks.status(1)[0]["result_file"])
         self.assertTrue((tasks.directory(t["id"])/"checkpoint.json").exists())
@@ -53,7 +54,7 @@ class ProjectEngine(unittest.TestCase):
         with tasks.db() as db:
             db.execute("UPDATE tasks SET updated=0")
     def test_crashed_worker_with_clean_records_is_rerun_at_most_twice(self):
-        tasks=TaskStore(self.root, display="Cato"); t=tasks.start(1,"Read research"); notices=[]
+        tasks=TaskStore(self.root, display="Cato"); t=tasks.start(1,"Read research", completion_items=WORK); notices=[]
         for n in (1,2):
             self.crash(tasks,t["id"]); tasks.retry_interrupted()
             self.assertEqual(tasks.get(t["id"])["status"],"queued",n)
@@ -65,14 +66,14 @@ class ProjectEngine(unittest.TestCase):
         tasks.report_worker_failures(lambda c,text:notices.append(text)); tasks.report_worker_failures(lambda c,text:notices.append(text))
         self.assertEqual(notices,["Cato could not finish 'Read research' (background task %d) and has stopped trying; it is listed under attention on the dashboard."%t["id"]])
     def test_unfinished_external_action_blocks_automatic_rerun(self):
-        tasks=TaskStore(self.root); t=tasks.start(1,"Send the report")
+        tasks=TaskStore(self.root); t=tasks.start(1,"Send the report", completion_items=WORK)
         actions=tasks.directory(t["id"])/"task_state"/"actions"; actions.mkdir(parents=True)
         (actions/"1.json").write_text(json.dumps({"tool":"send_email","status":"started"}),encoding="utf-8")
         self.crash(tasks,t["id"]); tasks.retry_interrupted()
         self.assertEqual(tasks.get(t["id"])["status"],"interrupted")
         self.assertIn("send_email started and never reported",tasks.get(t["id"])["note"])
     def test_stops_that_are_not_crashes_are_never_rerun(self):
-        tasks=TaskStore(self.root); t=tasks.start(1,"Looping task")
+        tasks=TaskStore(self.root); t=tasks.start(1,"Looping task", completion_items=WORK)
         tasks.move(t["id"],"stop","interrupted","Stopped: repeated failed or refused tool calls; see the result.")
         with tasks.db() as db:
             db.execute("UPDATE tasks SET updated=0")
@@ -80,9 +81,9 @@ class ProjectEngine(unittest.TestCase):
         self.assertEqual(tasks.get(t["id"])["status"],"interrupted")
     def test_start_has_no_mode_and_any_brief_is_accepted(self):
         tasks=TaskStore(self.root)
-        self.assertEqual(tasks.start(1,"Read only. Do not delegate; no Cal or Vit calls.")["status"],"queued")
-        self.assertEqual(tasks.start(1,"Brazil election note; get Cal to challenge it")["status"],"queued")
-        self.assertNotIn("warning",tasks.control(1,tasks.start(1,"Read research")["id"],"steer","Add a Cal review"))
+        self.assertEqual(tasks.start(1,"Read only. Do not delegate; no Cal or Vit calls.", completion_items=WORK)["status"],"queued")
+        self.assertEqual(tasks.start(1,"Brazil election note; get Cal to challenge it", completion_items=WORK)["status"],"queued")
+        self.assertNotIn("warning",tasks.control(1,tasks.start(1,"Read research", completion_items=WORK)["id"],"steer","Add a Cal review"))
     def test_bilingual_retrieval(self):
         self.assertIn("工作邮箱",query_terms("work email"))
         self.assertIn("work email",query_terms("工作邮箱"))

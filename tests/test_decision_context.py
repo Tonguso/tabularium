@@ -8,6 +8,7 @@ from tests.agent_harness import make_agent, put
 from tabularium.records import task_decisions as td
 from tabularium.memory.conversation_recall import ConversationRecall
 from tabularium.core.outcome import Failed, Refused
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class DecisionContext(unittest.TestCase):
@@ -25,7 +26,7 @@ class DecisionContext(unittest.TestCase):
 
     def question(self, agent):
         store = agent._background
-        task = store.start(1, 'Redraw charts')['id']
+        task = store.start(1, 'Redraw charts', completion_items=WORK)['id']
         put(store, task, 'running')
         return store.ask(1, task, 'Delete the rendered images?')
 
@@ -235,11 +236,11 @@ class DecisionContext(unittest.TestCase):
         never saw his no. An answered question is a ruling in the live evidence of every turn and task."""
         agent = self.agent()
         store = agent._background
-        first = store.start(1, 'Fix the arrow')['id']; put(store, first, 'running')
+        first = store.start(1, 'Fix the arrow', completion_items=WORK)['id']; put(store, first, 'running')
         asked = store.ask(1, first, 'Delete the left red piece?')
         self.assertNotIn('owner_rulings', store.live_context(1))                 # pending: a question, not a ruling
         td.answer_record(store, 1, asked['id'], 'No. It stays behind the ring; align it.', 'synthetic verified source')
-        for scope in (None, first, store.start(1, 'Four new directions')['id']):
+        for scope in (None, first, store.start(1, 'Four new directions', completion_items=WORK)['id']):
             evidence = json.loads(store.live_context(1, scope).split(chr(10), 1)[1])
             self.assertEqual(evidence['owner_rulings']['answers'][0]['answer'], 'No. It stays behind the ring; align it.', scope)
             self.assertIn('never offer again', evidence['owner_rulings']['note'])

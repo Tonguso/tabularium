@@ -2,6 +2,7 @@
 a looping agent is stopped with the runtime's own words and the task needs attention (2026-10-07, 2026-10-12)."""
 import sys, tempfile, time, unittest
 from pathlib import Path
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 ROOT = Path(__file__).resolve().parents[1]
 from tabularium.records import background_runtime
 from agent_harness import put
@@ -36,7 +37,7 @@ class LoopingWorker(unittest.TestCase):
             root = Path(tmp) / "coordinator"; root.mkdir()
             (root / "agent.py").write_text(STUB, encoding="utf-8")
             store = background_runtime.TaskStore(root)
-            task = store.start(1, "Review the workbook")
+            task = store.start(1, "Review the workbook", completion_items=WORK)
             notices = []
             try:
                 deadline = time.monotonic() + 15
@@ -66,7 +67,7 @@ class Notification(unittest.TestCase):
             root = Path(tmp) / "coordinator"; root.mkdir()
             store = background_runtime.TaskStore(root)
             for status in ("capped", "needs_attention"):
-                task = store.start(1, "Build the basket")
+                task = store.start(1, "Build the basket", completion_items=WORK)
                 (store.directory(task["id"]) / "result.txt").write_text(f"Partial basket ({status})", encoding="utf-8")
                 put(store, task["id"], status)
             sent = []

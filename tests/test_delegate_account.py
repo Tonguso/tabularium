@@ -7,6 +7,7 @@ import json, tempfile, unittest
 from pathlib import Path
 
 from agent_harness import make_agent
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class DelegateAccountReachesAlex(unittest.TestCase):
@@ -17,7 +18,7 @@ class DelegateAccountReachesAlex(unittest.TestCase):
         root = Path(self.tmp.name) / "coordinator"; root.mkdir()
         self.agent = make_agent("coordinator", root)
         self.store = self.agent._background
-        self.task = self.store.start(1, "Receive Vit's work: Tiro")["id"]
+        self.task = self.store.start(1, "Receive Vit's work: Tiro", completion_items=WORK)["id"]
         self.store.add_delegation(self.task, "vit", "req-tiro", "Tiro build", "owner_decision")
         items = [dict(item="Tiro launches", check="launch it", critical=True, early=True)]
         from tests.test_delegation_agreement import bind_delegate

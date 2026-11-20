@@ -9,6 +9,7 @@ from tests.agent_harness import make_agent, put
 from tabularium.records import task_decisions as td
 from tabularium.core.reply_envelope import Reply, reply
 from tabularium.core.roster import AGENTS
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class QuestionBinding(unittest.TestCase):
@@ -47,7 +48,7 @@ class QuestionBinding(unittest.TestCase):
         a = self.agent()
         asked = a._background.ask(1, 0, 'Shall I draft the memo?')
         td.bind_messages(a._background, asked['id'], [900])
-        task = a._background.start(1, 'Make a report')['id']
+        task = a._background.start(1, 'Make a report', completion_items=WORK)['id']
         kept = a._background.ask(1, task, 'Choose A or B')
         # His next message is about something else: the conversation question leaves the evidence, the task's stays.
         self.turn(a, 901, 'Book the flight', date=asked['created'] + 60)
@@ -75,7 +76,7 @@ class QuestionBinding(unittest.TestCase):
     def test_reply_is_a_candidate_not_an_answer_or_continuation(self):
         for name in AGENTS:
             a = self.agent(name)
-            task = a._background.start(1, 'Make a report')['id']
+            task = a._background.start(1, 'Make a report', completion_items=WORK)['id']
             d = a._background.ask(1, task, 'Choose A or B')
             td.bind_messages(a._background, d['id'], [900])
             for text in ('Why?', 'Use Lato', 'Choose B'):
@@ -131,7 +132,7 @@ class QuestionBinding(unittest.TestCase):
     def test_verified_current_answer_resumes_once_and_preserves_other_decisions(self):
         a = self.agent()
         s = a._background
-        task = s.start(1, 'Build report')['id']
+        task = s.start(1, 'Build report', completion_items=WORK)['id']
         d = s.ask(1, task, 'Choose A or B')
         other = s.ask(1, 0, 'Draw baskets?')
         db = sqlite3.connect(a._inbox.database)

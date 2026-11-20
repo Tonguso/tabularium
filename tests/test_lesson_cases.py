@@ -17,6 +17,7 @@ from tabularium.learning import lesson_cases
 from tabularium.learning import regression
 from tabularium.learning import trials
 from tabularium.records import background_runtime as rt
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 SKILL = '---\nname: basket\nmetadata:\n  version: "1.8.5"\n---\n\nRead archives.\n'
 
 
@@ -48,7 +49,7 @@ class LessonCases(unittest.TestCase):
             os.environ.pop(name, None)
 
     def lesson(self, rule="Save the value the owner named, nothing else", request="Save result.txt containing A."):
-        task = self.store.start(1, request, "")["id"]
+        task = self.store.start(1, request, "", completion_items=WORK)["id"]
         key = learning.propose(self.root, 1, rule, str(self.store.directory(task) / "checkpoint.json"), "basket_build")
         learning.propose_change(self.root, 1, key, self.skill, "", rule + ".", {"claim": "The skill says nothing about it.", "silent_at": "the rules", "alternatives": ["a", "b"]})
         return key
@@ -194,7 +195,7 @@ class LessonCases(unittest.TestCase):
     def test_recombination_drafts_a_reserved_case_by_code_and_the_trial_uses_the_skills_cases(self):
         a = self.lesson(rule="Keep the owner's value", request="Save result.txt containing A.")
         b = self.lesson(rule="Never add a trailing note", request="Save result.txt containing A and nothing after it.")
-        other = self.store.start(1, "Save result.txt containing Z.", "")["id"]
+        other = self.store.start(1, "Save result.txt containing Z.", "", completion_items=WORK)["id"]
         c = learning.propose(self.root, 1, "A lesson of another skill", str(self.store.directory(other) / "checkpoint.json"), "other")
         with self.assertRaises(ValueError):
             lesson_cases.recombine(self.root, 1, a, [b])                                   # not approved yet

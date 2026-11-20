@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from tabularium.records.background_runtime import TaskStore
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class DecisionSeven(unittest.TestCase):
@@ -20,7 +21,7 @@ class DecisionSeven(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.store = TaskStore(self.root)
-        self.task = self.store.start(self.CHAT, "样本拆分检验（预先登记）", "")["id"]
+        self.task = self.store.start(self.CHAT, "样本拆分检验（预先登记）", "", completion_items=WORK)["id"]
         put(self.store, self.task, "running")
         self.decision = self.store.ask(self.CHAT, self.task, "样本拆分 (a) 拆分需要篮子成立日：Alex 能否导出 这批篮子的成立/上线日？")
         self.recall = self.root / "task_state/conversation_recall.sqlite3"
@@ -63,7 +64,7 @@ class DecisionSeven(unittest.TestCase):
     def test_actual_task_state_is_reported_without_guessing_from_a_newer_topic(self):
         put(self.store, self.task, "finished")
         self.assertEqual(self.store.decisions(self.CHAT)[0]['task_state'], 'finished')
-        self.store.start(self.CHAT, "篮子成立日重跑：样本拆分", "")
+        self.store.start(self.CHAT, "篮子成立日重跑：样本拆分", "", completion_items=WORK)
         self.assertNotIn("possibly_stale", self.store.decisions(self.CHAT)[0])
 
 

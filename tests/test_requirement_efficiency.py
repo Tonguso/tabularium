@@ -8,6 +8,7 @@ from tabularium.records import verification
 from tabularium.learning import regression
 from tabularium.core.roster import AGENTS
 from tabularium.core.reply_envelope import Reply
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 class EfficiencyTests(unittest.TestCase):
     def setUp(self):
@@ -66,7 +67,7 @@ class EfficiencyTests(unittest.TestCase):
         root = self.root / 'worker'; root.mkdir()
         (root / 'agent.py').write_text(STUB, encoding='utf-8')
         store = TaskStore(root)
-        ident = store.start(1, 'Synthetic resume')['id']
+        ident = store.start(1, 'Synthetic resume', completion_items=WORK)['id']
         folder = store.directory(ident)
         (folder / 'conversation_1.json').write_text('[]')
         store.checkpoint(1, ident, 'UNIQUE SAVED PROGRESS', 'Continue', [], facts=['UNIQUE FACT'])

@@ -341,7 +341,12 @@ class CatoApp(AgentApp):
                          f"When it returns, read it with delegate(action='result', agent='{agent}', request_id='{request_id}'), "
                          "accept it against the completion items, and deliver the outcome to Alex.",
                 context="Brief sent to the delegate:\n" + brief, extra={"delegation_owner": request_id},
-                parked_on={"agent": agent, "request_id": request_id, "purpose": purpose})
+                parked_on={"agent": agent, "request_id": request_id, "purpose": purpose},
+                completion_items=[{"item": f"{who}'s result for request {request_id} read, reviewed against its completion "
+                                           "items, and the outcome delivered to Alex",
+                                   "check": f"Acceptance of request {request_id} is recorded for its current delivery, "
+                                            "and the reply to Alex states what was met and what was not",
+                                   "critical": True}])
             target, handed_off = owner["id"], True
             response["owner_task"] = owner["summary"]
         else:

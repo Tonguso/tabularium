@@ -9,6 +9,7 @@ from tabularium.core.turn_loop import run, Exchange
 from tabularium.core.session_lifecycle import continue_turn
 from tabularium.records.task_decisions import answer_record
 from tabularium.records.worker_lease import WorkerLease
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class WaitingHandoff(unittest.TestCase):
@@ -51,7 +52,7 @@ class WaitingHandoff(unittest.TestCase):
                 self.assertEqual(store.finish(ident,result), 'needs_answer')
             finally:
                 lease.close()
-            other = store.start(1,'Unrelated task')['id']
+            other = store.start(1,'Unrelated task', completion_items=WORK)['id']
             self.assertEqual(store.claim_next()['id'],other)
             put(store,other,'finished')
             answer_record(store,1,decision[0]['id'],'B','trusted test source')
@@ -217,8 +218,8 @@ def run_turn(messages, chat):
 '''
         (self.root/'agent.py').write_text(stub,encoding='utf-8')
         store = TaskStore(self.root)
-        first = store.start(1,'First task')['id']
-        second = store.start(1,'Next task')['id']
+        first = store.start(1,'First task', completion_items=WORK)['id']
+        second = store.start(1,'Next task', completion_items=WORK)['id']
         self.assertEqual(store.launch_next(),first)
         process = store.processes[first]
         process.wait(timeout=15)

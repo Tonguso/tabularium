@@ -16,6 +16,7 @@ from tabularium.core.outcome import Refused
 from tabularium.core.reply_envelope import Reply
 from tabularium.records.background_runtime import TaskStore
 from tabularium.channels.owner_telegram import OWNER_CHAT_ID
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 CHAT = OWNER_CHAT_ID
 
 
@@ -29,7 +30,7 @@ class Transitions(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.store = TaskStore(self.tmp.name)
-        self.task = self.store.start(CHAT, "Build the report", "")["id"]
+        self.task = self.store.start(CHAT, "Build the report", "", completion_items=WORK)["id"]
 
     def test_a_question_about_a_finished_task_is_refused_and_the_task_stays_finished(self):
         put(self.store, self.task, "finished")
@@ -178,7 +179,7 @@ class Agent(unittest.TestCase):
 
     def test_replying_to_a_question_answers_its_decision_directly(self):
         agent = self.agent()
-        task = agent._background.start(CHAT, "Basket build", "")["id"]
+        task = agent._background.start(CHAT, "Basket build", "", completion_items=WORK)["id"]
         put(agent._background, task, "running")
         decision = agent._background.ask(CHAT, task, "A: 30 names or B: 50 names?")
         ask = Reply("Before I finish: A (30 names) or B (50 names)?")
@@ -206,7 +207,7 @@ class Agent(unittest.TestCase):
         store = agent._background
         with store.db() as db:
             db.execute("UPDATE tasks SET status='finished', notified=1")          # the harness's own self-test task
-        task = store.start(CHAT, "Fix Tiro", "")["id"]
+        task = store.start(CHAT, "Fix Tiro", "", completion_items=WORK)["id"]
         put(store, task, "needs_attention")
         (store.directory(task) / "result.txt").write_text("Portable Tiro is ready to use.", encoding="utf-8")
         with store.db() as db:
@@ -220,7 +221,7 @@ class Agent(unittest.TestCase):
 
     def test_optional_follow_up_explicitly_uses_a_conversation_question(self):
         agent = self.agent()
-        task = agent._background.start(CHAT, "Report", "")["id"]
+        task = agent._background.start(CHAT, "Report", "", completion_items=WORK)["id"]
         put(agent._background, task, "finished")
         draft = Reply("Do you want the Japan names too?", question="Japan names too?", decision_task_id=0)
         out = task_decisions.verify_reply(agent, [], CHAT, draft)

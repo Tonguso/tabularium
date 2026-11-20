@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from agent_harness import make_agent, AGENTS
 from tabularium.records import verification
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 class RequirementChecks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -71,7 +72,7 @@ class RequirementChecks(unittest.TestCase):
     def test_cross_chat_and_worker_checks_refused(self):
         agent, _ = self.setup_agent('coordinator')
         self.assertIn('another chat', verification.execute(agent, 99, 1, 1))
-        other = agent._background.start(1, 'other task')['id']
+        other = agent._background.start(1, 'other task', completion_items=WORK)['id']
         self.assertIn('another chat or worker', verification.execute(agent, 1, other, 1))
 
     def test_native_command_failure_is_not_hidden_by_powershell(self):

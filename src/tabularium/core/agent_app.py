@@ -1242,7 +1242,11 @@ class AgentApp(engine.AgentRuntime):
                        + "\nStart with " + name + " using " + json.dumps(inputs, ensure_ascii=False)
                        + ". Preserve the summary-first workflow; report evidence and incomplete coverage.")
             task = self._background.start(chat_id, request,
-                                          "Full original chat for relevant context: " + str(self._conversation_path(chat_id)))
+                                          "Full original chat for relevant context: " + str(self._conversation_path(chat_id)),
+                                          completion_items=[{"item": "Alex's current request answered from the research reports",
+                                                             "check": "The reply answers the request, cites the reports it "
+                                                                      "used and names any coverage that is incomplete",
+                                                             "critical": True}])
             return (f"Research handed to background task: {self._background.label(task)} (internal ID: {task['id']}; do not show the ID to Alex). Do not repeat the scan in this chat. "
                     "Tell Alex it is running and let him continue chatting; use background_task(status/steer/cancel) as needed.")
         self._inbox.local.tool_id = None

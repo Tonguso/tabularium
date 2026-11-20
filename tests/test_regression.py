@@ -9,6 +9,7 @@ from tabularium.learning import regression
 from tabularium.learning import trials
 from agent_harness import put, make_agent, AGENTS
 from tabularium.records import background_runtime as rt
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 def subjective():
     return dict(id='rubric',version=1,request='Do A and B',oracle=dict(basis='Independent rubric',reviewed_by='test'),
                 requirements=[dict(id=n,check=dict(kind='judgment',rubric='Must do '+n)) for n in ('A','B')])
@@ -122,7 +123,7 @@ class Evaluation(unittest.TestCase):
 
     def test_collect_never_promotes_history_to_trusted_cases(self):
         store=rt.TaskStore(self.root)
-        row=store.start(1,'Past work')
+        row=store.start(1,'Past work', completion_items=WORK)
         folder=store.directory(row['id'])
         (folder/'checkpoint.json').write_text('{"plan":["A"]}')
         (folder/'result.txt').write_text('Agent said it was correct. '*20)

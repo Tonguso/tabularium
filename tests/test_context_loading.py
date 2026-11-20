@@ -7,6 +7,7 @@ from tests.agent_harness import make_agent
 from tabularium.records.background_runtime import TaskStore
 from tabularium.records.task_decisions import answer_record
 from tabularium.core.roster import AGENTS
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class ContextLoadingTests(unittest.TestCase):
@@ -21,7 +22,7 @@ class ContextLoadingTests(unittest.TestCase):
             root.mkdir()
             agent = make_agent(name, root, background=True)
             store = agent._background
-            other = store.start(1, 'UNRELATED PROJECT', '')['id']
+            other = store.start(1, 'UNRELATED PROJECT', '', completion_items=WORK)['id']
             store.ask(1, other, 'UNRELATED DECISION')
             brief = 'Required detail. ' * 700 + 'FINAL REQUIREMENT'
             store.control(1, 1, 'steer', brief)

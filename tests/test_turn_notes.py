@@ -65,7 +65,7 @@ class TurnNotes(unittest.TestCase):
         rt = self.runtime
         rt.conversations[1] = [{"role": "user", "content": rt.compose_turn(message("还有什么有意思的主题"), nudge=False)}]
         started = []
-        rt._background.start = lambda chat, request, context: started.append(request) or {"id": 148, "request": request}
+        rt._background.start = lambda chat, request, context, **_: started.append(request) or {"id": 148, "request": request}
         rt._background.label = lambda task: "research"
         rt._execute_tool_unguarded("list_research_reports", {"date_from": "2026-10-05"}, 1)
         self.assertEqual(len(started), 1)

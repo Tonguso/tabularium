@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from tabularium.learning import learning, dockets
 from tabularium.records import background_runtime as rt
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 SKILL = '---\nname: briefs\nmetadata:\n  version: "1.0.0"\n---\n\n## Acceptance\n- State what done looks like.\n'
 DAY = 86400
@@ -30,7 +31,7 @@ class Dockets(unittest.TestCase):
         self.tmp.cleanup()
 
     def observe(self, text, n, at=None):
-        task = self.store.start(1, f"brief {n}", "")["id"]
+        task = self.store.start(1, f"brief {n}", "", completion_items=WORK)["id"]
         key = learning.propose(self.root, 1, text, str(self.store.directory(task) / "checkpoint.json"), "other")
         if at is not None:
             learning._update(self.root, 1, key, lambda d: d.update(created=at))

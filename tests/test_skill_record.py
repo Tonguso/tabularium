@@ -13,6 +13,7 @@ from agent_harness import make_agent, put
 from tabularium.records import skill_record
 from tabularium.records.background_runtime import TaskStore
 from tabularium.channels.owner_telegram import OWNER_CHAT_ID
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 CHAT = OWNER_CHAT_ID
 DAY = 86400
 
@@ -42,7 +43,7 @@ class SkillRecord(unittest.TestCase):
                        (str(CHAT), said, "[2026-10-03 Saturday 12:02] 用印篆体"))
 
     def task(self, request, at, files, archive=False):
-        ident = self.store.start(CHAT, request)["id"]
+        ident = self.store.start(CHAT, request, completion_items=WORK)["id"]
         put(self.store, ident, "finished")
         with self.store.db() as db:
             db.execute("UPDATE tasks SET updated=? WHERE id=?", (at + 600, ident))

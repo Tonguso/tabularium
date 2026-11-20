@@ -18,6 +18,7 @@ from tabularium.records.background_runtime import TaskStore, worker
 from tabularium.models import subscription_runtime as bridge
 import claude_agent_sdk as sdk
 from claude_agent_sdk._errors import ResultError
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class SessionLifecycle(unittest.TestCase):
@@ -118,14 +119,14 @@ class Ownership(unittest.TestCase):
 
     def test_live_lease_blocks_resume_and_other_tasks_even_after_manager_restart(self):
         store = TaskStore(self.root)
-        first = store.start(1,'first')['id']
+        first = store.start(1,'first', completion_items=WORK)['id']
         row = store.claim_next()
         lease = WorkerLease(store.directory(first)/'worker.lock')
         self.assertTrue(lease.acquire())
         try:
             put(store, first,'interrupted','Worker error: simulated')
             store.control(1,first,'resume')
-            store.start(1,'second')
+            store.start(1,'second', completion_items=WORK)
             restarted = TaskStore(self.root)
             self.assertIsNone(restarted.claim_next())
             self.assertTrue(restarted.lease_busy(first))
@@ -146,7 +147,7 @@ class Ownership(unittest.TestCase):
 
     def test_real_process_lease_is_recoverable_after_exit(self):
         store = TaskStore(self.root)
-        ident = store.start(1,'work')['id']
+        ident = store.start(1,'work', completion_items=WORK)['id']
         folder = store.directory(ident)
         code = "from pathlib import Path; import time; from tabularium.records.worker_lease import WorkerLease; p=Path(__import__('sys').argv[1]); l=WorkerLease(p/'worker.lock'); assert l.acquire(); (p/'ready').touch(); time.sleep(30)"
         proc = subprocess.Popen([sys.executable,'-B','-c',code,str(folder)],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
@@ -165,8 +166,8 @@ class Ownership(unittest.TestCase):
     def test_two_managers_cannot_reserve_the_same_slot(self):
         import concurrent.futures
         store = TaskStore(self.root)
-        store.start(1,'first')
-        store.start(1,'second')
+        store.start(1,'first', completion_items=WORK)
+        store.start(1,'second', completion_items=WORK)
         other = TaskStore(self.root)
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
         try:
@@ -177,7 +178,7 @@ class Ownership(unittest.TestCase):
 
     def test_retry_does_not_requeue_worker_still_holding_lease(self):
         store = TaskStore(self.root)
-        ident = store.start(1,'work')['id']
+        ident = store.start(1,'work', completion_items=WORK)['id']
         put(store, ident,'interrupted','Worker error: test')
         db = sqlite3.connect(store.database)
         try:
@@ -219,7 +220,7 @@ def run_turn(messages, chat):
 '''
         (self.root/'agent.py').write_text(stub,encoding='utf-8')
         store = TaskStore(self.root)
-        ident = store.start(1,'work')['id']
+        ident = store.start(1,'work', completion_items=WORK)['id']
         store.launch_next()
         proc = store.processes[ident]
         proc.wait(timeout=10)
@@ -232,7 +233,7 @@ def run_turn(messages, chat):
 
     def test_drain_prevents_claim_and_spawn(self):
         store = TaskStore(self.root)
-        ident = store.start(1,'work')['id']
+        ident = store.start(1,'work', completion_items=WORK)['id']
         drain = self.root/'task_state/drain'
         drain.touch()
         self.assertIsNone(store.claim_next())
@@ -247,7 +248,7 @@ def run_turn(messages, chat):
         from test_worker import STUB
         (self.root/'agent.py').write_text(STUB,encoding='utf-8')
         store = TaskStore(self.root)
-        ident = store.start(1,'work')['id']
+        ident = store.start(1,'work', completion_items=WORK)['id']
         put(store, ident,'starting')
         env = dict(os.environ,COORDINATOR_BACKGROUND_TASK=str(ident))
         proc = subprocess.run([sys.executable,'-B','-m','tabularium','worker',str(ident),

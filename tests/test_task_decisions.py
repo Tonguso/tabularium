@@ -14,6 +14,7 @@ from tabularium.core.reply_envelope import Reply
 from tabularium.records.task_decisions import answer_record, verify_reply
 from tabularium.records.worker_lease import WorkerLease
 from tests.agent_harness import make_agent, put
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class DurableDecisionTests(unittest.TestCase):
@@ -22,7 +23,7 @@ class DurableDecisionTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.store = TaskStore(self.root)
-        self.task = self.store.start(1, "Produce a report after choosing a setting", "")["id"]
+        self.task = self.store.start(1, "Produce a report after choosing a setting", "", completion_items=WORK)["id"]
         put(self.store, self.task, "running")
 
     def source(self, speaker="user"):
@@ -39,7 +40,10 @@ class DurableDecisionTests(unittest.TestCase):
         self.source()
         for role in ROLES.values():
             self.store.role = role
-            ident = self.store.start(1, role.name + " report", "")["id"]
+            # A declared check that never ran: "completed" from the worker is not proof
+            ident = self.store.start(1, role.name + " report", "", completion_items=[
+                {"item": "Report saved", "check": "contains Report", "critical": True,
+                 "verification": {"kind": "contains", "paths": [str(self.root / "report.md")], "text": "Report"}}])["id"]
             put(self.store, ident, "running")
             result = Reply("Choose A or B", task_outcome="waiting", question="Choose A or B")
             self.assertEqual(self.store.finish(ident, result), "needs_answer")
@@ -78,7 +82,7 @@ class DurableDecisionTests(unittest.TestCase):
     def test_pending_question_survives_more_than_ten_new_tasks(self):
         self.store.ask(1, self.task, "Old unresolved choice")
         for _ in range(12):
-            ident = self.store.start(1, "new", "")["id"]
+            ident = self.store.start(1, "new", "", completion_items=WORK)["id"]
             put(self.store, ident, "finished")
         self.assertIn("Old unresolved choice", TaskStore(self.root).live_context(1))
 
@@ -234,7 +238,8 @@ class WorkerProcessDecisionTest(unittest.TestCase):
             root = Path(tmp.name)
             (root / "agent.py").write_text(WORKER_STUB, encoding="utf-8")
             store = TaskStore(root)
-            task = store.start(1, "Choose a setting then produce the report", "")
+            task = store.start(1, "Choose a setting then produce the report", "",
+                               completion_items=[{"item": "Report with B", "check": "Read saved report", "critical": True}])
             notices = []
             def until(state):
                 deadline = time.monotonic() + 12

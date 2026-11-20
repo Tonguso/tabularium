@@ -14,6 +14,7 @@ from tabularium.core.session_lifecycle import continue_turn
 from tabularium.core.turn_loop import Exchange, OpenAIResponses, run
 from tabularium.models.gemini_api import GeminiAPIError, GeminiGenerate
 from tabularium.records import verification
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class EpisodeLifecycleTests(unittest.TestCase):
@@ -96,7 +97,8 @@ class EpisodeLifecycleTests(unittest.TestCase):
 
         # Runtime verification uses _execute_tool_unguarded and must still read raw file contents.
         store = agent._background
-        tid = store.start(1, "Check scheduler")["id"]
+        tid = store.start(1, "Check scheduler", completion_items=[
+            {"item": "scheduler defines line_0010", "check": "scheduler.py contains line_0010 = 10", "critical": True}])["id"]
         put(store, tid, "running")
         agent.BACKGROUND_TASK_ID = str(tid)
         store.checkpoint(
@@ -176,7 +178,8 @@ class EpisodeLifecycleTests(unittest.TestCase):
         agent = make_agent("engineer", agent_root, background=True)
         agent.MAX_TOOL_ITERATIONS = 3
         store = agent._background
-        ident = store.start(1, "Repair worker_mod", f"Target repository: {repo}")["id"]
+        ident = store.start(1, "Repair worker_mod", f"Target repository: {repo}", completion_items=[
+            {"item": "worker_mod sets fixed status", "check": "worker_mod.py contains STATUS = 'fixed'", "critical": True}])["id"]
         put(store, ident, "running")
         agent.BACKGROUND_TASK_ID = str(ident)
         agent.RUNTIME_DIR = store.directory(ident)
@@ -338,7 +341,7 @@ class EpisodeLifecycleTests(unittest.TestCase):
         style_file.parent.mkdir(parents=True, exist_ok=True)
         style_file.write_text("Speak plainly.\n", encoding="utf-8")
         store = TaskStore(agent_root, ROLES["engineer"])
-        started = store.start(1, "Repair stuck worker job", "Repository path: sample_repo")
+        started = store.start(1, "Repair stuck worker job", "Repository path: sample_repo", completion_items=WORK)
         ident = started["id"]
         claimed = store.claim_next()
         self.assertEqual(claimed["id"], ident)

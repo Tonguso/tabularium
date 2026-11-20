@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 from agent_harness import make_agent
 from tabularium.records import verification
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 class RunBeforeReady(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -14,7 +15,7 @@ class RunBeforeReady(unittest.TestCase):
         self.root.mkdir()
         self.agent = make_agent('coordinator', self.root)
         self.store = self.agent._background
-        self.task = self.store.start(1, 'Check delivered document')['id']
+        self.task = self.store.start(1, 'Check delivered document', completion_items=WORK)['id']
         self.artifact = self.root / 'delivered.txt'
         self.artifact.write_text('launch works\ndrag works\n', encoding='utf-8')
         self.items = [dict(item='launch result', check='Required launch result text', critical=True, early=True,

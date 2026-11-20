@@ -3,12 +3,13 @@ import sys, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 from tabularium.records import background_runtime as rt
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 class StartNow(unittest.TestCase):
     def test_without_a_monitor_it_only_queues(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = rt.TaskStore(Path(tmp) / "coordinator")
             store.launch = lambda row: self.fail("must not launch without a monitor")
-            task = store.start(1, "job", "ctx")
+            task = store.start(1, "job", "ctx", completion_items=WORK)
             self.assertEqual(task["status"], "queued")
             self.assertTrue(task["summary"].startswith("queued:"))
 
@@ -18,11 +19,11 @@ class StartNow(unittest.TestCase):
             launched = []
             store.launch = lambda row: launched.append(row["id"])          # no real worker process in a test
             store.monitoring = True                                          # as in a serving agent process
-            first = store.start(1, "first job", "ctx")
+            first = store.start(1, "first job", "ctx", completion_items=WORK)
             self.assertEqual(launched, [first["id"]])
             self.assertTrue(first["summary"].startswith("Launch requested"), first["summary"])
             self.assertEqual(store.get(first["id"])["status"], "starting")
-            second = store.start(1, "second job", "ctx")
+            second = store.start(1, "second job", "ctx", completion_items=WORK)
             self.assertEqual(launched, [first["id"]])                        # one worker slot for Cato
             self.assertIn(f"waits behind task {first['id']}", second["summary"])
             self.assertEqual(store.get(second["id"])["status"], "queued")

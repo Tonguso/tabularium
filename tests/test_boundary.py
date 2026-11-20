@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 from agent_harness import make_agent
 from tabularium.core.outcome import Refused
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class Boundary(unittest.TestCase):
@@ -77,7 +78,7 @@ class SelfWork(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     agent = make_agent(name, home / name)
                 agent.config = dataclasses.replace(agent.config, work_roots=[str(projects)])
-                task = agent._background.start(1, "Fix the ads", "")["id"]
+                task = agent._background.start(1, "Fix the ads", "", completion_items=WORK)["id"]
                 agent.BACKGROUND_TASK_ID = str(task)
                 self.assertIsNone(boundary.check(agent, "write_file", {"path": str(projects / "aperio" / "x.js")}))
                 marked = agent._background.get(task).get("self_work") or ""

@@ -81,7 +81,7 @@ def compare(judge, case, candidate):
     return {"closeness": BETTER[g["better"]], "reason": str(g.get("reason", ""))[:300]}
 
 
-ANSWER_STATES = ("finished", "needs_attention")      # a prose rerun has no declared checks, so completion calls it unverified
+ANSWER_STATES = ("finished", "needs_attention")      # an eval rerun is a record; older runs ended needs_attention
 
 
 def answer_text(store, ident):

@@ -6,13 +6,14 @@ import unittest
 from pathlib import Path
 
 from tabularium.records.background_runtime import TaskStore
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 
 class InterruptedTasks(unittest.TestCase):
     def test_a_restart_does_not_announce_a_crash_that_will_be_rerun(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            task = TaskStore(root).start(1, "Inspect screenshot", "")
+            task = TaskStore(root).start(1, "Inspect screenshot", "", completion_items=WORK)
             with TaskStore(root).db() as db:
                 db.execute("UPDATE tasks SET status='interrupted', note='Worker error: RuntimeError' WHERE id=?", (task["id"],))
             notices = []

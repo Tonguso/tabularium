@@ -223,9 +223,14 @@ class TaskStore:
         foreground hand-off to Cal or Vit used to need a Cato task to RUN first, just to submit and park; with one
         worker slot busy, the hand-off itself queued behind unrelated work (Tiro, task 264). Now the delegate
         starts at once and the owner waits without a slot until poll_waiting wakes it with the result."""
-        if completion_items is not None:
+        from tabularium.records.task_decisions import record_only
+        if completion_items is not None or not record_only(request, extra or {}):
             from tabularium.records.verification import validate_items
-            validate_items(completion_items)
+            try:
+                validate_items(completion_items)
+            except ValueError as exc:
+                raise ValueError("A task is judged against the completion_items it starts with: list every deliverable "
+                                 "and constraint, each with item, check and critical. " + str(exc)) from None
             if any(it.get("source", 0) != 0 for it in completion_items):
                 raise ValueError("Initial requirements belong to source 0, the original brief.")
         if not request.strip():

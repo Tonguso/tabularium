@@ -9,6 +9,7 @@ import tempfile, time, unittest
 from agent_harness import put
 from tabularium.records.background_runtime import TaskStore, meta
 from tabularium.core.reply_envelope import Reply, unbacked
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 CHAT = 1
 
 
@@ -17,13 +18,13 @@ class Activation(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.store = TaskStore(self.tmp.name)
-        self.old = self.store.start(CHAT, "spreadsheet of managers")["id"]
+        self.old = self.store.start(CHAT, "spreadsheet of managers", completion_items=WORK)["id"]
         put(self.store, self.old, "finished")
         time.sleep(0.01)
 
     def test_a_new_start_backs_the_claim(self):
         t0 = time.time()
-        self.store.start(CHAT, "new work")
+        self.store.start(CHAT, "new work", completion_items=WORK)
         self.assertTrue(self.store.activated_since(CHAT, t0))
 
     def test_a_reopen_of_an_old_task_backs_the_claim_while_the_highest_id_stays(self):
@@ -45,7 +46,7 @@ class Activation(unittest.TestCase):
 
     def test_another_chats_start_does_not_count(self):
         t0 = time.time()
-        self.store.start(2, "someone else's work")
+        self.store.start(2, "someone else's work", completion_items=WORK)
         self.assertFalse(self.store.activated_since(CHAT, t0))
 
 
@@ -57,13 +58,13 @@ class Lanes(unittest.TestCase):
         self.store.worker_limit = lambda: 1
 
     def running(self, request):
-        ident = self.store.start(CHAT, request)["id"]
+        ident = self.store.start(CHAT, request, completion_items=WORK)["id"]
         put(self.store, ident, "running")
         return ident
 
     def test_a_running_diagnosis_does_not_block_owners_work(self):
         self.running("[Correction diagnosis] Alex corrected you at 22:01")
-        tiro = self.store.start(CHAT, "Tiro: default subtitle and font size")["id"]
+        tiro = self.store.start(CHAT, "Tiro: default subtitle and font size", completion_items=WORK)["id"]
         claimed = self.store.claim_next()
         self.assertEqual(claimed["id"], tiro)
 
@@ -75,8 +76,8 @@ class Lanes(unittest.TestCase):
         self.assertIsNone(self.store.claim_next())                          # the meta lane is taken, the real slot too
 
     def test_owners_queued_work_goes_before_a_queued_diagnosis(self):
-        self.store.start(CHAT, "[Trial lesson-x, current skill] rerun")
-        real = self.store.start(CHAT, "Research the exits")["id"]
+        self.store.start(CHAT, "[Trial lesson-x, current skill] rerun", completion_items=WORK)
+        real = self.store.start(CHAT, "Research the exits", completion_items=WORK)["id"]
         self.assertEqual(self.store.claim_next()["id"], real)
 
     def test_meta_is_by_request_prefix(self):

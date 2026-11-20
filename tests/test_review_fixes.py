@@ -12,6 +12,7 @@ from tabularium.memory import memory_consolidation as mc
 
 from tabularium.ops import release
 from tabularium.ops import agent_control
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 class MemoryLostUpdate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -92,7 +93,7 @@ class Release(unittest.TestCase):
         from tabularium.records.background_runtime import TaskStore
         from tabularium.records import lifecycle
         store = TaskStore(self.root / "coordinator")
-        ident = store.start(1, "work")["id"]
+        ident = store.start(1, "work", completion_items=WORK)["id"]
         store.claim_next()
         with store.db() as db:
             lifecycle.move(db, ident, "run", "running", "Worker started", release=release.commit(self.root))

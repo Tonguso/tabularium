@@ -10,6 +10,7 @@ from types import SimpleNamespace as NS
 
 from agent_harness import make_agent, put
 from tabularium.records.background_runtime import WAITING
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 CHAT = 1
 
 
@@ -40,7 +41,7 @@ class Handoff(unittest.TestCase):
                                         budget_tokens=50000, allowed_paths=[str(Path(self.tmp.name) / "tiro")], _runner=self.runner)
 
     def test_the_delegate_starts_now_and_the_owner_waits_without_a_slot(self):
-        self.store.start(CHAT, "fund-list expansion")        # the single slot is taken
+        self.store.start(CHAT, "fund-list expansion", completion_items=WORK)        # the single slot is taken
         self.store.claim_next()
         t0 = time.time()
         out = json.loads(self.submit())
@@ -52,6 +53,9 @@ class Handoff(unittest.TestCase):
         self.assertEqual([d["status"] for d in self.store.delegations(owner["id"])], ["submitted"])
         self.assertTrue(self.store.activated_since(CHAT, t0))               # "work started" is backed
         self.assertIsNone(self.store.claim_next())                          # nothing new was queued for the slot
+        # Born with what finishing means, so it can finish (2026-11-20: task 989 was born with no contract)
+        from tabularium.records import verification
+        self.assertIn("delivered to Alex", verification.saved_items(self.store, owner["id"])[0]["item"])
 
     def test_the_owner_wakes_when_the_result_returns(self):
         json.loads(self.submit())

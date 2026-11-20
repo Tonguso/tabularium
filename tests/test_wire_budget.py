@@ -20,6 +20,7 @@ from tabularium.core.outcome import Failed
 from tabularium.core.roster import ROLES
 from tabularium.records.background_runtime import TaskStore
 from tabularium.models import subscription_runtime as bridge
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 def noisy_png():
     image = Image.frombytes("L", (1500, 1500), random.Random(42).randbytes(1500 * 1500))
     buffer = io.BytesIO()
@@ -171,7 +172,7 @@ class WireBudget(unittest.TestCase):
         self.assertTrue(self.agent.send_message(1, "Worker stopped"))
         self.assertEqual(len(self.agent.outbox().pending(1)), 1)
         store = TaskStore(self.root)
-        task = store.start(1, "test delivery")
+        task = store.start(1, "test delivery", completion_items=WORK)
         put(store, task["id"], "interrupted", "Worker error: test")
         store.report_worker_failures(self.agent.send_message)
         store.report_worker_failures(self.agent.send_message)
@@ -200,7 +201,7 @@ class CrashDelivery(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         store = TaskStore(root, ROLES["engineer"])
-        task = store.start(123, "View test screenshot")
+        task = store.start(123, "View test screenshot", completion_items=WORK)
         ident = task["id"]
         context = store.directory(ident) / "context.json"
         context.write_text(json.dumps({"context": "", "notify_telegram": False, "retries": 0}), encoding="utf-8")
@@ -243,7 +244,7 @@ class CrashDelivery(unittest.TestCase):
                             'raise RuntimeError("test worker exception")')
         (root / "agent.py").write_text(stub, encoding="utf-8")
         store = TaskStore(root, ROLES["engineer"])
-        task = store.start(123, "Inspect screenshot")
+        task = store.start(123, "Inspect screenshot", completion_items=WORK)
         context = store.directory(task["id"]) / "context.json"
         context.write_text(json.dumps({"context": "", "notify_telegram": False, "retries": 0}), encoding="utf-8")
         notices = []
@@ -278,7 +279,7 @@ class CrashDelivery(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         store = TaskStore(Path(tmp.name))
-        task = store.start(1, "test")
+        task = store.start(1, "test", completion_items=WORK)
         put(store, task["id"], "interrupted", "Worker error: exception")
         def unavailable(*args):
             raise OSError("offline")

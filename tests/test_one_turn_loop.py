@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 from agent_harness import make_agent
 from tabularium.core import turn_loop
 from tabularium.core.turn_loop import Exchange
+WORK = [{"item": "Do what the brief asks", "check": "Read the result", "critical": True}]   # judged work is born with its contract
 
 ONCE = ("your response was CUT OFF", "tool rounds used in this session", "Cut off: my output hit")
 FILES = sorted(p for p in (ROOT / "src" / "tabularium").rglob("*.py") if p.parts[-2] != "agents")
@@ -110,7 +111,7 @@ class OneLoop(unittest.TestCase):
     def test_a_promise_backed_by_a_task_is_delivered(self):
         class Starts(Scripted):
             def exchange(self, api_messages):
-                self.agent._background.start(1, "研究 change-point detection")
+                self.agent._background.start(1, "研究 change-point detection", completion_items=WORK)
                 return super().exchange(api_messages)
         provider = Starts([Exchange(text='{"reply": "已经开始研究。", "work": "started"}')]); provider.agent = self.agent
         reply = turn_loop.run(self.agent, [{"role": "user", "content": "那就开始研究吧"}], 1, provider)

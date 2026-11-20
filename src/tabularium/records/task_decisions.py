@@ -350,21 +350,27 @@ def answer_record(store, chat, decision, answer, source):
         db.close()
 
 
+def record_only(request, context):
+    """The runtime's own records (a skill trial, an evaluation rerun, a correction diagnosis, a method review): saved,
+    never judged as finished work, so they carry no completion contract. Every other task is judged against the
+    contract it is born with (2026-11-20: a hand-off's receiving task was born with none and could never finish)."""
+    from tabularium.learning.corrections import is_diagnosis
+    return bool(context.get("trial") or context.get("eval") or is_diagnosis(request))
+
+
 def completion_evidence(store, ident, result, context, checkpoint):
     """One evidence decision. A record-only run ending is not a claim that its work passed."""
     from tabularium.records import verification
     from tabularium.learning import regression
-    from tabularium.learning.corrections import is_diagnosis
     task = store.get(ident)
     reasons, items = [], []
-    record_only = bool(context.get("trial") or is_diagnosis(task["request"]))
-    if record_only:
+    benchmark = (context.get("eval") or {}).get("benchmark")
+    if record_only(task["request"], context) and not benchmark:
         return dict(passed=False, verdict="recorded", reasons=["Record saved; not verified task completion."], items=[])
     if getattr(result, "task_outcome", "none") != "completed" or not getattr(result, "complete", False):
         reasons.append("The worker did not declare a complete result.")
     if (getattr(result, "question", "") and getattr(result, "task_outcome", "none") != "completed") or checkpoint.get("blocker"):
         reasons.append("An unresolved question or checkpoint blocker remains.")
-    benchmark = (context.get("eval") or {}).get("benchmark")
     if benchmark:
         try:
             regression.bound_case(store.agent_dir, context)
@@ -409,7 +415,6 @@ def finish(store, ident, result, *, commit=True, notes=None):
     they never join the text Alex receives (2026-10-26 and 2026-10-31, Alex on COST and [Route] lines)."""
     from tabularium.core.agent_runtime import atomic_json
     from tabularium.memory.memory_store import atomic_text
-    from tabularium.learning.corrections import is_diagnosis
     folder = store.directory(ident)
     errors = []
     values = []
@@ -425,7 +430,7 @@ def finish(store, ident, result, *, commit=True, notes=None):
         values.append(value)
     context, checkpoint = values
     task = store.get(ident)
-    isolated = bool(context.get("trial") or context.get("eval") or is_diagnosis(task["request"]))
+    isolated = record_only(task["request"], context)
     if store.worker_attempt and task['attempt'] != store.worker_attempt:
         raise ValueError("Worker no longer owns this task.")
     decision = 0
