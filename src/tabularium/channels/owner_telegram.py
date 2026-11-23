@@ -35,5 +35,11 @@ class OwnerBot(telebot.TeleBot):
         # Advance the offset even for rejected updates, so they aren't fetched forever.
         if updates:
             self.last_update_id = max(self.last_update_id, max(u.update_id for u in updates))
-        allowed = [u for u in updates if u.message is not None and is_owner(u.message)]
+        allowed = [u for u in updates if (u.message is not None and is_owner(u.message)) or owner_press(u.callback_query)]
         return super().process_new_updates(allowed)
+
+
+def owner_press(press):
+    """True for the owner's tap on a button under one of this bot's messages in his own chat."""
+    return (press is not None and getattr(press.from_user, 'id', None) == OWNER_USER_ID
+            and getattr(getattr(press.message, 'chat', None), 'id', None) == OWNER_CHAT_ID)

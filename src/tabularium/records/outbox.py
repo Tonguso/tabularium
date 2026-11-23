@@ -26,6 +26,20 @@ LATE_SECONDS = 120
 RETRY_SECONDS = (5, 15, 30, 60)
 
 
+PRESS = re.compile(r"decision:(\d+):(yes|no)")
+
+
+def verdict_buttons(decision):
+    """Yes and No under a parked action's ask. Each names the decision, so a tap is a verdict on that action and
+    on nothing else (2026-11-23: a typed yes was bound by guessing which ask it answered, and guessed wrong four
+    times in a week, in both directions)."""
+    from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+    markup = InlineKeyboardMarkup()
+    markup.row(InlineKeyboardButton("Yes", callback_data=f"decision:{int(decision)}:yes"),
+               InlineKeyboardButton("No", callback_data=f"decision:{int(decision)}:no"))
+    return markup
+
+
 def transient(exc):
     """A failure worth retrying later: the network, or Telegram saying 'not now' (429, 5xx)."""
     try:
@@ -67,7 +81,8 @@ class Outbox:
         try:
             db.execute('BEGIN IMMEDIATE')
             columns = {row[1] for row in db.execute('PRAGMA table_info(outbox)')}
-            for name, declaration in [('channel', "TEXT NOT NULL DEFAULT 'telegram'"), ('original', 'TEXT'), ('job', 'INTEGER')]:
+            for name, declaration in [('channel', "TEXT NOT NULL DEFAULT 'telegram'"), ('original', 'TEXT'), ('job', 'INTEGER'),
+                                      ('buttons', 'INTEGER NOT NULL DEFAULT 0')]:
                 if name not in columns:
                     db.execute(f'ALTER TABLE outbox ADD COLUMN {name} {declaration}')
             db.commit()
@@ -79,43 +94,26 @@ class Outbox:
         db.row_factory = sqlite3.Row
         return db
 
-    def put(self, chat, chunks, reply_to=None, decision=0, channel='telegram', original=None, job=None):
+    def put(self, chat, chunks, reply_to=None, decision=0, channel='telegram', original=None, job=None, buttons=False):
         """Queue the chunks of one message, then try to deliver this chat's queue now. Returns the Telegram ids of
-        the chunks delivered in this call (empty when the connection is down: they stay queued)."""
+        the chunks delivered in this call (empty when the connection is down: they stay queued). buttons: the last
+        chunk carries Yes and No buttons that name `decision` (a parked action's ask)."""
         if channel not in ('telegram', 'dashboard'):
             raise ValueError('Unknown delivery channel')
         now = time.time()
+        chunks = [c for c in chunks if c]
         db = self._db()
         try:
-            for i, chunk in enumerate(c for c in chunks if c):
-                db.execute("INSERT INTO outbox(chat,text,reply_to,decision,first,created,channel,original,status,job) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            for i, chunk in enumerate(chunks):
+                db.execute("INSERT INTO outbox(chat,text,reply_to,decision,first,created,channel,original,status,job,buttons) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (chat, chunk, reply_to if i == 0 else None, decision or 0, int(i == 0), now, channel,
                      original if i == 0 or original is None else '',
-                     'sent' if channel == 'dashboard' else 'pending', job))
+                     'sent' if channel == 'dashboard' else 'pending', job,
+                     int(bool(buttons and decision and i == len(chunks) - 1))))
             db.commit()
         finally:
             db.close()
         return self.flush(chat) if channel == 'telegram' else []
-
-    def ask_is_current(self, chat, decision):
-        """True when the ask for `decision` was sent and everything sent to the chat since came from the same inbox
-        job (the reply that goes out with the ask); False once a later turn said anything (2026-11-14: a bare yes to
-        a desktop grant bound to nothing because the turn's own reply followed the ask)."""
-        with closing(self._db()) as db:
-            ask = db.execute("SELECT id, job FROM outbox WHERE chat=? AND decision=? AND status='sent' ORDER BY id DESC LIMIT 1",
-                             (chat, int(decision))).fetchone()
-            if not ask:
-                return False
-            later = db.execute("SELECT job FROM outbox WHERE chat=? AND status='sent' AND id>?", (chat, ask["id"])).fetchall()
-        return all(row["job"] is not None and row["job"] == ask["job"] for row in later)
-
-    def last_sent(self, chat):
-        """(decision, message_id) of the newest message delivered to `chat`: what the owner is answering when he
-        sends a bare word. (0, None) when nothing was sent."""
-        with closing(self._db()) as db:
-            row = db.execute("SELECT decision, message_id FROM outbox WHERE chat=? AND status='sent' ORDER BY id DESC LIMIT 1",
-                             (chat,)).fetchone()
-        return (int(row["decision"] or 0), row["message_id"]) if row else (0, None)
 
     def pending(self, chat=None):
         with closing(self._db()) as db:
@@ -136,7 +134,8 @@ class Outbox:
                 if row["first"] and time.time() - row["created"] > LATE_SECONDS:
                     text = f"[Written {time.strftime('%H:%M', time.localtime(row['created']))}; delayed by a connection outage]\n" + text
                 try:
-                    message_id = self._deliver(row["chat"], text, row["reply_to"])
+                    message_id = self._deliver(row["chat"], text, row["reply_to"],
+                                               verdict_buttons(row["decision"]) if row["buttons"] else None)
                 except Exception as exc:                    # noqa: BLE001 - classified below
                     if transient(exc):
                         stalled.add(row["chat"])
@@ -154,7 +153,7 @@ class Outbox:
                         self.on_sent(row["decision"], message_id)
         return delivered
 
-    def _deliver(self, chat, chunk, reply_to):
+    def _deliver(self, chat, chunk, reply_to, markup=None):
         """Quote, then without the quote (the quoted message may be gone), then plain text (malformed HTML). A network
         failure is raised at once: it is not the message's fault, and the queue will retry it."""
         bot = self.bot_getter()
@@ -162,6 +161,8 @@ class Outbox:
         attempts += [dict(text=chunk, parse_mode="HTML"), dict(text=plain(chunk))]
         last = None
         for kw in attempts:
+            if markup is not None:
+                kw["reply_markup"] = markup
             try:
                 sent = bot.send_message(chat, **kw)
                 mid = getattr(sent, "message_id", None)

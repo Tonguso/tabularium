@@ -983,11 +983,29 @@ class AgentApp(engine.AgentRuntime):
             row = task_decisions.park_action(self._background, chat_id, tool, inputs, text, decision_id)
         except ValueError as exc:
             return Refused(str(exc))
-        ask = Reply(text + "\n\nReply *yes* to this message to run it, *no* to cancel.")
+        ask = Reply(text + "\n\nTap Yes to run it, No to cancel.")
         ask.decision_id = row["id"]
+        ask.buttons = True
         self.send_message(chat_id, ask)
-        return Refused(f"Not done yet: parked for Alex's yes as decision #{row['id']}. He has the exact action; his "
-                       "yes runs it exactly as parked. Do not retry it or ask again; tell him it waits for his yes.")
+        return Refused(f"Not done yet: parked for Alex's verdict as decision #{row['id']}. He has the exact action with "
+                       "Yes and No buttons under it; his Yes runs it exactly as parked. Do not retry it or ask again; "
+                       "tell him it waits for his tap.")
+
+    def handle_press(self, press):
+        """Alex's tap on Yes or No under an ask. Queued durably first, then acknowledged to Telegram."""
+        from tabularium.records.outbox import PRESS
+        named = PRESS.fullmatch(press.data or "")
+        if named:
+            self._inbox.accept_press(int(named.group(1)), named.group(2) == "yes")
+        self.bot.answer_callback_query(press.id)
+
+    def _retire_buttons(self, chat, decision):
+        """A settled action's ask loses its buttons, so nothing on the screen offers a verdict that is over."""
+        for message_id in json.loads(decision["message_ids"] or "[]"):
+            try:
+                self.bot.edit_message_reply_markup(chat, message_id, reply_markup=None)
+            except Exception as exc:                              # cosmetic: a stale button settles nothing anyway
+                print(f"[decision] buttons of #{decision['id']} stayed on message {message_id}: {type(exc).__name__}")
 
     @staticmethod
     def _action_brief(tool, outcome):
@@ -1031,40 +1049,47 @@ class AgentApp(engine.AgentRuntime):
             finally:
                 self._approving = None
         td.finish_action(self._background, chat, decision["id"], outcome)
+        self._retire_buttons(chat, decision)
         return outcome
 
     def _settle_follow_up(self, chat, message):
-        """A plain yes or no that arrives while the turn that asked is still running answers that ask here, inside
-        the turn (2026-11-15 14:41: the turn parked a desktop grant and sent the ask; Alex's "Yes" six seconds later
-        joined the turn as text, the model could only ask again). Returns the history entry that replaces the bare
-        word, or None when the message is an ordinary follow-up."""
+        """A verdict on a parked action that arrives while the turn that asked is still running is carried out here,
+        inside the turn (2026-11-15 14:41: the turn parked a desktop grant and sent the ask; Alex's "Yes" six seconds
+        later joined the turn as text, the model could only ask again). The verdict names its action: a tap on the
+        ask's button, or a plain yes or no sent as a reply to the ask. Returns the history entry that stands for it,
+        or None when the message is an ordinary follow-up."""
         from tabularium.records import task_decisions as td
         text = (getattr(message, "text", None) or "").strip()
         yes = td.verdict(text)
-        if yes is None:
-            return None
+        pressed = getattr(message, "decision_id", None) if getattr(message, "channel", "") == "button" else None
         ref = getattr(message, "reply_to_message", None)
-        if ref is not None:
+        if pressed:
+            decision = next((d for d in td.pending(self._background, chat, kind="action") if d["id"] == pressed), None)
+            if decision is None:
+                return f"[Alex tapped {'Yes' if yes else 'No'} on parked action #{pressed}, which was already settled. Nothing ran.]"
+        elif yes is not None and ref is not None:
             decision = td.by_message(self._background, chat, ref.message_id)
             if not decision or decision["kind"] != "action":
                 return None
         else:
-            actions = td.pending(self._background, chat, kind="action")
-            if not actions or not self.outbox().ask_is_current(chat, actions[-1]["id"]):
-                return None
-            decision = actions[-1]
+            return None
         source = json.dumps({"message_id": message.message_id, "quote": text[:500]}, ensure_ascii=False)
         outcome = self._run_parked(chat, decision, yes, source)
+        tool = json.loads(decision["action"])["tool"]
+        if pressed:
+            return (f"[Alex tapped {'Yes' if yes else 'No'} on parked action #{decision['id']} ({tool}). "
+                    f"{outcome or 'It was already settled; nothing ran.'}]")
         if outcome is None:
             return None
-        tool = json.loads(decision["action"])["tool"]
         return (f"{self.compose_turn(message, nudge=False)}\n[Parked action #{decision['id']} ({tool}): "
                 f"Alex said {'yes' if yes else 'no'}. {outcome}]")
 
     def _settle_by_reply(self, message):
-        """Alex's reply identifies a candidate question. Exact actions can be approved directly by a plain
-        yes/no, when exactly one action is parked. Returns (handled, note): handled means the message was a verdict on
-        a parked action and no model turn is needed; note identifies a candidate question for attribution in the normal turn."""
+        """A message that names a decision: a tap on an ask's Yes or No, a Telegram reply to the ask, the dashboard's
+        reply to a question. A verdict on a parked action is carried out here; nothing else binds one, least of all a
+        typed yes that names no ask (2026-11-23: guessing which ask a bare yes answered failed four times in a week).
+        Returns (handled, note): handled means the message was a verdict on a parked action and no model turn is
+        needed; note identifies a candidate question for attribution in the normal turn."""
         from tabularium.records import task_decisions as td
         chat = message.chat.id
         text = (getattr(message, "text", None) or "").strip()
@@ -1086,19 +1111,20 @@ class AgentApp(engine.AgentRuntime):
                                          {"role": "assistant", "content": f"[{outcome}]"}]
             self.save_conversation(chat)
             return True, ""
-        declared = getattr(message, 'decision_id', None) if getattr(message, 'channel', '') == 'dashboard' else None
+        channel = getattr(message, 'channel', '')
+        declared = getattr(message, 'decision_id', None) if channel in ('dashboard', 'button') else None
         decision = next((d for d in td.pending(self._background, chat) if d['id'] == declared), None) if declared else (td.by_message(self._background, chat, ref.message_id) if ref is not None else None)
         if declared and decision is None:
-            self.send_message(chat, 'That question is no longer pending. No action was repeated; refresh Messaging.')
-            return True, ''
-        if decision is None and ref is None and getattr(message, 'channel', '') != 'dashboard' and td.verdict(text) is not None:
-            # A bare yes answers the last thing asked. It binds to the newest parked action only when nothing has been
-            # said to the chat since its ask except the reply of the same turn (2026-11-12 16:32: "Ok" to a wording
-            # question ran a deletion parked eleven hours earlier; 2026-11-14 19:52: three yeses to a desktop grant
-            # bound to nothing because the turn's own reply followed the ask). A reply to the ask settles it at any time.
-            actions = td.pending(self._background, chat, kind="action")
-            decision = actions[-1] if actions and self.outbox().ask_is_current(chat, actions[-1]["id"]) else None
+            if channel == 'dashboard':
+                self.send_message(chat, 'That question is no longer pending. No action was repeated; refresh Messaging.')
+            return True, ''                                       # a second tap on a settled ask runs nothing
         if decision is None:
+            waiting = td.pending(self._background, chat, kind="action") if td.verdict(text) is not None else []
+            if waiting:
+                ids = ", ".join(f"#{d['id']}" for d in waiting)
+                return False, (f"\n[Parked action {ids} still waits for Alex. This message names no ask, so it ran and "
+                               "cancelled nothing: his verdict is a tap on Yes or No under the ask, or a reply to it. "
+                               "If he meant this as that verdict, tell him so in one line.]")
             return False, ""
         source = json.dumps({"message_id": message.message_id, "quote": text[:500]}, ensure_ascii=False)
         if decision["kind"] == "action":
@@ -1431,6 +1457,7 @@ class AgentApp(engine.AgentRuntime):
         bot.message_handler(content_types=["document"])(inbox.handler(self.handle_document))
         inbox.handler(self.handle_dashboard_media)
         bot.message_handler(func=lambda m: True)(inbox.handler(self.handle_message))
+        bot.callback_query_handler(func=lambda press: True)(self.handle_press)
 
     def handle_start(self, message):
         chat_id = message.chat.id

@@ -682,7 +682,7 @@ class AgentRuntime(SharedHandlers):
         chunks.append(clean)
         # Durable until Telegram accepts it (tabularium.records.outbox, 2026-10-21): a network failure queues the message
         # for the retry thread instead of dropping it, so True means "accepted for delivery".
-        self.outbox().put(chat_id, chunks, reply_to, decision, original=str(text), job=job)
+        self.outbox().put(chat_id, chunks, reply_to, decision, original=str(text), job=job, buttons=getattr(text, 'buttons', False))
         return True
 
     def outbox(self):
@@ -2167,8 +2167,8 @@ class AgentRuntime(SharedHandlers):
         job = getattr(getattr(self._inbox, "local", None), "job", None)
         if job:
             taken = []
-            for ident, message in self._inbox.follow_ups(chat_id, job):
-                # A plain yes or no to this turn's own ask runs the parked action now; the outcome joins the turn
+            for ident, message in self._inbox.follow_ups(chat_id, job, presses=True):
+                # A verdict on this turn's own ask runs the parked action now; the outcome joins the turn
                 # (2026-11-15 14:41: a desktop grant's "Yes" arrived as text and the model could only ask again).
                 content = self._settle_follow_up(chat_id, message) or self.compose_turn(message, nudge=False)
                 if not isinstance(content, str):          # a reply to a photo stays its own turn
@@ -2179,7 +2179,7 @@ class AgentRuntime(SharedHandlers):
                 fresh.append(entry)
                 taken.append(ident)
                 local = getattr(self._inbox, "local", None)
-                if local is not None:
+                if local is not None and getattr(message, "channel", "") != "button":   # a tap is carried out, not answered
                     local.turn_messages = list(getattr(local, "turn_messages", None) or []) + [(message.message_id, message.text)]
             if taken:
                 self.save_conversation(chat_id)           # saved before the jobs are marked done, never lost

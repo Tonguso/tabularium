@@ -142,14 +142,13 @@ class Agent(unittest.TestCase):
         self.assertEqual(ran, ["Remove-Item -Recurse D:\\Baskets\\old"])
         self.assertEqual(task_decisions.pending(second._background, CHAT, kind="action"), [])
 
-    def test_a_bare_yes_runs_the_parked_action_only_when_it_was_the_last_thing_asked(self):
+    def test_a_typed_yes_that_names_no_ask_runs_nothing_and_a_reply_to_the_ask_runs_it(self):
         agent = self.agent()
         agent.get_auto_mode = lambda chat: False
         agent.execute_tool("execute_command", {"command": "Remove-Item -Recurse D:\\Baskets\\old"}, CHAT)
         agent.outbox().flush(CHAT)                                  # the ask is delivered
         parked = task_decisions.pending(agent._background, CHAT, kind="action")[0]
-        self.assertEqual(agent.outbox().last_sent(CHAT)[0], parked["id"])
-        # The agent then asks something else in prose. A bare "ok" answers that, not the deletion.
+        # The agent then asks something else in prose. A bare "ok" names no ask: it is never bound to the deletion.
         agent.send_message(CHAT, "Shall I start on the slides?")
         agent.outbox().flush(CHAT)
         ran = []
@@ -158,7 +157,9 @@ class Agent(unittest.TestCase):
             def communicate(self, timeout=None):
                 return b"removed", b""
         with patch("tabularium.core.agent_app.subprocess.Popen", side_effect=lambda argv, **kw: ran.append(argv[-1]) or Proc()):
-            self.assertEqual(agent._settle_by_reply(message("ok")), (False, ""))
+            handled, note = agent._settle_by_reply(message("ok"))
+            self.assertFalse(handled)
+            self.assertIn(f"#{parked['id']} still waits", note)
             self.assertEqual(task_decisions.pending(agent._background, CHAT, kind="action")[0]["id"], parked["id"])
             self.assertEqual(ran, [])
             # A reply to the ask itself still runs it, however late; the chat gets one line, the record the output.
@@ -170,11 +171,11 @@ class Agent(unittest.TestCase):
         self.assertEqual(sent, ["Ran it, exit 0: removed"])
         self.assertEqual(task_decisions.pending(agent._background, CHAT, kind="action"), [])
 
-    def test_a_plain_yes_is_ambiguous_when_two_actions_wait(self):
+    def test_a_plain_yes_settles_neither_of_two_waiting_actions(self):
         agent = self.agent()
         for n in (1, 2):
             task_decisions.park_action(agent._background, CHAT, "send_email", {"to": f"{n}@x"}, f"send {n}?", decision_id=0)
-        self.assertEqual(agent._settle_by_reply(message("yes")), (False, ""))
+        self.assertFalse(agent._settle_by_reply(message("yes"))[0])
         self.assertEqual(len(task_decisions.pending(agent._background, CHAT, kind="action")), 2)
 
     def test_replying_to_a_question_answers_its_decision_directly(self):

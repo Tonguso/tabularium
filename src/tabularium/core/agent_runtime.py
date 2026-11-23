@@ -290,6 +290,20 @@ class DurableInbox:
         finally:
             db.close()
 
+    def accept_press(self, decision_id, yes):
+        """The owner's tap on Yes or No under a parked action's ask, queued like any message of his. It carries the
+        decision's identity, so nothing has to work out which ask it answers."""
+        from tabularium.channels.owner_telegram import OWNER_CHAT_ID
+        now = time.time()
+        with self.db() as db:
+            ident = db.execute('INSERT INTO jobs(chat,message,handler,payload,status,created) VALUES (?,NULL,?,?,?,?)',
+                               (OWNER_CHAT_ID, 'handle_press', '{}', 'pending', now)).lastrowid
+            payload = {'channel': 'button', 'text': 'yes' if yes else 'no', 'date': now,
+                       'decision_id': int(decision_id), 'message_id': -ident}
+            db.execute('UPDATE jobs SET message=?,payload=? WHERE id=?', (-ident, json.dumps(payload), ident))
+        self.wake.set()
+        return ident
+
     def destination(self, chat, message_id=None):
         message_id = message_id or self.answering()
         db = sqlite3.connect(self.database, timeout=3)
@@ -329,13 +343,15 @@ class DurableInbox:
         with self.db() as db:
             return db.execute("SELECT 1 FROM jobs WHERE chat=? AND id>(SELECT id FROM jobs WHERE chat=? AND message=?) LIMIT 1", (chat, chat, message_id)).fetchone() is not None
 
-    def follow_ups(self, chat, job):
-        """Pending text messages Alex sent to `chat` after job `job` started, oldest first, as (id, Message)."""
+    def follow_ups(self, chat, job, presses=False):
+        """Pending text messages Alex sent to `chat` after job `job` started, oldest first, as (id, Message).
+        presses: his taps on an ask's buttons too, for the running turn; a tap is never folded into a typed bubble."""
         from tabularium.channels.messaging import decode
         from tabularium.channels.owner_telegram import is_owner
+        handlers = ('handle_message', 'handle_press' if presses else 'handle_message')
         with self.db() as db:
-            rows = db.execute("SELECT id,payload FROM jobs WHERE chat=? AND handler='handle_message' AND status='pending' "
-                              "AND id>? ORDER BY id", (chat, job)).fetchall()
+            rows = db.execute("SELECT id,payload FROM jobs WHERE chat=? AND handler IN (?,?) AND status='pending' "
+                              "AND id>? ORDER BY id", (chat, *handlers, job)).fetchall()
         out = []
         for ident, raw in rows:
             message = decode(json.loads(raw))
@@ -460,7 +476,7 @@ class DurableInbox:
             ids = [ident]
             message = None
             try:
-                fn, album = self.handlers['handle_message' if name == 'handle_dashboard_reply' else name]
+                fn, album = self.handlers['handle_message' if name in ('handle_dashboard_reply', 'handle_press') else name]
                 message = decode(json.loads(payload))
                 from tabularium.channels.owner_telegram import is_owner
                 if not is_owner(message):

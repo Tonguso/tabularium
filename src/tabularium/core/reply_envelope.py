@@ -94,6 +94,7 @@ class Reply(str):
     work = "none"
     complete = True
     decision_id = 0          # the decision this message asks; send_message records its Telegram id on it (2026-10-21)
+    buttons = False          # a parked action's ask: Yes and No buttons that name decision_id go out under it
     answers = ()             # exact current-turn message IDs covered by this reply
     request = "none"         # where his request stands: done, started, asking, blocked, none (2026-10-21)
 

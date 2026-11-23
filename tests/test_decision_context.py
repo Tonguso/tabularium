@@ -124,7 +124,7 @@ class DecisionContext(unittest.TestCase):
         agent.send_message = lambda chat, text, **kw: sent.append(str(text)) or True
         agent._park(1, 'execute_command', {'command': 'Remove-Item -Recurse D:\\x'}, 'This looks destructive:\n`Remove-Item -Recurse D:\\x`')
         self.assertEqual([d['kind'] for d in td.pending(agent._background, 1)], ['question', 'action'])
-        self.assertIn('Reply *yes*', sent[-1])
+        self.assertIn('Tap Yes to run it', sent[-1])
 
     def test_a_prepared_action_is_asked_as_the_question_and_the_command(self):
         agent = self.agent()

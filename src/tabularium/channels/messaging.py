@@ -97,15 +97,16 @@ def ready(directory, media=False):
 
 
 def decode(payload):
-    if payload.get('channel') != 'dashboard':
+    if payload.get('channel') not in ('dashboard', 'button'):
         from telebot.types import Message
         return Message.de_json(payload)
+    # 'button' is the owner's tap on Yes or No under an ask in Telegram: a verdict with the decision's identity
     from tabularium.channels.owner_telegram import OWNER_CHAT_ID, OWNER_USER_ID
     return SimpleNamespace(chat=SimpleNamespace(id=OWNER_CHAT_ID, type='private'),
         from_user=SimpleNamespace(id=OWNER_USER_ID), message_id=payload['message_id'],
         date=payload['date'], text=payload['text'], caption=payload['text'], media_group_id=None,
         attachment=payload.get('attachment'),
-        reply_to_message=None, quote=None, channel='dashboard',
+        reply_to_message=None, quote=None, channel=payload['channel'],
         decision_id=payload.get('decision_id') or None, skill_edit=payload.get('skill_edit'), json=payload)
 
 

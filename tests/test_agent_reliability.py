@@ -60,7 +60,7 @@ class Reliability(unittest.TestCase):
         bot = OwnerBot.__new__(OwnerBot)
         bot.last_update_id = 0
         allowed, denied, group = message(1), message(2, owner=999), message(3, kind='group')
-        updates = [SimpleNamespace(update_id=i, message=m) for i, m in enumerate([allowed, denied, group], 1)]
+        updates = [SimpleNamespace(update_id=i, message=m, callback_query=None) for i, m in enumerate([allowed, denied, group], 1)]
         with patch('telebot.TeleBot.process_new_updates') as dispatch:
             bot.process_new_updates(updates)
         self.assertEqual(dispatch.call_args.args[0], updates[:1])

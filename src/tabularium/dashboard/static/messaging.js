@@ -127,7 +127,7 @@ const dashboardMedia = (() => {
         const file=await dashboardMedia.get(agent);
         if(!text.trim()&&!file)return;
         if(file&&replyTo)throw Error('Answer the question with text first, then send the attachment separately.');
-        pending={client_id:crypto.randomUUID(),text,decision_id:replyTo?.id||0,question:replyTo,has_media:!!file};
+        pending={client_id:crypto.randomUUID(),text,decision_id:replyTo?.id??null,question:replyTo,has_media:!!file};
         try{localStorage.setItem(storageKey,JSON.stringify(pending));}
         catch(e){pending=null;throw Error('Cannot save a retry identity. Message not sent.');}
       }

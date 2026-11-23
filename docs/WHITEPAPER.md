@@ -157,11 +157,11 @@ Everything an agent asks the owner is a decision: one durable row with the quest
 that asked it, and later the answer, its source message and the owner's quoted words. Two kinds exist. A question
 ("30 names or 50?") is answered by the owner's next message, or by a reply to the question's message, which binds
 directly. A parked action (send this email, run this command) stores the exact inputs and runs only on a yes, whenever
-it comes; a late yes is still a yes, and a restart forgets nothing. A bare yes answers the newest parked action when
-nothing has been said to the chat since its ask except the reply of the same turn; a reply to the ask settles it at any
-time; an action identical to one already pending is asked again, never parked twice. A yes that arrives while the turn that
-asked is still running settles the ask inside that turn, and the outcome joins the turn in place of the bare word; it is never
-handed to the model as text. The runtime parks, never the agent: the danger
+it comes; a late yes is still a yes, and a restart forgets nothing. The verdict names its action: the ask goes out with
+Yes and No buttons that carry the decision's identity, and a tap, or a plain yes or no sent as a reply to the ask, settles
+it at any time. A typed yes that names no ask settles nothing; the agent is told the action still waits. An action
+identical to one already pending is asked again, never parked twice. A verdict that arrives while the turn that asked is
+still running is carried out inside that turn, and the outcome joins the turn; it is never handed to the model as text. The runtime parks, never the agent: the danger
 screen parks the action it stops, beside any question already pending. An agent has no tool to park its own action, so it cannot ask approval for a command it is free to run and
 describe the result as the system's caution; the one way an agent attaches an exact action to a decision is in answer
 to a worker's pending question, and that ask reads as the question and the command. One pending question per task is enforced by a
@@ -672,6 +672,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 
 | 2026-11-19 | A review of the day's fixes found that, after the episode redesign, nothing bounded a turn's request between its start and the provider's refusal; a skill already loaded was loaded again, and every new episode dropped them all; two of the runtime's three notices stayed English when the owner wrote Chinese | Past a ceiling well above working size a request is cut once and grows again, so its prefix stays cached; a loaded skill is shown once per episode and carried into the next; a result already shown is a kind of its own, never progress; the runtime's own words come from one table in both languages |
 | 2026-11-20 | The dashboard showed a receiving task for a hand-off to a specialist as never finishing, whatever the specialist delivered: the task store created it with no completion items, and completion needs a nonempty contract. Three other paths could create work the same way, and evaluation reruns ended unverified for the same reason | The store refuses to create judged work without its completion items; each path that creates work states what finishing it means. The runtime's own records (trials, evaluation reruns, diagnoses, method reviews) carry no contract and end as records, by one definition shared by start, finish and the completion check |
+| 2026-11-23 | A review of five weeks of incidents found four in one week from one decision: a typed yes with no reply was bound to a parked action by working out which ask it answered. It ran a deletion on an "Ok" meant for another question, then bound to nothing three times, then missed a yes sent during the asking turn; each fix refined the guess | The ask carries Yes and No buttons that name its decision. A tap or a reply to the ask is the verdict; a typed yes that names no ask settles nothing, and the agent is told the action still waits. The guess and its bookkeeping are gone |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
