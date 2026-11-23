@@ -44,6 +44,10 @@ def events(store, ident, limit=400):
             out.append({"t": created, "kind": "model" if kind == "response" else "bounce", "name": model or "",
                         "detail": (role or "") + (f" · {billing}" if billing else ""), "status": kind, "size": tokens,
                         "cache_read": m.get("cache_read"), "archive": "", "error": ""})
+    for e in store.history(ident):                      # every status change, from the task's journal
+        out.append({"t": e["at"], "kind": "state", "name": e["op"], "status": e["status"],
+                    "detail": f"{e['op']} -> {e['status']}" + (f": {str(e['note'])[:300]}" if e["note"] else ""),
+                    "size": 0, "archive": "", "error": ""})
     checkpoint = folder / "checkpoint.json"
     if checkpoint.exists():
         try:

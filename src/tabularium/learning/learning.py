@@ -583,8 +583,11 @@ def resolve_receipt(root, chat, task, receipt, method_sha):
     kind, ident = m.group(1), int(m.group(2))
     if kind == 'task' and not (tasks / str(ident) / 'result.txt').exists():
         raise ValueError(f'Task {ident} has no result in the records.')
-    if kind == 'verification' and not (tasks / str(ident) / 'completion.json').exists():
-        raise ValueError(f'Task {ident} has no completion record.')
+    if kind == 'verification':
+        with closing(sqlite3.connect((tasks / 'jobs.sqlite3').as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
+            judged = db.execute('SELECT 1 FROM events WHERE task=? AND data IS NOT NULL LIMIT 1', (ident,)).fetchone()
+        if not judged:
+            raise ValueError(f'Task {ident} has no completion record.')
     if kind == 'message':
         recall = root / 'task_state/conversation_recall.sqlite3'
         with closing(sqlite3.connect(recall.as_uri() + '?mode=ro', uri=True)) as db:

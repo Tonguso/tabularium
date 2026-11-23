@@ -234,7 +234,9 @@ class NoPollGaps(unittest.TestCase):
         with self.store.db() as db:
             db.execute("INSERT INTO tasks(id,chat,request,status,created,updated) VALUES (11,1,'r',?,0,0)", (rt.WAITING,))
         folder = self.store.directory(11); folder.mkdir(parents=True, exist_ok=True)
-        (folder / "context.json").write_text(json.dumps({"context": "", "parked_at": 0}), encoding="utf-8")
+        (folder / "context.json").write_text(json.dumps({"context": ""}), encoding="utf-8")
+        with self.store.db() as db:
+            rt.lifecycle.record(db, 11, "park", rt.WAITING, at=1)
         self.store.add_delegation(11, "cal", "coordinator-cal-11-x", "exposure facts", "worker_judgment")
         answers = {"coordinator-cal-11-x": {"status": "question", "question": "Which fiscal year: FY25 or FY26?"}}
         self.store.status_checker = lambda agent, rid: answers.get(rid)

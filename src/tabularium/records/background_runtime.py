@@ -131,8 +131,8 @@ class TaskStore:
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_pending_question ON decisions(task,chat) "
                        "WHERE state='pending' AND kind='question' AND task<>0")
             db.execute("CREATE TABLE IF NOT EXISTS controls(id INTEGER PRIMARY KEY, task INTEGER, text TEXT, applied INTEGER DEFAULT 0)")
-            # Accepted activations (start, resume, reopen): what a turn's "work started" claim is checked against.
-            db.execute("CREATE TABLE IF NOT EXISTS activations(id INTEGER PRIMARY KEY, task INTEGER, chat INTEGER, action TEXT, created REAL)")
+            db.execute(lifecycle.EVENTS)                         # every status change, appended by lifecycle.move
+            db.execute("CREATE INDEX IF NOT EXISTS events_task ON events(task, id)")
             db.execute("CREATE TABLE IF NOT EXISTS delegations(task INTEGER, request_id TEXT, agent TEXT, purpose TEXT, source TEXT, status TEXT, created REAL, updated REAL, PRIMARY KEY(task, request_id))")
             # Durable status-call timer: a resumed worker used to get one free status poll per restart.
             columns = {r[1] for r in db.execute("PRAGMA table_info(delegations)")}
@@ -152,6 +152,26 @@ class TaskStore:
 
         from tabularium.records.task_decisions import migrate_questions
         migrate_questions(self)
+        with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            lifecycle.adopt(db, self._completion_file)
+
+    def _completion_file(self, ident):
+        """The verdict a task's folder held before the journal carried it (read once, by lifecycle.adopt)."""
+        try:
+            value = json.loads((self.directory(ident) / "completion.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def completion(self, ident):
+        """The completion verdict the task stands on now, or None (lifecycle.completion)."""
+        with self.db() as db:
+            return lifecycle.completion(db, ident)
+
+    def history(self, ident):
+        with self.db() as db:
+            return lifecycle.history(db, ident)
 
     @contextmanager
     def db(self):
@@ -239,15 +259,13 @@ class TaskStore:
             now = time.time()
             with self.db() as db:
                 db.execute("BEGIN IMMEDIATE")
-                cursor = db.execute("INSERT INTO tasks(chat,request,status,created,updated,note,notified) VALUES (?,?,?,?,?,?,1)",
-                                    (chat, request, WAITING, now, now, f"Waiting on delegate: {parked_on['agent']} {parked_on['request_id']}"))
-                ident = cursor.lastrowid
+                ident = lifecycle.born(db, chat, request, WAITING, f"Waiting on delegate: {parked_on['agent']} {parked_on['request_id']}",
+                                       notified=1)
                 db.execute("INSERT INTO requirements(task,request,items) VALUES (?,'',?)",
                            (ident, json.dumps(completion_items or [], ensure_ascii=False)))
-                db.execute("INSERT INTO activations(task,chat,action,created) VALUES (?,?,?,?)", (ident, chat, "start", now))
                 self.directory(ident).mkdir(exist_ok=True)
                 atomic_json(self.directory(ident) / "context.json", {"context": context, "request": request, "retries": 0,
-                                                                     "parked_at": now, **(extra or {})})
+                                                                     **(extra or {})})
             self.add_delegation(ident, parked_on["agent"], parked_on["request_id"], parked_on.get("purpose", ""), "owner_decision")
             task = self.get(ident)
             task["summary"] = (f"task {ident} waits on {parked_on['agent']} request {parked_on['request_id']} without holding a "
@@ -258,12 +276,9 @@ class TaskStore:
             prior = db.execute("SELECT * FROM tasks WHERE chat=? AND request=? AND status IN ('queued','starting','running','cancelling','pausing','waiting_on_delegate')", (chat, request)).fetchone()
             if prior:
                 return dict(prior)
-            cursor = db.execute("INSERT INTO tasks(chat,request,status,created,updated,note) VALUES (?,?,?,?,?,?)",
-                                (chat, request, "queued", time.time(), time.time(), "Waiting for background worker"))
-            ident = cursor.lastrowid
+            ident = lifecycle.born(db, chat, request, "queued", "Waiting for background worker")
             db.execute("INSERT INTO requirements(task,request,items) VALUES (?,'',?)",
                        (ident, json.dumps(completion_items or [], ensure_ascii=False)))
-            db.execute("INSERT INTO activations(task,chat,action,created) VALUES (?,?,?,?)", (ident, chat, "start", time.time()))
             self.directory(ident).mkdir(exist_ok=True)
             extra = dict(extra or {})
             if self.answering and not extra.get("message_id"):
@@ -322,7 +337,6 @@ class TaskStore:
                 lifecycle.move(db, ident, op, "queued", ("Reopened" if op == "reopen" else "Resume queued")
                                + "; waiting for previous worker ownership to release")
                 db.execute("DELETE FROM worker_failures WHERE task=?", (int(ident),))
-                db.execute("INSERT INTO activations(task,chat,action,created) VALUES (?,?,?,?)", (int(ident), chat, op, time.time()))
                 if text:
                     db.execute("INSERT INTO controls(task,text) VALUES (?,?)", (int(ident), text))
             else:
@@ -792,10 +806,8 @@ class TaskStore:
                 with self.db() as db:
                     lifecycle.move(db, ident, "wake", "queued", "Delegate returned; resume queued", notified=1, quiet=True)
                 continue
-            try:
-                parked = json.loads((self.directory(ident) / "context.json").read_text(encoding="utf-8")).get("parked_at", task["updated"])
-            except (OSError, ValueError):
-                parked = task["updated"]
+            with self.db() as db:
+                parked = lifecycle.since(db, ident, WAITING)
             if time.time() - parked > DELEGATE_MAX_WAIT_SECONDS:
                 ids = "、".join(f"{'Cal' if d['agent'] == 'cal' else 'Vit'} {d['request_id']}" for d in in_flight)
                 from tabularium.memory.memory_store import atomic_text
@@ -809,7 +821,9 @@ class TaskStore:
         turn's "work started" claim is checked against this; until 2026-10-21 it compared the highest task id, so
         a resumed or reopened task counted as nothing started (Cato's runtime report 2026-10-21-2242)."""
         with self.db() as db:
-            return db.execute("SELECT 1 FROM activations WHERE chat=? AND created>=? LIMIT 1", (chat, since)).fetchone() is not None
+            return db.execute(f"SELECT 1 FROM events e JOIN tasks t ON t.id=e.task WHERE t.chat=? AND e.at>=? "
+                              f"AND e.op IN ({','.join('?' * len(lifecycle.ACTIVATIONS))}) LIMIT 1",
+                              (chat, since, *lifecycle.ACTIVATIONS)).fetchone() is not None
 
     def newest(self, chat):
         """The highest task id for the chat, or 0."""
@@ -1341,9 +1355,7 @@ class TaskStore:
                 text = "I've stopped the background work. Anything already saved is still available."
             elif task['status'] not in ('finished', 'needs_attention', 'needs_answer', 'capped'):
                 text = "The background work stopped before I could finish. I've kept the request and saved progress, so it can be picked up from there."
-            completion_path = self.directory(task['id']) / 'completion.json'
-            completion = json.loads(completion_path.read_text(encoding='utf-8')) if completion_path.exists() else {}
-            decision = completion.get('decision_id', 0)
+            decision = (self.completion(task['id']) or {}).get('decision_id', 0)
             if decision and any(d['id'] == decision for d in self.decisions(task['chat'])):
                 from tabularium.core.reply_envelope import Reply
                 text = Reply(text, decision_id=decision)
@@ -1522,8 +1534,8 @@ def worker(ident, agent_dir, role, attempt=None):
             if state == WAITING:
                 return
             if state == "needs_attention":
-                decision = json.loads((folder / "completion.json").read_text(encoding="utf-8"))
-                # The result reaches Alex as written; what the checks found is a dashboard segment (completion.json),
+                decision = store.completion(ident) or {}
+                # The result reaches Alex as written; what the checks found is a dashboard segment (the verdict),
                 # never a prefix on his message (2026-10-24, Alex: [quote removed]).
                 failed = [r for r in decision.get("reasons", []) if r.startswith("Check failed")]
                 if failed and not task_context.get("trial"):     # a failed declared check joins the next diagnosis (2026-10-24)

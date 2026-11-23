@@ -109,7 +109,7 @@ class QuestionBinding(unittest.TestCase):
         self.assertEqual(s.decisions(1, task), [])
         d = s.decisions(1, 0)[0]
         self.assertEqual(d['question'], 'Start a separate trial?')
-        record = json.loads((s.directory(task) / 'completion.json').read_text())
+        record = s.completion(task)
         self.assertEqual(record['decision_id'], d['id'])
         (s.directory(task) / 'result.txt').write_text(str(r), encoding='utf-8')
         notices = []

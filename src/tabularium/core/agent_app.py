@@ -14,6 +14,7 @@ Behaviour is unchanged by construction: tests/test_agent_equivalence.py loads ea
 schemas, handler registrations and constants with the capture taken from the four old files."""
 from contextlib import contextmanager
 from tabularium.core.command_output import command_result
+from tabularium.paths import tool_env
 import atexit
 import io
 import json
@@ -1190,7 +1191,7 @@ class AgentApp(engine.AgentRuntime):
             # held Cato inside one "60-second" call for sixteen minutes while the machine swapped itself to death.
             proc = subprocess.Popen(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],   # never the user's profile script
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=tool_env(),
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             try:

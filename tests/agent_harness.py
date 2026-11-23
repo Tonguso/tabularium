@@ -52,5 +52,7 @@ def put(store, ident, status, note=""):
     import time
     with store.db() as db:
         db.execute("UPDATE tasks SET status=?,note=?,updated=?,notified=0 WHERE id=?", (status, note, time.time(), int(ident)))
+        from tabularium.records import lifecycle
+        lifecycle.record(db, ident, "fixture", status, note)
         if status == "interrupted":
             db.execute("INSERT OR IGNORE INTO worker_failures(task,note,created) VALUES (?,?,?)", (int(ident), note, time.time()))

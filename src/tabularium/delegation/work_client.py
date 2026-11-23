@@ -10,6 +10,7 @@ import time
 
 ROOT = _home()/'engineer'
 from tabularium.records.background_runtime import TaskStore, ACTIVE
+from tabularium.records import lifecycle
 import re
 
 def secret_check(value):
@@ -79,10 +80,8 @@ def call(action, request=None, request_id=None):
                 if previous:
                     ident = previous[0]
                 else:
-                    cursor=db.execute('INSERT INTO tasks(chat,request,status,created,updated,note) VALUES(?,?,?,?,?,?)', (OWNER_CHAT_ID,prompt,'queued',time.time(),time.time(),'Engineering request queued; not yet running'))
                     # Local caller retrieves results; do not send a Telegram completion notice.
-                    db.execute('UPDATE tasks SET notified=1 WHERE id=?', (cursor.lastrowid,))
-                    ident=cursor.lastrowid
+                    ident=lifecycle.born(db, OWNER_CHAT_ID, prompt, 'queued', 'Engineering request queued; not yet running', notified=1)
                     directory=store.directory(ident)
                     directory.mkdir(exist_ok=True)
                     from tabularium.core.agent_runtime import atomic_json

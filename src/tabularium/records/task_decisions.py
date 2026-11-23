@@ -413,8 +413,6 @@ def finish(store, ident, result, *, commit=True, notes=None):
     """One decision, previewed before the final reply and rechecked when committing task state. `notes` are the
     runtime's own bookkeeping for the dashboard's task segment (route, the delegate's account, a repeated lesson):
     they never join the text Alex receives (2026-10-26 and 2026-10-31, Alex on COST and [Route] lines)."""
-    from tabularium.core.agent_runtime import atomic_json
-    from tabularium.memory.memory_store import atomic_text
     folder = store.directory(ident)
     errors = []
     values = []
@@ -491,14 +489,9 @@ def finish(store, ident, result, *, commit=True, notes=None):
         if not commit:
             return evidence
         evidence.update(notes or {})
-        atomic_json(folder / "completion.json", evidence)
-        if state == lifecycle.WAITING:
-            atomic_text(folder / "parked_answer.txt", str(result or ""))
-            context["parked_at"] = time.time()
-            atomic_json(folder / "context.json", context)
         operation = "park" if state == lifecycle.WAITING else "finish"
         lifecycle.move(db, ident, operation, state, "Completion: " + state + "; " + "; ".join(evidence["reasons"]),
-                       notified=1 if state == lifecycle.WAITING else 0)
+                       notified=1 if state == lifecycle.WAITING else 0, data=evidence)
         db.commit()
         return state
     finally:

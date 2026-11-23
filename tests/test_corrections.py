@@ -128,7 +128,7 @@ class Diagnosis(unittest.TestCase):
         put(store, ident, "running")
         state = store.finish(ident, Reply("Which basket?", task_outcome="blocked", question="Which basket?"))
         self.assertEqual(state, "needs_attention")
-        self.assertFalse(json.loads((store.directory(ident) / "completion.json").read_text())["passed"])
+        self.assertFalse(store.completion(ident)["passed"])
         self.assertEqual(store.decisions(CHAT, ident), [])
 
     def test_a_diagnosis_cannot_ask_owner_and_ends_finished(self):

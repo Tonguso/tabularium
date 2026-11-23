@@ -18,6 +18,7 @@ from pathlib import Path
 
 from tabularium.core.agent_app import AgentApp, Config
 from tabularium.core.command_output import command_result
+from tabularium.paths import tool_env
 from tabularium.core.roster import ROLES
 from tabularium.core.outcome import Failed
 
@@ -135,7 +136,7 @@ class VitruviusApp(AgentApp):
         argv = commands[kind] + extra
         limit = max(10, min(int(timeout or CHECK_TIMEOUT_DEFAULT), 600))
         started = time.time()
-        proc = subprocess.Popen(argv, cwd=str(base), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        proc = subprocess.Popen(argv, cwd=str(base), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=tool_env(),
                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:
             out, _ = proc.communicate(timeout=limit)

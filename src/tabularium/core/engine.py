@@ -2,7 +2,7 @@
 current memory, turn notes), memory and recovery. One class, AgentRuntime; tabularium.core.shared_handlers.SharedHandlers
 and tabularium.core.agent_app.AgentApp extend it, and each agent's telegram.py subclasses AgentApp. One agent per process.
 """
-from tabularium.paths import child_env
+from tabularium.paths import child_env, tool_env
 import base64
 import io
 import json
@@ -1148,7 +1148,7 @@ class AgentRuntime(SharedHandlers):
                                   render=render, date_from=date_from, date_to=date_to))
         try:
             proc = subprocess.Popen([sys.executable, "-m", "tabularium.records.review_output", str(request)],
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=tool_env(),
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             try:
                 out, err = proc.communicate(timeout=180)
@@ -2441,7 +2441,7 @@ class AgentRuntime(SharedHandlers):
         try:
             # errors="replace": a single malformed byte must not blank the whole result.
             # Strict decoding fails on the reader thread and silently yields stdout=None.
-            proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
+            proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=tool_env(),
                                   encoding="utf-8", errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except subprocess.TimeoutExpired:
             if checkpoint.exists():

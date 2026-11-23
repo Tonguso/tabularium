@@ -24,6 +24,16 @@ def logs() -> Path:
     return home() / "logs"
 
 
+def tool_env() -> dict:
+    """The environment for a process the model directs (a command, a test run, a script of the agent's own): this
+    process's, without anything the home's settings file defines. Until 2026-11-23 every such process inherited
+    every agent's bot token, mail key and model key, so one `Get-ChildItem env:` put them in a transcript and any
+    program a command started could read them. The runtime's own children (workers, the dashboard) keep them."""
+    from tabularium import config
+    settings = {key.upper() for key in config.settings_keys(home())}
+    return {key: value for key, value in os.environ.items() if key.upper() not in settings}
+
+
 def child_env(home_dir=None, **extra) -> dict:
     """The environment for a process this installation starts: the same home, the package importable whether or
     not it is installed (its parent folder leads PYTHONPATH), the interpreter's own Scripts folder on PATH so the

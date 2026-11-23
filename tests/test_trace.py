@@ -13,7 +13,7 @@ class Trace(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.folder = Path(self.tmp.name) / "7"
         (self.folder / "task_state" / "actions").mkdir(parents=True)
-        self.store = SimpleNamespace(directory=lambda ident: self.folder)
+        self.store = SimpleNamespace(directory=lambda ident: self.folder, history=lambda ident: [])
 
     def tearDown(self):
         self.tmp.cleanup()

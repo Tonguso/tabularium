@@ -125,7 +125,7 @@ class ResearchBenchmark(unittest.TestCase):
             (folder / 'result.txt').write_text('Test representative reliability before deployment.', encoding='utf-8')
             state = store.finish(ident, Reply('Test before deployment.', task_outcome='completed'))
             self.assertEqual(state, 'finished', 'Generation completion must not require its own subjective review')
-            cp = json.loads((folder / 'completion.json').read_text(encoding='utf-8'))
+            cp = store.completion(ident)
             self.assertEqual(cp['verdict'], 'recorded')
             self.assertFalse(cp['passed'])
             return ident

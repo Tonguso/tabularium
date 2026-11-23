@@ -156,7 +156,7 @@ class CompletionFeedback(unittest.TestCase):
             state=store.get(1)['status']
             finish(store,1,Reply('Outcome',task_outcome=result['task_outcome']),commit=False)
             self.assertEqual(store.get(1)['status'],state)
-            self.assertFalse((store.directory(1)/'completion.json').exists())
+            self.assertIsNone(store.completion(1))
             if mode in ('decision','cancelled'):
                 continue  # the normal boundary ends the turn before another model response
             answer,wires,messages=self.scripted(agent,[result])

@@ -93,7 +93,7 @@ survives manager restarts. The dashboard is a local web page that reads the reco
 |---|---|
 | Inbox | A small database per chat: waiting messages, follow-ups, updates to running jobs, usage events |
 | Engine | Shared code: the turn loop, the tool dispatcher, the reply envelope, the safety rails |
-| Task store | SQLite: tasks, their lifecycle, decisions, controls, delegations, requirements, proof, activations |
+| Task store | SQLite: tasks, the events of their lifecycle, decisions, controls, delegations, requirements, proof |
 | Outbox | Every outgoing message, written before it is sent, retried in order after an outage |
 | Memory | One text file per agent plus a searchable archive of every conversation |
 | Skills | Folders with a written method (`SKILL.md`) the agent loads when a task matches |
@@ -151,6 +151,11 @@ outside the table raises and writes nothing, and a move only succeeds if the tas
 read. A question about a finished task cannot silently reopen it; reopening is its own operation. Before this table
 existed, task status was written by thirteen statements in two files.
 
+Every move also appends an event to the task's history, in the same transaction as the status change, so the row
+and the history cannot disagree. A fact that a transition established travels as that event's data and has no other
+copy: the completion verdict is the data of the finish event, and it stops standing the moment the task moves on.
+A task is created with its first event; when it parked and whether work was started are read from the events.
+
 ### 4.2 Decisions
 
 Everything an agent asks the owner is a decision: one durable row with the question, the task, the Telegram message
@@ -207,8 +212,8 @@ existing retry path rather than adding a second checker.
 
 Every tool call writes a receipt before it runs and the outcome after, so a crash leaves the action's status known
 rather than guessed, and a worker resuming from a crash inspects receipts before repeating an external action.
-Workers checkpoint progress, facts, assumptions and decisions. An activation row records every start, resume and
-reopen, and backs the reply envelope's "work started" claim. Each task records the commit of the code it ran on.
+Workers checkpoint progress, facts, assumptions and decisions. The start, resume and reopen events of the task
+history back the reply envelope's "work started" claim. Each task records the commit of the code it ran on.
 
 ### 4.6 Outbox
 
@@ -609,7 +614,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 - The system is single-owner, single-machine, Windows, and addresses the owner by name in prompts. Generalising
   these is open work.
 - Model access through vendors' own clients is the operator's responsibility under the vendors' terms.
-- Command screening is not a sandbox.
+- Command screening is not a sandbox. A process the model directs no longer inherits the home's keys and tokens, but
+  it runs as the owner and can read and write what he can; an operating-system boundary is not built.
 
 ## 14. Lessons from building it
 
@@ -678,6 +684,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-20 | The dashboard showed a receiving task for a hand-off to a specialist as never finishing, whatever the specialist delivered: the task store created it with no completion items, and completion needs a nonempty contract. Three other paths could create work the same way, and evaluation reruns ended unverified for the same reason | The store refuses to create judged work without its completion items; each path that creates work states what finishing it means. The runtime's own records (trials, evaluation reruns, diagnoses, method reviews) carry no contract and end as records, by one definition shared by start, finish and the completion check |
 | 2026-11-23 | A review of five weeks of incidents found four in one week from one decision: a typed yes with no reply was bound to a parked action by working out which ask it answered. It ran a deletion on an "Ok" meant for another question, then bound to nothing three times, then missed a yes sent during the asking turn; each fix refined the guess | The ask carries Yes and No buttons that name its decision. A tap or a reply to the ask is the verdict; a typed yes that names no ask settles nothing, and the agent is told the action still waits. The guess and its bookkeeping are gone |
 | 2026-11-23 | The same review found about one in five of the owner's messages to the coordinator was a correction, a rate that had not fallen in five weeks, while the benchmark of synthetic cases passed seven or eight of eight on every run: the evaluation could not see what he was correcting | Every recorded correction is a case: the conversation up to the reply he objected to, rebuilt from the inbox and outbox, answered again by today's agent in a rehearsal that sends and records nothing, and judged against his words. The dashboard shows how many are repeated, and compares runs over the cases they share |
+| 2026-11-23 | The same review found facts about a task kept beside its status with nothing tying them to it: the completion verdict in a file written before the status change committed and never updated when the task was resumed, the time it parked in another file, its activations in a table of their own, and the row itself keeping only its latest note | Every status change appends an event in its own transaction; the verdict is the finish event's data and ends when the task moves on; parking time and activations are read from the events; a task is created with its first event, by one function |
+| 2026-11-23 | Every command, test run and script the model started inherited every agent's bot token, mail key and model key, because each agent process loads the settings file into its environment | A process the model directs gets the environment without anything the settings file defines; the runtime's own children keep it |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

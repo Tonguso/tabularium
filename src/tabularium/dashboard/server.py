@@ -210,7 +210,7 @@ def state():
             title=(task.get('request') or 'Background work').splitlines()[0]
             task['label']=(title[:100]+'…') if len(title)>100 else title
             task['checkpoint']=read_json(store.directory(task['id'])/'checkpoint.json')
-            task['completion']=read_json(store.directory(task['id'])/'completion.json')   # checks live here, not in his messages (2026-10-24)
+            task['completion']=store.completion(task['id'])   # checks live here, not in his messages (2026-10-24)
             data['tasks'].append(task)
     data['restart']=read_json(ROOT/'dashboard/restart_status.json')
     data['supervisor']=read_json(ROOT/'logs/supervisor_state.json')

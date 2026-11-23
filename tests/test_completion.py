@@ -96,14 +96,14 @@ class CompletionTests(unittest.TestCase):
         """2026-10-24, Alex: [quote removed] (task 348 delivered under "Not complete: Instructions without
         declared requirements: [235]"; 235 was the runtime's own resume note). Whether an instruction carries a
         declared requirement is guidance to the worker, never evidence against finished work. Earlier proof stays
-        valid, and no reason about it reaches completion.json."""
+        valid, and no reason about it reaches the completion record."""
         agent, _ = self.agent()
         store = agent._background
         agent._execute_tool_unguarded('verify_requirement', {'task_id': 1, 'item': 1}, 1)
         store.control(1, 1, 'steer', 'Continue the read-through from the saved checkpoint; same constraints as the brief.')
         store.acknowledge([x['id'] for x in store.pending_controls(1)])
         self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'finished')
-        decision = json.loads((store.directory(1) / 'completion.json').read_text())
+        decision = store.completion(1)
         self.assertTrue(decision['passed'])
         self.assertNotIn('without declared requirements', ' '.join(decision['reasons']))
 
@@ -113,7 +113,7 @@ class CompletionTests(unittest.TestCase):
         store.add_delegation(1, 'vit', 'pending-work', 'Check result', 'worker_judgment')
         store.status_checker = lambda *args: 'running'
         self.assertEqual(store.finish(1, Reply('Waiting', task_outcome='waiting')), 'waiting_on_delegate')
-        self.assertFalse(json.loads((store.directory(1) / 'completion.json').read_text())['passed'])
+        self.assertFalse(store.completion(1)['passed'])
         store.status_checker = lambda *args: 'completed'
         store.poll_waiting()
         self.assertEqual(store.get(1)['status'], 'queued')
@@ -126,7 +126,7 @@ class CompletionTests(unittest.TestCase):
         context = {'eval': {'case': case['id'], 'benchmark': regression.fingerprint([case])}, 'notify_telegram': False}
         (store.directory(1) / 'context.json').write_text(json.dumps(context), encoding='utf-8')
         self.assertEqual(store.finish(1, Reply('Done', task_outcome='completed')), 'finished')
-        completion = json.loads((store.directory(1) / 'completion.json').read_text(encoding='utf-8'))
+        completion = store.completion(1)
         self.assertEqual(completion['verdict'], 'recorded')
         self.assertFalse(completion['passed'])
         graded = regression.grade(None, case, 'Done', store.directory(1) / 'trial_output')

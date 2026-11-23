@@ -47,7 +47,7 @@ class DelegateAccountReachesAlex(unittest.TestCase):
         notes = dict(route="[Route] claude-sdk/subscription 1 turns",
                      account="Vit's own account (Tiro build), unedited:\nCOST: 18,000 vs target 260,000")
         self.store.finish(self.task, "Tiro is ready.", notes=notes)
-        completion = json.loads((self.store.directory(self.task) / "completion.json").read_text(encoding="utf-8"))
+        completion = self.store.completion(self.task)
         self.assertEqual({k: completion.get(k) for k in notes}, notes)
 
     def test_a_result_without_head_lines_is_said_to_be_coordinator_s_reading_only(self):
