@@ -16,7 +16,12 @@ Only corrections older than AGE_DAYS are used: his answers of the last two days 
 case that the ruling itself answers measures nothing that lasts. The newest CASES eligible corrections are the set, so
 a week's runs share most of their cases; a comparison between two runs holds for the cases they share.
 
-Results go to task_state/correction_eval/<stamp>.json. Nothing is sent to the owner; the dashboard shows the rate."""
+Results go to task_state/correction_eval/<stamp>.json. Nothing is sent to the owner; the dashboard shows the rate.
+
+What the replay measures, and what it does not (first run, 2026-11-23: 0 of 16 repeated). Today's agent answers with
+today's memory, which holds what he said in those corrections, so the replay shows whether a correction once made
+still holds: a guard against a change that undoes one. It does not show how often he corrects the agent in new
+situations. That is live_rate, counted from the same records, and it is the number to bring down."""
 import json
 import sqlite3
 import time
@@ -254,6 +259,17 @@ def latest(agent_dir):
             out["previous"] = {"shared": len(told), "repeated_then": sum(a == "repeated" for a, _ in told),
                                "repeated_now": sum(b == "repeated" for _, b in told)}
     return out
+
+
+def live_rate(agent_dir, chat, days=7, now=None):
+    """What the owner actually did in the last `days`: {corrections, messages}, from the recorded corrections and his
+    messages in the inbox."""
+    since = (now or time.time()) - days * 86400
+    with closing(_ro(Path(agent_dir) / "task_state" / "inbox.sqlite3")) as db:
+        corrections = db.execute("SELECT count(*) FROM usage_events WHERE kind='correction' AND created>=?", (since,)).fetchone()[0]
+        messages = db.execute("SELECT count(*) FROM jobs WHERE chat=? AND created>=? AND "
+                              "coalesce(json_extract(payload,'$.channel'),'')<>'button'", (chat, since)).fetchone()[0]
+    return {"corrections": corrections, "messages": messages}
 
 
 def summary(record):

@@ -36,7 +36,7 @@ class SearchOrderFile(unittest.TestCase):
 
 class SearchOrderWiring(unittest.TestCase):
     def test_shared_entry_point_follows_the_file(self):
-        src = (ROOT / "src" / "tabularium" / "core" / "engine.py").read_text(encoding="utf-8")
+        src = (ROOT / "src" / "tabularium" / "core" / "web_tools.py").read_text(encoding="utf-8")
         fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef) and n.name == "tool_web_search")
         body = ast.unparse(fn)
         self.assertIn("read_order()", body)

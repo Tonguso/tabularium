@@ -190,6 +190,8 @@ def state():
         agent['memory_review']=read_json(folder/'memory_review.json')
         try: agent['correction_eval']=correction_eval.latest(ROOT/name)       # recorded corrections replayed (2026-11-23)
         except (OSError, ValueError, KeyError): agent['correction_eval']=None
+        try: agent['corrections_week']=correction_eval.live_rate(ROOT/name, OWNER_CHAT_ID)   # what he actually corrected
+        except (OSError, sqlite3.Error): agent['corrections_week']=None
         try:   # the latest regression eval against the one before (2026-10-23)
             agent['regression']=regression.latest(ROOT/name)
             r=agent['regression']

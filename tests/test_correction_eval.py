@@ -130,6 +130,20 @@ class Cases(unittest.TestCase):
         self.assertEqual([c["corrections"][0] for c in self.build(limit=2)], ["Wrong 3", "Wrong 2"])
 
 
+class LiveRate(unittest.TestCase):
+    def test_the_live_rate_counts_what_he_corrected_among_what_he_sent_this_week(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = Records(tmp)
+            self.addCleanup(r.inbox.close)
+            now = time.time()
+            r.said("Old message", now - 30 * DAY)
+            r.said("Make the logo", now - DAY)
+            wrong = r.said("The strip is misaligned", now - DAY + 60)
+            r.said("yes", now - DAY + 90, channel="button")                     # a tap is not a message
+            r.corrected(wrong)
+            self.assertEqual(ce.live_rate(tmp, CHAT, now=now), {"corrections": 1, "messages": 2})
+
+
 CASE = {"id": 7, "said_at": "2026-11-10 10:00", "corrections": ["Stop asking, just send it."],
         "reply": "Shall I send it now?", "prompt": [{"t": 1_799_000_000.0, "text": "Send the draft to the desk"}],
         "context": [{"role": "user", "t": 1_798_999_000.0, "text": "What is the plan?"},
