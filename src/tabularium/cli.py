@@ -5,7 +5,7 @@
     tabularium [--home PATH] dashboard              the local web page
     tabularium [--home PATH] supervisor             the process that owns the agents and the dashboard
     tabularium [--home PATH] status | restart [slot ...] | start | open
-    tabularium [--home PATH] eval <slot> [...] | lessons [slot ...] | exam | review
+    tabularium [--home PATH] eval <slot> [...] | lessons [slot ...] | exam | review | corrections
     tabularium [--home PATH] worker <task> --agent DIR --role SLOT [--attempt ID]     (started by the task store)
 
 The home folder is --home, else TABULARIUM_HOME, else the current directory. Its .env is loaded before anything else
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"
-LEGACY = {"status", "restart", "start", "open", "eval", "lessons", "exam", "review"}
+LEGACY = {"status", "restart", "start", "open", "eval", "lessons", "exam", "review", "corrections"}
 
 
 def init(home, argv):

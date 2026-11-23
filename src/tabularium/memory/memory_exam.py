@@ -109,10 +109,10 @@ def examiner_call(runtime, prompt, schema):
 
 def ask_agent(runtime, chat, question):
     """One turn under the conditions of a real conversation: the fixed seed, a timestamped message, and the current core
-    memory attached by the request builder, as every turn gets it. Only EXAM_TOOLS exist, enforced by tool_scope.
+    memory attached by the request builder, as every turn gets it. Only EXAM_TOOLS exist, enforced by rehearsal.
     A fresh message list, so the live conversation is untouched. Returns (answer, tools_used)."""
     messages = runtime.load_memory_context() + [{"role": "user", "content": f"{runtime._ts()} {ASK_PREFIX}Question: {question}"}]
-    with runtime.tool_scope(EXAM_TOOLS):
+    with runtime.rehearsal(EXAM_TOOLS):
         answer = runtime.run_turn(messages, chat) or ""
     used = [b.get("name") for m in messages if m.get("role") == "assistant" and isinstance(m.get("content"), list)
             for b in m["content"] if isinstance(b, dict) and b.get("type") == "tool_use"]

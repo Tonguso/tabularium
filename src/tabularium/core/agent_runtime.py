@@ -313,6 +313,13 @@ class DurableInbox:
         finally:
             db.close()
 
+    def idle_seconds(self):
+        """Seconds since the owner's last message arrived; 0 while one is waiting or being answered."""
+        with self.db() as db:
+            busy = db.execute("SELECT count(*) FROM jobs WHERE status IN ('pending','running')").fetchone()[0]
+            newest = db.execute("SELECT max(created) FROM jobs").fetchone()[0]
+        return 0 if busy else time.time() - (newest or 0)
+
     def answering(self):
         """The Telegram message id the running job answers, or None outside a job."""
         return getattr(self.local, 'message_id', None)

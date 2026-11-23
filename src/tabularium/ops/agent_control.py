@@ -241,5 +241,14 @@ def main(args):
             flag = _home() / name / "task_state" / f"memory_{args[0]}_requested"
             flag.parent.mkdir(parents=True, exist_ok=True); flag.touch()
         print(f"Memory {args[0]} requested for " + ", ".join(names) + "; results in <agent>/task_state/memory_" + args[0] + ".json within a few minutes.")
+    elif args and args[0] == "corrections":
+        # The replay of recorded corrections on demand (2026-11-23): picked up within a minute once the chat is quiet.
+        from tabularium.core.roster import ROLES
+        names = [a for a in args[1:] if not a.startswith("--")] or [n for n in AGENTS if ROLES[n].learns]
+        for name in names:
+            flag = _home() / name / "task_state" / "correction_eval_requested"
+            flag.parent.mkdir(parents=True, exist_ok=True); flag.touch()
+        print("Correction replay requested for " + ", ".join(names) + "; it runs when the chat has been quiet for twenty "
+              "minutes, and results go to <agent>/task_state/correction_eval/.")
     else:
         print(__doc__)

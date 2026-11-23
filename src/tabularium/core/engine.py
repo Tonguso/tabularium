@@ -395,6 +395,10 @@ class AgentRuntime(SharedHandlers):
                 except Exception as exc:
                     print(f"[{name}] worker error: {type(exc).__name__}: {exc}")
             try:
+                self.run_correction_eval()                                       # daily, when the owner has been quiet
+            except Exception as exc:
+                print(f"[correction_eval] worker error: {type(exc).__name__}: {exc}")
+            try:
                 self.run_benchmark_rerun()                                       # a model or route change is rescored (2026-11-02)
             except Exception as exc:
                 print(f"[benchmark_rerun] worker error: {type(exc).__name__}: {exc}")
@@ -1984,7 +1988,7 @@ class AgentRuntime(SharedHandlers):
         self._episode_reads.pop(chat_id, None)
         from tabularium.core.session_lifecycle import continue_turn
         result = continue_turn(self, messages, chat_id, lambda: self._routing.run(self, messages, chat_id))
-        if self.BACKGROUND_TASK_ID:
+        if self.BACKGROUND_TASK_ID or self._rehearsing:
             return result
         corrected = getattr(result, "correction", ())
         for ident in getattr(result, "not_correction", ()):   # the judgement on strong language is recorded either way

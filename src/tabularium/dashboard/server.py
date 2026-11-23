@@ -16,7 +16,7 @@ from tabularium.ops.scorecard import weekly
 from tabularium.models.usage import aggregate, decode
 from tabularium.core import trace
 from tabularium.learning import regression
-from tabularium.learning import research_signal
+from tabularium.learning import research_signal, correction_eval
 from tabularium.core.agent_runtime import atomic_json
 from tabularium.models import provider_routing as routing
 from tabularium.tools import search_routing
@@ -188,6 +188,8 @@ def state():
         # of memory.md is ready for a clean-up he must propose to Alex first.
         agent['memory_exam']=read_json(folder/'memory_exam.json')
         agent['memory_review']=read_json(folder/'memory_review.json')
+        try: agent['correction_eval']=correction_eval.latest(ROOT/name)       # recorded corrections replayed (2026-11-23)
+        except (OSError, ValueError, KeyError): agent['correction_eval']=None
         try:   # the latest regression eval against the one before (2026-10-23)
             agent['regression']=regression.latest(ROOT/name)
             r=agent['regression']

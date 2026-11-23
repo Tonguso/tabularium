@@ -236,6 +236,7 @@ class AgentApp(engine.AgentRuntime):
         self._background = TaskStore(self.AGENT_DIR, cfg.role, cfg.display)
         self._background.answering = lambda: self._inbox.answering()
         self._tool_scope = None   # None: every tool; a set: only those (tool_scope)
+        self._rehearsing = False  # True inside rehearsal(): the turn's reply is read by the caller, never recorded
         self._email_receipts = EmailReceipts(self.AGENT_DIR / "task_state" / "email_receipts")
 
         # Refuse to start twice. Two processes polling the same bot token both call getUpdates, and Telegram answers
@@ -762,6 +763,18 @@ class AgentApp(engine.AgentRuntime):
             yield
         finally:
             self._tool_scope = previous
+
+    @contextmanager
+    def rehearsal(self, names):
+        """A turn run to be read, never delivered (the memory exam, the replay of a correction): only these tools
+        exist, and run_turn records nothing from the reply. Without this a rehearsed reply that asked a question
+        became a pending decision in the owner's chat, and one that named a correction started a diagnosis."""
+        with self.tool_scope(names):
+            self._rehearsing = True
+            try:
+                yield
+            finally:
+                self._rehearsing = False
 
     def _preset_verification(self):
         return bool(self.BACKGROUND_TASK_ID and self._background.preset_case(int(self.BACKGROUND_TASK_ID)))
@@ -1708,6 +1721,29 @@ class AgentApp(engine.AgentRuntime):
             t = memory_consolidation.trial(self, OWNER_CHAT_ID)
         print(f"[memory_trial] live {t['before']} -> candidate {t['after']}")
         return t
+
+    CORRECTION_EVAL_SECONDS = 24 * 3600
+    CORRECTION_EVAL_QUIET = 20 * 60
+
+    def run_correction_eval(self):
+        """Once a day, when the owner has been quiet for a while, replay his recorded corrections against the agent
+        as it is now and record how many it repeats (tabularium.learning.correction_eval). `tabularium corrections`
+        asks for a run now. Returns the record, or None when no run was due."""
+        from tabularium.channels.owner_telegram import OWNER_CHAT_ID
+        from tabularium.learning import correction_eval
+        if not self.config.role.learns:
+            return None
+        flag = self.AGENT_DIR / "task_state" / "correction_eval_requested"
+        last = correction_eval.latest(self.AGENT_DIR)
+        due = flag.exists() or last is None or time.time() - last["time"] >= self.CORRECTION_EVAL_SECONDS
+        if not due or self._inbox.idle_seconds() < self.CORRECTION_EVAL_QUIET:
+            return None
+        flag.unlink(missing_ok=True)
+        self.ensure_initialised(OWNER_CHAT_ID)
+        record = correction_eval.run(self, OWNER_CHAT_ID, quiet=lambda: self._inbox.idle_seconds() > 0)
+        correction_eval.save(self.AGENT_DIR, record)
+        print(f"[correction_eval] {correction_eval.summary(record)} ({record['seconds']}s)")
+        return record
 
     def run_memory_exam(self):
         """Ask the agent a few questions about what Alex told him this week; record the result, send nothing."""
