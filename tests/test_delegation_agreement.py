@@ -103,6 +103,29 @@ class DelegationAgreement(unittest.TestCase):
         (self.remote.directory(self.child)/'result.txt').write_text('Different delivery', encoding='utf-8')
         self.assertFalse(self.completion()['passed'])
 
+    def test_replaced_delivery_ends_the_acceptance_in_the_scorecard(self):
+        self.fetch()
+        self.accept()
+        self.assertTrue(self.store.scorecard('request')['accepted'])
+        (self.remote.directory(self.child)/'result.txt').write_text('Different delivery', encoding='utf-8')
+        self.fetch()
+        card = self.store.scorecard('request')
+        self.assertEqual((card['accepted'], card['verdicts'], card['items_met']), (None, None, None))
+        self.accept()
+        self.assertTrue(self.store.scorecard('request')['accepted'])
+
+    def test_reopened_request_is_not_accepted_in_the_scorecard(self):
+        self.fetch()
+        self.accept()
+        self.store.reopen_delegation(self.task, 'request')
+        self.assertIsNone(self.store.scorecard('request')['accepted'])
+
+    def test_the_target_is_read_from_the_delegates_contract(self):
+        from tabularium.records import task_cost
+        self.assertEqual(self.store.scorecard('request')['budget'], 1000)
+        task_cost.set_target(self.remote.directory(self.child), 5000)      # what an extension does
+        self.assertEqual(self.store.scorecard('request')['budget'], 5000)
+
     def test_direct_rework_invalidates_owner_acceptance(self):
         self.fetch()
         self.accept()

@@ -149,6 +149,10 @@ class TaskStore:
             for column in ("brief TEXT", "brief_lesson TEXT", "reason TEXT", "direct_cost INTEGER", "guesses TEXT", "guesses_verdict TEXT", "rework_log TEXT"):
                 if column.split()[0] not in score_columns:
                     db.execute("ALTER TABLE scorecard ADD COLUMN " + column)
+            # Older rows: an acceptance whose delivery was later replaced or reopened was left standing in the scorecard.
+            db.execute("UPDATE scorecard SET " + ",".join(c + "=NULL" for c in self.REVIEW_OUTCOME) + " WHERE accepted IS NOT NULL "
+                       "AND EXISTS(SELECT 1 FROM delegations d WHERE d.task=scorecard.task AND d.request_id=scorecard.request_id "
+                       "AND d.status IN ('submitted','returned'))")
 
         from tabularium.records.task_decisions import migrate_questions
         migrate_questions(self)
@@ -495,12 +499,9 @@ class TaskStore:
         db = sqlite3.connect(self.database, timeout=30)
         try:
             previous = verification.review_record(self, ident, request_id)
-            unchanged = previous.get('delivery') == snapshot
-            record = previous if unchanged else dict(delivery=snapshot, verdicts=[])
-            state = next(d['status'] for d in self.delegations(ident) if d['request_id'] == request_id) if unchanged else 'returned'
-            db.execute("UPDATE delegations SET acceptance=?,status=?,updated=? WHERE task=? AND request_id=?",
-                       (json.dumps(record, ensure_ascii=False), state, time.time(), ident, request_id))
-            db.commit()
+            if previous.get('delivery') != snapshot:          # a new delivery: the review of the old one no longer stands
+                self._review(db, ident, request_id, dict(delivery=snapshot, verdicts=[]), 'returned')
+                db.commit()
         finally:
             db.close()
         return verification.delivery_id(snapshot)
@@ -543,6 +544,16 @@ class TaskStore:
 
     # ── Acceptance: a result counts as read only after a verdict per completion item ──
     VERDICTS = ("met", "partial", "not_met")
+    REVIEW_OUTCOME = ("spent", "items_total", "items_met", "critical_total", "critical_met", "verdicts", "accepted")
+
+    def _review(self, db, ident, request_id, record, status, outcome=None):
+        """The one place the review of a request is written. The delegation row holds the review of the current
+        delivery and the scorecard its outcome; they change in the caller's transaction, so a new delivery or a reopen
+        cannot leave the scorecard showing an acceptance of work that was replaced (2026-11-24)."""
+        db.execute("UPDATE delegations SET acceptance=?,status=?,updated=? WHERE task=? AND request_id=?",
+                   (None if record is None else json.dumps(record, ensure_ascii=False), status, time.time(), int(ident), request_id))
+        db.execute("UPDATE scorecard SET " + ",".join(c + "=?" for c in self.REVIEW_OUTCOME) + " WHERE request_id=?",
+                   (*(outcome or [None] * len(self.REVIEW_OUTCOME)), request_id))
 
     def record_submission(self, request_id, task, agent, task_type, budget, items, brief=None, reason="", direct_cost=0):
         with self.db() as db:
@@ -613,12 +624,10 @@ class TaskStore:
         items = self.contract_items(request_id)
         db = sqlite3.connect(self.database, timeout=30)
         try:
-            db.execute("UPDATE delegations SET acceptance=?,status=?,updated=? WHERE task=? AND request_id=?",
-                       (json.dumps(record, ensure_ascii=False), 'returned' if unmet else 'read', time.time(), int(ident), request_id))
             critical_total = sum(bool(it.get('critical')) for it in items)
-            db.execute("UPDATE scorecard SET spent=?,items_total=?,items_met=?,critical_total=?,critical_met=?,verdicts=?,accepted=? WHERE request_id=?",
-                       (spent,len(items),len(items)-len(unmet),critical_total,critical_total-len(critical_unmet),
-                        json.dumps(verdicts,ensure_ascii=False),None if unmet else time.time(),request_id))
+            self._review(db, ident, request_id, record, 'returned' if unmet else 'read',
+                         (spent, len(items), len(items) - len(unmet), critical_total, critical_total - len(critical_unmet),
+                          json.dumps(verdicts, ensure_ascii=False), None if unmet else time.time()))
             row = db.execute("SELECT rework_log FROM scorecard WHERE request_id=?", (request_id,)).fetchone()
             log = json.loads((row[0] if row else None) or "[]")
             if log and 'outcome' not in log[-1]:           # the review after a rework: did the delegate change anything?
@@ -647,6 +656,9 @@ class TaskStore:
                 resolved = verification.delegate(self, card['task'], card['request_id'])
                 if resolved:
                     card['items'] = json.dumps(verification.saved_items(*resolved), ensure_ascii=False)
+                    # The target lives in the delegate's contract, where an extension raises it; the column is what was first asked.
+                    from tabularium.records import task_cost
+                    card['budget'] = task_cost.target(resolved[0].directory(resolved[1])) or card['budget']
                 result.append(card)
             return (result[0] if result else None) if request_id else result
         finally:
@@ -655,8 +667,7 @@ class TaskStore:
     def reopen_delegation(self, ident, request_id):
         """A capped delegate resumed after a budget extension is in flight again."""
         with self.db() as db:
-            db.execute("UPDATE delegations SET status='submitted',acceptance=NULL,updated=? WHERE task=? AND request_id=?",
-                       (time.time(), int(ident), request_id))
+            self._review(db, ident, request_id, None, 'submitted')
 
     def unread_delegations(self, ident):
         return [d for d in self.delegations(ident) if d["status"] not in ("read", "cancelled")]

@@ -39,13 +39,14 @@ def acceptance(request_id):
         with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=5)) as con:
             con.row_factory=sqlite3.Row
             d=con.execute('SELECT task,agent,purpose,source,status,acceptance,created,updated FROM delegations WHERE request_id=? ORDER BY created DESC LIMIT 1',(request_id,)).fetchone()
-            card=con.execute('SELECT task_type,budget,spent,items_total,items_met,critical_total,critical_met,reworks,brief_lesson,reason FROM scorecard WHERE request_id=?',(request_id,)).fetchone()
+            card=con.execute('SELECT task_type,spent,items_total,items_met,critical_total,critical_met,reworks,brief_lesson,reason FROM scorecard WHERE request_id=?',(request_id,)).fetchone()
     except sqlite3.Error:
         return None
     if not d and not card:return None
     out=dict(d) if d else {}
-    try:out['verdicts']=json.loads(out.get('acceptance') or '[]')
-    except ValueError:out['verdicts']=[]
+    try:record=json.loads(out.get('acceptance') or '[]')
+    except ValueError:record=[]
+    out['verdicts']=(record.get('verdicts') or []) if isinstance(record,dict) else record   # the review of a delivery, or an older bare list
     out.pop('acceptance',None)
     if card:out['scorecard']=dict(card)
     return out

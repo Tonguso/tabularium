@@ -118,7 +118,6 @@ def call(action, request=None, request_id=None):
                 text=('Scope changed by Cato. New completion items: '+json.dumps(verification.saved_items(store, task['id']),ensure_ascii=False)+
                       '. Re-estimate the whole job with task_checkpoint(estimate_effective_tokens=...) before further work. '+(body.get('note') or ''))
             else:
-                deal['reworks']=int(deal.get('reworks') or 0)+1
                 text=('Rework requested by Cato on completion items '+', '.join(str(i) for i in body.get('items') or [])+': '+(body.get('note') or '')+
                       ' Resume from your checkpoint; do not redo items already accepted.')
             atomic_json(ctx_path, ctx)
