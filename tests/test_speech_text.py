@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from tabularium.core import agent_app
+from tabularium.core import speech
 from tabularium.core.agent_app import AgentApp
 from tabularium.agents import private, coordinator, engineer
 
@@ -23,7 +23,7 @@ def spoken(config, text, env=None):
         sent.update(url=url, payload=json)
         return Refused()
     with patch.dict(os.environ, {"ELEVENLABS_API_KEY": "test", **(env or {})}), \
-            patch.object(agent_app.requests, "post", post):
+            patch.object(speech.requests, "post", post):
         assert app._speak_elevenlabs(1, text) is False      # the fake service refuses; nothing is sent
     return sent["url"], sent["payload"]
 

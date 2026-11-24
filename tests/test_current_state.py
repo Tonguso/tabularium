@@ -109,11 +109,11 @@ class ARouteChangeRerunsTheBenchmarkOnce(unittest.TestCase):
     def test_one_launch_per_route_and_none_without_a_gap(self):
         from tabularium.learning import regression
         with patch.object(regression, "primary_route", return_value="gpt-6-luna"), \
-             patch.object(regression, "route_gap", return_value=None), patch("tabularium.core.engine.subprocess.Popen") as popen:
+             patch.object(regression, "route_gap", return_value=None), patch("tabularium.core.self_checks.subprocess.Popen") as popen:
             self.assertFalse(self.runtime.run_benchmark_rerun())
             popen.assert_not_called()
         with patch.object(regression, "primary_route", return_value="gpt-6-luna"), \
-             patch.object(regression, "route_gap", return_value="- BENCHMARK? ..."), patch("tabularium.core.engine.subprocess.Popen") as popen:
+             patch.object(regression, "route_gap", return_value="- BENCHMARK? ..."), patch("tabularium.core.self_checks.subprocess.Popen") as popen:
             self.assertTrue(self.runtime.run_benchmark_rerun())
             self.assertEqual(popen.call_args.args[0][1:5], ["-m", "tabularium", "eval", "coordinator"])
             self.assertFalse(self.runtime.run_benchmark_rerun())                 # the same route is not launched twice

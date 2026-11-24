@@ -6,13 +6,10 @@ request_context (how a request is built from the conversation), skill_catalogue 
 tabularium.core.shared_handlers.SharedHandlers and tabularium.core.agent_app.AgentApp extend it, and each agent's
 telegram.py subclasses AgentApp.
 """
-from tabularium.paths import child_env, tool_env
 import base64
-import io
 import json
 import os
 import re
-import subprocess
 import logging
 import sys
 import threading
@@ -21,17 +18,14 @@ from datetime import datetime
 from pathlib import Path
 
 import anthropic
-import requests
 import telebot
 
-from tabularium.memory.memory_context import read_view, WorkingMemory, current_context
-from tabularium.learning.learning import record as record_lesson
 from tabularium.core import turn_loop
 from tabularium.core.wire_budget import MAX_IMAGES, bound_result
 from tabularium.core.outcome import Refused, Failed, AlreadyShown
-from tabularium.core.context_window import ARCHIVE_MARKER, archive_preview, prepare_context, clear_cache_markers, wire_size, REQUEST_BYTES
+from tabularium.core.context_window import ARCHIVE_MARKER, archive_preview
 from tabularium.records.background_runtime import TaskStopped
-from tabularium.memory.memory_store import memory_lock, atomic_text, append_unique, reconcile, record_fact
+from tabularium.memory.memory_store import atomic_text, reconcile
 from tabularium.records.action_evidence import verify_artifact
 from tabularium.core.command_guard import CommandGuard
 from tabularium.core.web_tools import WebTools
