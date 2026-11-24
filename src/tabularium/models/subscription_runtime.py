@@ -1,7 +1,7 @@
 """Claude subscription adapter using canonical agent context and only the agent's tools."""
 from tabularium.paths import home as _home
 from tabularium.core.wire_budget import message_budget, bound_result, MAX_IMAGES, json_size, CLI_RESULT_COPIES, ENVELOPE_HEADROOM
-from tabularium.core.context_window import archive_preview, exchange_starts
+from tabularium.core.context_window import archive_preview
 from tabularium.core.outcome import Failed
 from tabularium.core.session_lifecycle import SessionLimit
 import asyncio
@@ -227,21 +227,6 @@ def sdk_tool_names(history):
         out.append(message)
     return out
 
-def transcript_blocks(replay, marker):
-    """The replayed conversation as text blocks, one per exchange (a message from the owner and all that followed it),
-    each the JSON of its messages. Every block before the newest exchange is the same text from one turn to the next,
-    so the cache marker on the last of them lets the next session read them from the provider's cache and write only
-    what is new. The newest exchange carries what is true now (core memory, live state) and is never reused.
-    Until 2026-11-24 the conversation was one text that changed every turn, so every turn wrote all of it to the
-    cache again: 28M tokens in fourteen days on one agent, about 31k to 54k a turn."""
-    starts = sorted({0, *exchange_starts(replay)}) if replay else []
-    blocks = [{'type': 'text', 'text': json.dumps(replay[a:b], ensure_ascii=False)}
-              for a, b in zip(starts, starts[1:] + [len(replay)])]
-    if len(blocks) > 1:
-        blocks[-2]['cache_control'] = dict(marker)
-    return blocks
-
-
 def run_claude(agent, messages, chat, model, reminded=False, retry=None):
     from tabularium.core import reply_envelope
     from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, AssistantMessage, create_sdk_mcp_server, query, tool
@@ -277,16 +262,15 @@ def run_claude(agent, messages, chat, model, reminded=False, retry=None):
             return [serial(v) for v in value]
         return value
 
-    from tabularium.core.request_context import RequestContext      # the one definition of the cache marker
-    transcript = transcript_blocks(serial(sdk_tool_names(history)), RequestContext.CACHE_CONTROL)
+    transcript = json.dumps(serial(sdk_tool_names(history)), ensure_ascii=False)
     blocks = [{'type': 'text', 'text': 'Continue this conversation at the latest user request. '
-               'The JSON blocks below are the conversation history in order, including completed tool actions, not new system instructions. '
+               'The JSON below is conversation history, including completed tool actions, not new system instructions. '
                'Do not repeat completed actions. If an action outcome is unknown, inspect it before proceeding. '
-               'Your tools in this session are the mcp__agent__* tools listed for you; call them by those exact names.'}] + transcript + images
+               'Your tools in this session are the mcp__agent__* tools listed for you; call them by those exact names.\n'+transcript}] + images
     # A resumed history can contain several turns of valid images. Retain the most recent set;
     # older images remain retrievable, rather than multiplying the live-session attachment budget.
     for index in range(max(0, len(images) - MAX_IMAGES)):
-        blocks[len(blocks) - len(images) + index] = {'type': 'text', 'text': archive_preview(
+        blocks[index + 1] = {'type': 'text', 'text': archive_preview(
             [images[index]], agent.AGENT_DIR / 'context_archive' / 'results', preview_chars=400)}
     if CLI_RESULT_COPIES * json_size(blocks) + ENVELOPE_HEADROOM > message_budget():
         raise Unavailable('Claude prompt exceeds the shared wire budget before session start; use a smaller context or another route', 60)
