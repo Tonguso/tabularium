@@ -34,7 +34,8 @@ class SelftestPath(unittest.TestCase):
             self.assertIn("Runtime self-test", content)
             self.assertIn("reply with exactly the word OK", content)
             self.assertEqual(runtime._turns_since_activity[OWNER_CHAT_ID], 3)            # nudge counter untouched
-            saved = json.loads((root / "task_state" / "selftest.json").read_text(encoding="utf-8"))
+            # beside the agent's other runtime records: the agent's own folder for the live agent, its own for a release probe
+            saved = json.loads((runtime.RUNTIME_DIR / "task_state" / "selftest.json").read_text(encoding="utf-8"))
             self.assertTrue(saved["ok"])
 
     def test_selftest_reports_a_handler_composition_failure(self):

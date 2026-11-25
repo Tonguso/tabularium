@@ -15,6 +15,19 @@ class SelfChecks:
 
     SELFTEST_FIRST_DELAY = 300
 
+    # The conversation the self-test turn follows. A real turn is never the first message of a conversation: it
+    # carries earlier exchanges and a tool call with its result. A change that broke every turn with a history
+    # passed a self-test that sent one message alone (2026-11-24: an hour of failed turns on the subscription route).
+    SELFTEST_HISTORY = (
+        {"role": "user", "content": "[Runtime self-test, earlier exchange; not from Alex] What does the file notes.txt say?"},
+        {"role": "assistant", "content": [{"type": "text", "text": "I will read it."},
+                                          {"type": "tool_use", "id": "selftest_history_1", "name": "read_file", "input": {"path": "notes.txt"}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "selftest_history_1", "content": "Self-test note: nothing to do."}]},
+        {"role": "assistant", "content": [{"type": "text", "text": "It holds one line: nothing to do."}]},
+        {"role": "user", "content": "[Runtime self-test, earlier exchange; not from Alex] Thank you."},
+        {"role": "assistant", "content": [{"type": "text", "text": "You are welcome."}]},
+    )
+
     WEEKLY_SECONDS = 7 * 24 * 3600
 
     WEEKLY_CHECKS = (("memory_review", "run_memory_review"), ("memory_exam", "run_memory_exam"),
@@ -143,19 +156,22 @@ class SelfChecks:
 
     def run_selftest(self):
         """One real turn, composed the way the message handler composes it (compose_turn on a synthetic Telegram
-        message) and run through run_turn: the model must call read_file on the identity file and answer OK.
+        message) after SELFTEST_HISTORY, and run through run_turn: the model must call read_file on the identity
+        file and answer OK. The release probe (tabularium probe) runs this same turn on the source under test.
         Result in task_state/selftest.json; the supervisor tells Alex on failure, the dashboard shows it.
         Runs under the chat lock so it never interleaves with a real conversation turn (2026-10-11). Nothing is sent
         to Telegram. Before 2026-10-11 18:00 this bypassed the handler and passed while every real message failed."""
         from tabularium.channels.owner_telegram import OWNER_CHAT_ID
         from tabularium.core.agent_runtime import atomic_json
         from types import SimpleNamespace
-        path = self.AGENT_DIR / "task_state" / "selftest.json"
+        path = self.RUNTIME_DIR / "task_state" / "selftest.json"
         target = self.AGENT_DIR / "SKILL.md"
         text = ("[Runtime self-test, not a message from Alex; send nothing to Telegram and change nothing.] "
                 f"Call read_file on {target} (a few lines are enough), then reply with exactly the word OK.")
         incoming = SimpleNamespace(chat=SimpleNamespace(id=OWNER_CHAT_ID), text=text, date=int(time.time()), reply_to_message=None)
-        messages = []
+        import copy
+        messages = copy.deepcopy(list(self.SELFTEST_HISTORY))
+        before = len(messages)
         started = time.time(); reply = ""; error = ""; ok = False
         self.ensure_initialised(OWNER_CHAT_ID)
         with self.get_chat_lock(OWNER_CHAT_ID):
@@ -163,7 +179,7 @@ class SelfChecks:
                 messages.append({"role": "user", "content": self.compose_turn(incoming, nudge=False)})
                 reply = self.run_turn(messages, OWNER_CHAT_ID) or ""
                 used_tool = any(isinstance(m.get("content"), list) and any(isinstance(b, dict) and b.get("type") == "tool_use" for b in m["content"])
-                               for m in messages)
+                               for m in messages[before:])
                 ok = "OK" in reply.upper() and used_tool
                 if not ok:
                     error = "no tool call" if not used_tool else "reply was not OK"
@@ -173,7 +189,7 @@ class SelfChecks:
         # Which route answered, and whether it was the first choice: for two days (2026-10-20 to 10-22) the daily
         # self-test passed on the ChatGPT fallback while the Claude CLI was missing, and nothing said so.
         try:
-            state = json.loads((self.AGENT_DIR / "task_state" / "routing_state.json").read_text(encoding="utf-8"))
+            state = json.loads((self.RUNTIME_DIR / "task_state" / "routing_state.json").read_text(encoding="utf-8"))
             routes = self._routing.config(self.AGENT_DIR).get("routes") or []
             route = state.get("route") or {}
             record["route"] = route.get("kind", "")

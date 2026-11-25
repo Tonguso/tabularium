@@ -120,6 +120,19 @@ def effective_routes(root):
     return [{'kind': current['kind'], 'model': current['model']}] + [r for r in routes if r['kind'] != current['kind']]
 
 
+def cooling(record, route):
+    """True while a route's cooldown record still holds for the model it names."""
+    return record.get('model') == route['model'] and record.get('retry_at', 0) > time.time()
+
+
+def first_open(root):
+    """The route the next turn tries first: the first of the sequence that is not cooling down. None when all are."""
+    for route in effective_routes(root):
+        if not cooling(read(Path(root)/'task_state'/('route_'+route['kind']+'.json')), route):
+            return route
+    return None
+
+
 def override_label(current):
     until = time.strftime('until %Y-%m-%d %H:%M', time.localtime(current['expires'])) if current.get('expires') else 'until cleared'
     return f"Temporary override: {label(current)} ({until})"
@@ -179,7 +192,7 @@ def run(agent, messages, chat):
     for route in routes:
         cooldown_path = agent.AGENT_DIR/'task_state'/('route_'+route['kind']+'.json')
         cooldown = read(cooldown_path)
-        if cooldown.get('model') == route['model'] and cooldown.get('retry_at', 0) > time.time():
+        if cooling(cooldown, route):
             reasons.append(KINDS[route['kind']] + ': ' + cooldown.get('reason', 'cooldown'))
             continue
         token = ACTIVE.set(route)

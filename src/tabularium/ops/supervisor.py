@@ -361,7 +361,7 @@ def release_step(children, job, submit):
             raise RuntimeError('Source changed; commit it and request a new release')
         if request['status'] in ('queued', 'testing'):
             if job is None:
-                job = submit(release.test_version, ROOT, request['target'])
+                job = submit(release.certify, ROOT, request['target'], [n for n in request['components'] if n in AGENTS])
                 request['status'] = 'testing'
             if job.done():
                 request['tested'] = job.result()

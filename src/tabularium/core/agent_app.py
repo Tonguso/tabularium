@@ -216,6 +216,11 @@ class AgentApp(ToolSchemas, Speech, ParkedActions, OwnerCommands, MemoryChecks, 
         self.MEMORY_FILE = agent_dir / "memory.md"
         self.BACKGROUND_TASK_ID = os.environ.get(f"{cfg.name.upper()}_BACKGROUND_TASK", "")
         self.RUNTIME_DIR = (agent_dir / "task_state" / "background" / str(int(self.BACKGROUND_TASK_ID))) if self.BACKGROUND_TASK_ID else agent_dir
+        # A release probe (tabularium probe): the foreground agent of this folder with its runtime records in a
+        # folder of its own, beside the live process and never polling.
+        probe = os.environ.get("TABULARIUM_PROBE_DIR", "")
+        if probe and not self.BACKGROUND_TASK_ID:
+            self.RUNTIME_DIR = Path(probe)
         self._chatgpt_plan = ChatGPTPlan(cfg.display)
         self._images = ImageMemory(self.AGENT_DIR)
         self._recall = ConversationRecall(self.AGENT_DIR)
@@ -228,7 +233,7 @@ class AgentApp(ToolSchemas, Speech, ParkedActions, OwnerCommands, MemoryChecks, 
         # Refuse to start twice. Two processes polling the same bot token both call getUpdates, and Telegram answers
         # one of them with 409 Conflict -- which can take the poller down and looks exactly like the agent "closing on
         # its own". A bound socket is the lock: it cannot go stale like a PID file, and it is released when the process dies.
-        if not self.BACKGROUND_TASK_ID:
+        if not self.BACKGROUND_TASK_ID and not probe:
             self._claim_single_instance(cfg.instance_port, cfg.display)
 
         self.SKILL_FILE = self.AGENT_DIR / "SKILL.md"

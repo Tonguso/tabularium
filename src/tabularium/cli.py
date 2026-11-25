@@ -62,6 +62,29 @@ def worker(argv):
     return None
 
 
+def probe(argv):
+    """One real turn of an agent on the source this process runs: its real prompt, tools, memory and routes, the
+    self-test turn after a conversation, with its runtime records in the folder given. The supervisor runs it on the
+    tested release before any process is replaced (ops/release.prove). The turn must be answered on the route the
+    next live turn would try first; an answer from a fallback means that route failed. Prints one PROBE line."""
+    import json
+    from tabularium.core.roster import ROLES
+    if len(argv) != 2 or argv[0] not in ROLES:
+        return "usage: tabularium probe <slot> <runtime folder>"
+    os.environ["TABULARIUM_PROBE_DIR"] = str(Path(argv[1]).resolve())
+    from tabularium import paths
+    from tabularium.agents import build
+    from tabularium.models import provider_routing
+    agent = build(paths.agent_dir(argv[0]), argv[0])
+    agent.send_message = lambda *args, **kwargs: None
+    expected = provider_routing.first_open(agent.AGENT_DIR)
+    record = agent.run_selftest()
+    if record["ok"] and expected and record.get("route") != expected["kind"]:
+        record.update(ok=False, error=f"answered on {record.get('route') or 'no route'}; {expected['kind']} did not answer")
+    print("PROBE " + json.dumps(record, ensure_ascii=False))
+    return None if record["ok"] else "probe failed: " + record["error"]
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["--home"] and len(argv) > 1:
@@ -94,6 +117,10 @@ def main(argv=None):
         supervisor.main()
     elif command == "worker":
         message = worker(rest)
+        if message:
+            sys.exit(message)
+    elif command == "probe":
+        message = probe(rest)
         if message:
             sys.exit(message)
     elif command in LEGACY:

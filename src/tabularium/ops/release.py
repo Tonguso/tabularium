@@ -222,5 +222,63 @@ def test_version(root, target):
     return target
 
 
+PROBE_SECONDS = 420               # one real turn: the CLI start, the model and one tool call
+
+
+def prove(root, target, agents):
+    """Each agent answers one real turn on release `target` before any process is replaced: `tabularium probe` in its
+    own process, on the release's exported source, with the agent's real prompt, tools and routes. The suites replace
+    the model with a stand-in, so they cannot see a request the provider refuses (2026-11-24: a fifth cache marker
+    passed every test and failed every turn for an hour). Raises naming each agent that did not answer."""
+    import sys
+    root = Path(root)
+    python = str(Path(sys.executable).with_name('python.exe')) if sys.platform == 'win32' else sys.executable
+    env = child_env()
+    src = snapshot(target, root)
+    if src is not None:
+        others = [p for p in env.get('PYTHONPATH', '').split(os.pathsep) if p and p not in (str(src), str(PACKAGE.parent))]
+        env['PYTHONPATH'] = os.pathsep.join([str(src), *others])
+    running = []
+    for name in agents:
+        folder = root/name/'task_state'/'probe'          # in the agent's own folder: its prompt is written there
+        shutil.rmtree(folder, ignore_errors=True)
+        (folder/'task_state').mkdir(parents=True)
+        running.append((name, subprocess.Popen(
+            [python, '-B', '-X', 'utf8', '-m', 'tabularium', '--home', str(root), 'probe', name, str(folder)],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, encoding='utf-8', errors='replace',
+            env=env, cwd=str(root), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))))
+    failed = []
+    for name, process in running:
+        try:
+            output = process.communicate(timeout=PROBE_SECONDS)[0] or ''
+        except subprocess.TimeoutExpired:
+            if sys.platform == 'win32':                 # the turn's own children (a provider CLI) go with it
+                subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True, timeout=30,
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            process.kill()
+            output = (process.communicate()[0] or '') + f'\nPROBE {{"ok": false, "error": "no answer in {PROBE_SECONDS} seconds"}}'
+        lines = [line for line in output.splitlines() if line.startswith('PROBE ')]
+        try:
+            record = json.loads(lines[-1][6:]) if lines else {}
+        except ValueError:
+            record = {}
+        ok = bool(record.get('ok')) and process.returncode == 0
+        with (root/'logs/release-tests.log').open('a', encoding='utf-8') as log:
+            log.write(f"probe {name}: {'passed' if ok else 'FAILED'} {json.dumps(record, ensure_ascii=False)}\n"
+                      + ('' if ok else '\n'.join(output.splitlines()[-30:]) + '\n'))
+        if not ok:
+            failed.append(f"{name}: {record.get('error') or 'the probe ended without a result'}")
+    if failed:
+        raise RuntimeError('A real turn failed on this release; see logs/release-tests.log. ' + '; '.join(failed)[:600])
+
+
+def certify(root, target, agents):
+    """What a release shows before any process is replaced: the suites pass on its source, and each agent answers
+    one real turn on it."""
+    tested = test_version(root, target)
+    prove(root, tested, agents)
+    return tested
+
+
 # Capture actual disk identity at first import, never a version claimed by the launcher.
 LOADED = identity()
