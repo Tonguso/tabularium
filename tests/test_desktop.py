@@ -157,7 +157,7 @@ class DesktopTool(unittest.TestCase):
         for name in ("coordinator", "private", "librarian", "engineer"):
             with tempfile.TemporaryDirectory() as tmp:
                 agent = make_agent(name, Path(tmp))
-                self.assertIn("desktop", [t["name"] for t in agent.get_tools("anthropic")], name)
+                self.assertIn("desktop", [t["name"] for t in agent.available_tools("anthropic")], name)
 
 
 if __name__ == "__main__":

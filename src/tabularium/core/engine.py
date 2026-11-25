@@ -23,6 +23,7 @@ import telebot
 from tabularium.core import turn_loop
 from tabularium.core.wire_budget import MAX_IMAGES, bound_result
 from tabularium.core.outcome import Refused, Failed, AlreadyShown
+from tabularium.core.deferred_tools import USE_TOOL
 from tabularium.core.context_window import ARCHIVE_MARKER, archive_preview
 from tabularium.records.background_runtime import TaskStopped
 from tabularium.memory.memory_store import atomic_text, reconcile
@@ -575,6 +576,10 @@ class AgentRuntime(CommandGuard, WebTools, MediaTools, ResearchReports, SelfChec
         ~160k tokens a turn for it. Identical inputs and identical result twice running means the model is
         looping, not working; the refusal tells it to change something or report the blocker."""
         import hashlib
+        if name == USE_TOOL:                 # one of the tools listed in one line: it runs as itself, or its instructions are shown
+            name, inputs, shown = self.use_tool(inputs, chat_id)
+            if shown is not None:
+                return shown
         key = name + "\x00" + json.dumps(inputs, sort_keys=True, ensure_ascii=False, default=str)
         history = self._repeat_calls.setdefault(chat_id, [])
         recent = history[-self._REPEAT_LIMIT:]
@@ -639,7 +644,7 @@ class AgentRuntime(CommandGuard, WebTools, MediaTools, ResearchReports, SelfChec
         return result
 
     def _episode_state(self, chat_id):
-        return self._episode_reads.setdefault(chat_id, {"seq": 0, "spans": {}, "skills": {}})
+        return self._episode_reads.setdefault(chat_id, {"seq": 0, "spans": {}, "skills": {}, "instructed": set()})
 
 
     def unproductive(self, result):

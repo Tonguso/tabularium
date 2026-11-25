@@ -484,7 +484,7 @@ def execute(agent, chat, task_id, item, request_id="", rerun=False):
                   "started": time.time(), "status": "unverified"}
         atomic_json(path, record)                       # crash or refusal must invalidate an old pass
         tool = "execute_command" if spec["kind"] == "command" else "read_file"
-        available = {t["name"] for t in agent.get_tools("anthropic")}
+        available = {t["name"] for t in agent.available_tools("anthropic")}
         if tool not in available:
             return Refused(f"Verification requires {tool}, which this agent cannot use.")
         if agent.BACKGROUND_TASK_ID and agent.config.background_refusals:

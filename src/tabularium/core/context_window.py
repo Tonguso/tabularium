@@ -4,6 +4,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 from tabularium.memory.memory_store import atomic_text
+from tabularium.core.deferred_tools import called
 
 # A conservative wire-size trigger, NOT a claim about any model's token window.
 # Server context errors trigger further reduction; protected content is never cut.
@@ -102,7 +103,7 @@ def prepare_context(messages: list, directory: Path, *, retry: bool = False,
     Only bulky older tool payloads become retrievable previews, only under pressure.
     Never mutate canonical history. Archive failure propagates before any request is sent.
     """
-    names = {b.get("id"): b.get("name") for m in messages
+    names = {b.get("id"): called(b)[0] for m in messages
              for b in (m.get("content") if isinstance(m.get("content"), list) else [])
              if isinstance(b, dict) and b.get("type") == "tool_use"}
     protected_tail = 2 if retry else 6
@@ -197,7 +198,7 @@ def completed_exchanges(messages, directory):
         exchange = messages[start:end]
         protected = {b.get('id') for m in exchange for b in
                      (m.get('content') if isinstance(m.get('content'), list) else [])
-                     if b.get('type') == 'tool_use' and b.get('name') in PROTECTED_TOOLS}
+                     if b.get('type') == 'tool_use' and called(b)[0] in PROTECTED_TOOLS}
         uses = {b.get('id') for m in exchange for b in
                 (m.get('content') if isinstance(m.get('content'), list) else []) if b.get('type') == 'tool_use'}
         results = {b.get('tool_use_id') for m in exchange for b in

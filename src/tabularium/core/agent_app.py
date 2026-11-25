@@ -46,6 +46,7 @@ from tabularium.memory.conversation_recall import ConversationRecall
 from tabularium.memory.image_memory import ImageMemory
 from tabularium.core.roster import Role
 from tabularium.core.outcome import Refused, Failed
+from tabularium.core.deferred_tools import called
 from tabularium.tools.sec_edgar import sec_filing
 from tabularium.memory import archive_search
 @dataclass
@@ -612,7 +613,7 @@ class AgentApp(ToolSchemas, Speech, ParkedActions, OwnerCommands, MemoryChecks, 
             if message.get('role') != 'assistant' or not isinstance(message.get('content'), list):
                 continue
             for block in message['content']:
-                if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == name and block.get('input') == inputs and block['id'] not in used:
+                if isinstance(block, dict) and block.get('type') == 'tool_use' and called(block) == (name, inputs) and block['id'] not in used:
                     self._inbox.local.tool_id = block['id']
                     used.add(block['id'])
                     self._inbox.local.tool_ids = used

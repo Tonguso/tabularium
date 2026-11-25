@@ -315,7 +315,7 @@ def run_turn(messages,chat):
                 "kind": "contains", "paths": [str(artifact)], "text": "Report with B delivered"}}])
         from tabularium.records import verification
         checker=NS(_background=store, BACKGROUND_TASK_ID=str(ident), config=NS(background_refusals=False),
-                   get_tools=lambda provider: [{"name": "read_file"}],
+                   available_tools=lambda provider: [{"name": "read_file"}],
                    _execute_tool_unguarded=lambda name, args, chat: Path(args["path"]).read_text())
         verification.execute(checker, chat, ident, 1)
         verification.execute(checker, chat, ident, 2)

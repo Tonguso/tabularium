@@ -177,7 +177,7 @@ class LessonToolForEveryAgentThatLearns(unittest.TestCase):
     def test_coordinator_cal_and_vit_have_it_once_and_private_does_not(self):
         with tempfile.TemporaryDirectory() as tmp:
             for name, has in (("coordinator", True), ("librarian", True), ("engineer", True), ("private", False)):
-                names = [t["name"] for t in agent_for(name, tmp).get_tools("anthropic")]
+                names = [t["name"] for t in agent_for(name, tmp).available_tools("anthropic")]
                 self.assertEqual(names.count("lesson"), 1 if has else 0, name)
 
 

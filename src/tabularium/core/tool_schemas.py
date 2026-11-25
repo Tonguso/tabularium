@@ -4,6 +4,8 @@ from tabularium.memory.memory_context import memory_tool_schema
 from tabularium.records import verification
 from tabularium.tools.sec_edgar import SEC_FILING_TOOL
 from tabularium.memory import archive_search
+from tabularium.core import deferred_tools
+from tabularium.core.outcome import Refused
 
 
 # One checkpoint tool for every agent (2026-10-11 evening, Alex: [quote removed]). Until then Cato, Cal/Vit and Tacitus
@@ -385,6 +387,33 @@ class ToolSchemas:
         return bool(self.BACKGROUND_TASK_ID and self._background.preset_case(int(self.BACKGROUND_TASK_ID)))
 
     def get_tools(self, provider: str) -> list:
+        """The tool list a request carries. The tools of deferred_tools.DEFERRED are one line each inside use_tool;
+        an agent with a chosen short list (Config.tool_allow) carries all of its tools in full."""
+        tools = self.available_tools(provider)
+        if not self.config.tool_allow:
+            tools = deferred_tools.fold(tools, None if provider == "anthropic" else openai_tool)
+        if provider == "anthropic" and tools:
+            tools[-1] = {**tools[-1], "cache_control": dict(self.CACHE_CONTROL)}     # the list is cached up to its last tool
+        return tools
+
+    def use_tool(self, inputs, chat_id):
+        """A use_tool call as (tool, inputs, text): text is None when the named tool is to run with those inputs,
+        and otherwise what the call returns in its place. The first call for a tool in a turn returns the tool's
+        instructions and runs nothing, so no tool is used before its description and schema have been read."""
+        name = inputs.get("name") if isinstance(inputs, dict) else None
+        schema = next((t for t in self.available_tools("anthropic") if t["name"] == name), None) if name in deferred_tools.DEFERRED else None
+        if schema is None:
+            return name, {}, Refused(f"use_tool has no tool named {name!r} here. Read the list in its description.")
+        values = inputs.get("input")
+        seen = self._episode_state(chat_id)["instructed"]
+        if isinstance(values, dict) and name in seen:
+            return name, values, None
+        seen.add(name)
+        self._inbox.record_event("tool_instructions", model=name, role="runtime")
+        return name, {}, deferred_tools.instructions(schema, isinstance(values, dict))
+
+    def available_tools(self, provider: str) -> list:
+        """Every tool this turn may use, each in full: the agent's list, narrowed to the scope when one is set."""
         tools = self._all_tools(provider)
         if self._tool_scope is not None:
             tools = [t for t in tools if (t.get("function") or t).get("name") in self._tool_scope]
@@ -403,9 +432,7 @@ class ToolSchemas:
     def _all_tools(self, provider: str) -> list:
         if not self.config.email_browser_tools:
             if provider == "anthropic":
-                tools = [self.TAVILY_SEARCH_TOOL_ANTHROPIC] + self.BASE_TOOLS_ANTHROPIC
-                tools[-1] = {**tools[-1], "cache_control": dict(self.CACHE_CONTROL)}
-                return tools
+                return [self.TAVILY_SEARCH_TOOL_ANTHROPIC] + self.BASE_TOOLS_ANTHROPIC
             return [self.TAVILY_SEARCH_TOOL_OPENAI] + self.BASE_TOOLS_OPENAI
         email = self.EMAIL_TOOLS_ANTHROPIC if self.EMAIL_AVAILABLE else []
         email_oa = self.EMAIL_TOOLS_OPENAI if self.EMAIL_AVAILABLE else []
@@ -413,8 +440,5 @@ class ToolSchemas:
         browser_oa = self.BROWSER_TOOLS_OPENAI if self.PLAYWRIGHT_AVAILABLE else []
         if provider == "anthropic":
             search = self.TAVILY_SEARCH_TOOL_ANTHROPIC   # the agents' own web_search tool; the engine order decides where it goes
-            tools = [search] + self.BASE_TOOLS_ANTHROPIC + email + browser
-            # Cache the tools list — last tool gets the cache_control marker
-            tools[-1] = {**tools[-1], "cache_control": dict(self.CACHE_CONTROL)}
-            return tools
+            return [search] + self.BASE_TOOLS_ANTHROPIC + email + browser
         return [self.TAVILY_SEARCH_TOOL_OPENAI] + self.BASE_TOOLS_OPENAI + email_oa + browser_oa

@@ -612,7 +612,7 @@ def execute(agent, chat, inputs):
                 raise ValueError("Prepare attaches an exact action to a worker's pending question. An action of your own "
                                  "is run, not prepared: the runtime parks it by itself if it needs Alex's word.")
             schemas = {(t.get('function') or t)['name']: (t.get('function') or t)
-                       for t in agent.get_tools('anthropic')}
+                       for t in agent.available_tools('anthropic')}
             if tool not in ('send_email', 'execute_command') or tool not in schemas:
                 raise ValueError("This agent cannot prepare that tool.")
             schema = schemas[tool]['input_schema']

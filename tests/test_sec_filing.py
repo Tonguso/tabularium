@@ -79,7 +79,7 @@ class SecFiling(unittest.TestCase):
                 root = Path(tmp) / agent; root.mkdir()
                 with contextlib.redirect_stdout(io.StringIO()):
                     a = make_agent(agent, root)
-                have[agent] = "sec_filing" in {t["name"] for t in a.get_tools("anthropic")}
+                have[agent] = "sec_filing" in {t["name"] for t in a.available_tools("anthropic")}
         self.assertEqual(have, {"coordinator": True, "librarian": True, "private": False, "engineer": False})
 
 
