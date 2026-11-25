@@ -2,11 +2,15 @@
 
 Per agent, per local week (Monday to Sunday): turns answered and turns that failed; replies the runtime bounced
 (unbacked promise, cut-off, step limit, runaway stop; recorded as usage_events of kind "bounce" at the moment they
-happen, so no history is parsed and Tacitus's conversations are never read); background tasks finished and stopped,
-with the median time to finish; Cato's acceptance of Cal's and Vit's work (items met, reworks, wrong guesses); the
+happen, so no history is parsed and Tacitus's conversations are never read); what a foreground turn costs and how often
+the agent put a question or a parked action to the owner; background tasks finished and stopped,
+with the median time to finish; Cato's acceptance of Cal's and Vit's work (items met, reworks, wrong guesses, real
+cost against the agreed target); the
 memory exam; and corrections: lessons (candidates are the workers' own failure notes, taken ones went through Alex)
 and incident records that name the agent. The last line only
 counts what was written down: a week with no lessons and no incidents is clean only if we kept the records.
+Four of these are what a change to the framework is judged by, week on week (2026-11-25): the share of turns the owner
+corrected, effective tokens per turn, delegation cost against target, and how often he was asked.
 Usage: python -m tabularium.ops.scorecard [weeks]  (the dashboard shows the same table on the overview)."""
 from datetime import datetime, timedelta
 import json
@@ -20,6 +24,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from tabularium.core.roster import AGENTS, ROLES
+from tabularium.models.usage import decode
+from tabularium.records.task_cost import effective_tokens
 
 LOCAL = ZoneInfo("UTC")
 STOPPED = ("needs_attention", "interrupted", "capped", "infeasible", "cancelled")
@@ -64,6 +70,12 @@ def agent_week(root, name, start, end):
     accepted = _query(state / "background" / "jobs.sqlite3",
                       "SELECT agent, items_total, items_met, reworks, guesses_verdict FROM scorecard WHERE accepted>=? AND accepted<?", (start, end))
     logs = _query(state / "background" / "jobs.sqlite3", "SELECT rework_log FROM scorecard WHERE accepted>=? AND accepted<?", (start, end))
+    priced = _query(state / "background" / "jobs.sqlite3", "SELECT budget, spent FROM scorecard WHERE accepted>=? AND accepted<? "
+                    "AND spent IS NOT NULL AND budget>0", (start, end))
+    asked = _query(state / "background" / "jobs.sqlite3", "SELECT count(*) n FROM decisions WHERE created>=? AND created<?", (start, end))
+    usage = _query(state / "inbox.sqlite3", "SELECT metrics, role FROM usage_events WHERE kind='response' AND created>=? AND created<?", (start, end))
+    done = sum(j["status"] == "done" for j in jobs)
+    corrected = corrections[0]["n"] if corrections else 0
     outcomes = [o for a in logs for e in json.loads(a.get("rework_log") or "[]") for o in (e.get("outcome") or {}).values()]
     lessons = _query(state / "projects.sqlite3", "SELECT json_extract(data,'$.status') s, count(*) n FROM records WHERE kind='lesson' "
                      "AND updated>=? AND updated<? GROUP BY s", (start, end))
@@ -77,11 +89,17 @@ def agent_week(root, name, start, end):
         except ValueError:
             pass
     return {
-        "turns": sum(j["status"] == "done" for j in jobs),
+        "turns": done,
         "turns_failed": sum(j["status"] == "failed" for j in jobs),
         "bounces": {b["model"]: b["n"] for b in bounces},
         "model_responses": responses[0]["n"] if responses else 0,
-        "corrections": corrections[0]["n"] if corrections else 0,      # times Alex told the agent it got something wrong
+        "corrections": corrected,                                      # times Alex told the agent it got something wrong
+        "correction_rate": round(corrected / done, 3) if done else None,
+        # every model response recorded in the foreground that week, weighted as task_cost weighs a task's
+        "tokens_per_turn": round(sum(effective_tokens(decode(u["metrics"], u["role"] or "")) for u in usage) / done) if done else None,
+        "asked": asked[0]["n"] if asked else 0,                        # questions and parked actions put to Alex
+        "delegation_cost": {"priced": len(priced), "spent": sum(p["spent"] for p in priced),
+                            "target": sum(p["budget"] for p in priced)} if priced else None,
         "tasks_finished": len(finished),
         "tasks_stopped": sum(t["status"] in STOPPED for t in tasks),
         "task_minutes_median": round(statistics.median((t["updated"] - t["created"]) / 60 for t in finished), 1) if finished else None,
@@ -139,11 +157,14 @@ def table(report):
         lines.append(name)
         rows = [("turns (failed)", lambda a: f"{a['turns']} ({a['turns_failed']})"),
                 ("bounced replies", lambda a: str(sum(a["bounces"].values()))),
-                ("Alex's corrections", lambda a: str(a.get("corrections", 0))),
+                ("Alex's corrections (rate)", lambda a: str(a.get("corrections", 0)) + ("" if a.get("correction_rate") is None else f" ({a['correction_rate']:.0%})")),
+                ("tokens per turn", lambda a: "-" if a.get("tokens_per_turn") is None else f"{a['tokens_per_turn']:,}"),
+                ("asked Alex", lambda a: str(a.get("asked", 0))),
                 ("tasks finished / stopped", lambda a: f"{a['tasks_finished']} / {a['tasks_stopped']}"),
                 ("median task minutes", lambda a: "-" if a["task_minutes_median"] is None else str(a["task_minutes_median"])),
                 ("delegations items met", lambda a: "-" if not a["delegations"] else f"{a['delegations']['items_met']}/{a['delegations']['items_total']} rw{a['delegations']['reworks']}"),
                 ("rework items changed/unch.", lambda a: "-" if not a["delegations"] else f"{a['delegations'].get('rework_changed', 0)}/{a['delegations'].get('rework_unchanged', 0)}"),
+                ("delegation cost x target", lambda a: "-" if not a.get("delegation_cost") else f"{a['delegation_cost']['spent'] / a['delegation_cost']['target']:.1f}x ({a['delegation_cost']['priced']})"),
                 ("memory exam c/p/w", lambda a: "-" if not a["memory_exam"] else "/".join(str(a["memory_exam"][k]) for k in ("correct", "partial", "wrong"))),
                 ("lessons cand/taken + inc", lambda a: f"{a['lessons_candidate']}/{a['lessons_taken']} + {a['incidents']}")]
         for label, f in rows:

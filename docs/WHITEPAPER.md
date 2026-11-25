@@ -518,8 +518,9 @@ Tabularium is run like software, which is uncommon for agent systems.
 
 | Instrument | What it tells you | How often |
 |---|---|---|
-| Self-test | The agent can take a message, read a file and answer, and which model route answered | Daily, five minutes after every start, and whenever the model client changes |
-| Scorecard | The week per agent: turns, bounced replies, corrections, tasks finished, delegated items met, memory exam | Weekly |
+| Self-test | The agent can take a message that follows a conversation with a tool call in it, read a file and answer, and which model route answered | Daily, five minutes after every start, and whenever the model client changes |
+| Release probe | The same turn, for each agent, in its own process on the commit about to be released: the agent's real prompt, tools, memory and routes, answered on the route its next live turn would use | Every release, after the suites and before any process is replaced |
+| Scorecard | The week per agent: turns, bounced replies, corrections and their share of turns, tokens per turn, how often the owner was asked, tasks finished, delegated items met, delegation cost against target, memory exam | Weekly |
 | Correction replay | The owner's recorded corrections older than three days, each rebuilt from the inbox and outbox and answered again in a rehearsal; a judge says whether the fault he named is repeated | Daily, when the chat is quiet |
 | Trace | Everything one task did, in order: tools, model calls, tokens, failures, minutes; usage is recorded per model call as it happens, so an interrupted session keeps its partial count | On demand |
 | Regression benchmark | Fixed, reviewed synthetic cases with independent answers (six at the time of writing, with twenty-one objective checks and one declared subjective rubric); code checks the delivered files; pass rate and flaky cases per task type | Weekly, and after any change A change of the primary model or route reruns the benchmark once, in its own process, and the dashboard shows the new score beside the previous route's. |
@@ -529,7 +530,9 @@ Tabularium is run like software, which is uncommon for agent systems.
 | Incident reviews | What went wrong, what each actor could see, which design choice allowed it | After each failure the owner noticed |
 | Release record | Which commit each task ran on | Every task |
 
-Restarts drain current work, run the test suite, and refuse uncommitted code. What then runs is not the working
+Restarts drain current work, run the test suite, and refuse uncommitted code. The suites replace the model with a
+stand-in, so after they pass each agent answers one real turn on the tested commit, in its own process beside the
+live one; a release whose turn fails ends there, with every running process untouched. What then runs is not the working
 tree but an export of the tested commit, kept under the home folder with its identity written beside the package;
 every component and every worker it starts imports from there, so an edit on disk reaches nothing until it is
 committed, tested and released, and a crash restart runs the last release. Until 12 November every process
@@ -691,6 +694,8 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-24 | The review of a delegated request was written in two tables by three functions, each writing its own part: a new delivery or a reopen cleared the review in one and left the other showing the request as accepted. The delegate also kept its own count of reworks that nothing read, and the cost target recorded at submission was not the one an extension had raised | One function writes the review, in one transaction, so its outcome ends with the delivery it judged; the unread count is gone; the target is read from the delegate's contract, where it is set |
 | 2026-11-24 | The agent class was the second large file, 1,800 lines: tool schemas, voice replies, parked actions, the owner's commands and the memory checks sat beside the dispatcher and the message handlers | Each of the five is a module of its own that the class inherits, moved unchanged by the same script as the engine; the file is under nine hundred lines, and the imports both splits left unused are removed |
 | 2026-11-24 | A change to send the conversation as cacheable blocks, with one cache marker, was released after probes showed it working. On real traffic every turn on the subscription route failed for about an hour: a real session already carries the provider's limit of four markers, and the probes, with one tool and a short prompt, carried fewer. Neither the tests, the release health check nor the self-test sends a real turn with the agent's full prompt and tools | The change was reverted. The conversation is still written to the cache whole on every turn; a fix has to work without a marker of its own, and has to be proven on a session built exactly as a real turn builds it |
+| 2026-11-25 | The largest class in the record of failures is a change by a maintainer that broke a working path, and the release had no way to see one the provider refuses: the suites replace the model, the release checked that processes were up, and the self-test sent one message with no conversation before it | The self-test turn follows a conversation with a tool call in it, and a release runs that turn for each agent on the tested commit before it drains anything; an answer from a fallback route counts as a failure. Run against a copy of the source carrying the change of 24 November, it failed in four seconds with the provider's error |
+| 2026-11-25 | Sixty rows of this table and no measure that said which change helped. The share of turns the owner corrected, the cost of a turn and how often he was asked were not shown, and the cost of a delegated request had never been recorded: the column was empty in all 109 requests while real cost ran about ten times the agreed targets | The weekly scorecard shows all four, from records only, and the review of a delivery writes what the request has cost the delegate so far. A change is kept or removed on those numbers |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
