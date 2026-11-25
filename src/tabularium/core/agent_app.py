@@ -103,25 +103,14 @@ class Config:
 # ── Shared text ──────────────────────────────────────────────────────────────────
 
 
-# Shared "Operational reliability" block (Cato, Cal, Vit). Tacitus supplies his own tail. The four {slots} are the
-# lines that differed between the three files; everything else was identical.
+# Shared "Operational reliability" block (Cato, Cal, Vit). Tacitus supplies his own tail. The {slots} are the
+# lines that differed between the three files; everything else was identical. Rules about one tool that is listed
+# in one line (core/deferred_tools) are not here: they are in that tool's description, which the model is given
+# before its first use in a turn (2026-11-25: capability_check, specialist_review, review_output, the report scan).
 OPS_BLOCK = """Operational reliability:
-- Before substantial work, inspect capability_check for relevant prerequisites. For mail probe email;
-  for authenticated reading probe the actual site headlessly and inspect member content. Configuration,
-  saved cookies and past API responses never prove current access. Do not open login/setup windows as
-  a probe. Preserve checkpoints when blocked and report the precise capability and evidence.
 {recurring}
 - The shared local agent dashboard is http://127.0.0.1:8220 on this computer, not a public or phone URL.
   It shows recorded evidence, not guaranteed completion or estimated subscription quota.
-- Use specialist_review selectively for material research, calculations or consequential conclusions.
-  Choose the relevant role; do not automatically call all three or duplicate consult_advisor.
-  Supply the original question, dated source excerpts with IDs, assumptions and counterevidence.
-  You may omit your proposed answer on a first pass to reduce anchoring. Reviewers have no {display}
-  persona/history/tools and cannot verify externally. Resolve conflicts against sources and actual
-  calculations; agreement alone proves nothing. You retain responsibility for the final answer.
-{advisor}
-  Never include passwords, tokens, API keys or configuration secrets. Max three calls per turn.
-  Long review work belongs in background; use manual mode when reviewer calls are needed.
 {records}
 - Save task_checkpoint for continuation or unresolved blockers. Saved files and verification receipts already persist; finishing does not require another progress checkpoint.
   A worker that crashes is rerun automatically (twice at most) only when its own action records show
@@ -168,14 +157,6 @@ OPS_BLOCK = """Operational reliability:
   certainty. Do not let a prior assistant answer or confident assertion count as independent evidence.
   For material unresolved disagreements, use consult_advisor with both cases and actual evidence;
   routine chat does not need an advisor call. The advisor is another judgment, not a source.
-- Output QA: call review_output for completed xlsx/pptx work. Supply task-derived totals,
-  expected cells and unit labels for Excel; don't invent targets just to obtain a pass.
-  For decks inspect EVERY rendered slide with view_image; fix clipping, readability, chart labels,
-  units and source dates before delivery. Rerun review after changes: receipts identify exact bytes.
-  For substantial research, pass material factual claims and their retained source excerpts to
-  review_output, then assess whether the surrounding text supports the actual conclusion. Distinguish
-  publication date, event date, observation period and inference; seek counterevidence for a contested
-  causal claim. Missing coverage stays explicit. Don't call an excerpt match proof of truth.
 - Work that can finish in this turn is done in this turn, with your own tools: edit the file, run the
   script, render it, look at it, send it. A picture fix, a figure check or a one-file change never goes
   to a worker; a worker starts blind, re-derives what you already see, and asks Alex again.
@@ -190,8 +171,6 @@ OPS_BLOCK = """Operational reliability:
   file saved versus structurally checked versus calculations/layout actually checked.
   Use verify_artifact on completed files and perform task-specific checks before saying ready.
   Never automatically repeat an external action with an unknown outcome.
-- Research: scan summaries across the requested dates, disclose coverage, then discuss PDF choices.
-  Checkpoints retain partial scans and extracted PDFs. A stalled scan is not an empty date range.
 """
 
 
