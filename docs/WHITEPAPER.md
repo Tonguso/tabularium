@@ -1,12 +1,12 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.7, 14 November 2026
+Version 0.8, 26 November 2026
 
 ## Abstract
 
 Tabularium is a framework for running a small cast of AI agents on behalf of one person. It was built by that person
-with two coding agents over four weeks of daily use, and it is published here as working code with nearly six hundred
-tests. Its organising principle is simple to state and turns out to be hard to keep: no part of the system believes
+with two coding agents over five weeks of daily use, and it is published here as working code with more than eight
+hundred tests. Its organising principle is simple to state and turns out to be hard to keep: no part of the system believes
 what another part says about its own work. Where a conventional agent harness puts a rule in a prompt and trusts the
 model to follow it, Tabularium writes a record and has the runtime check it: a task that was started, a question that
 was asked, an answer that was given, a file that was delivered, a check that ran. The owner is the only judge of
@@ -506,6 +506,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
 | Checkpoints and receipts | A crash losing work | Every tool call is a receipt; progress is checkpointed |
 | Drain restart | Restarting mid-task or onto broken code | Pauses workers at their next safe point and queues their tasks for the new process, runs all tests, refuses uncommitted code |
+| Release probe | A change the provider refuses, which passes every test because the tests replace the model | Each agent answers one real turn on the tested commit, with its real prompt and tools, before any process is replaced; an answer from a fallback route is a failure |
 | Snapshot | An edit on disk reaching running agents before any test | Every component and worker runs an export of the released commit, never the working tree; a crash restart runs the last release |
 | Privacy by role | Maintainers reading private conversations | The private agent's records are closed; only tool records |
 
@@ -623,6 +624,13 @@ Tabularium borrows from, and departs from, several lines of published work.
 - Model access through vendors' own clients is the operator's responsibility under the vendors' terms.
 - Command screening is not a sandbox. A process the model directs no longer inherits the home's keys and tokens, but
   it runs as the owner and can read and write what he can; an operating-system boundary is not built.
+- The release probe is one turn per agent on its primary route. A release does not exercise a fallback route, and
+  a fault that needs a long conversation or a rarely used tool can still pass it.
+- A tool listed in one line costs one extra model call the first time it is used in a turn, and an agent may
+  reach for it less often than when its instructions were always in front of it. The runtime counts those calls;
+  whether behaviour changed is read from the weekly numbers, not proven.
+- The weekly scorecard says what moved, not which change moved it: changes released in the same week share one
+  number, so a change is judged cleanly only when it is the one change of its week.
 
 ## 14. Lessons from building it
 
@@ -729,3 +737,6 @@ office, where the decisions and contracts that no magistrate's word could overri
 | Review state | The verdict an observation carries about a docket: proposed by the runtime, confirmed as a member, or excluded by the owning agent; a judged observation is never proposed again |
 | Ledger | The section at the end of a skill where approved additions live as tagged entries with helped and hurt counts |
 | Supervisor | The process that starts, watches and restarts the others |
+| Release probe | One real turn each agent answers on the commit about to be released, before any process is replaced |
+| Listed tool | A rarely used tool sent as one line inside `use_tool`; its full instructions arrive the first time it is called in a turn |
+| Scorecard | The weekly numbers per agent, taken from records only: corrections, tokens per turn, questions asked, delegation cost |

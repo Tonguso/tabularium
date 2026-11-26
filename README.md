@@ -13,7 +13,7 @@ waiting for. The framework's one rule: no part of the system believes what anoth
 claim of work started, a question asked, a file delivered or a check passed is a record the runtime wrote and can
 read back, or it did not happen.
 
-It is the code behind a working system: four agents, five weeks of daily use, 676 offline tests. The design and the
+It is the code behind a working system: four agents, five weeks of daily use, more than 850 offline tests. The design and the
 failures that produced it are in the white paper: [docs/WHITEPAPER.md](docs/WHITEPAPER.md).
 
 ![One agent process and what surrounds it](docs/figures/fig1-machine.svg)
@@ -79,9 +79,15 @@ agent is in [examples/minimal](examples/minimal/README.md).
 - **Memory that is tested.** One readable memory file per agent, writes that must quote you, a weekly exam, a
   weekly review that reads every sourced fact against what you said later, and tidy-ups applied only after the exam
   passes on both versions.
-- **Operations like software.** A supervisor, self-tests, weekly scorecards, per-task traces, a regression
-  benchmark, and releases only onto tested, committed code; a release pauses running workers at their next safe point
-  and resumes them on the new build. The dashboard switches an agent's model in one click.
+- **Operations like software.** A supervisor, self-tests, per-task traces, a regression benchmark, and a weekly
+  scorecard of the numbers a change is judged by: how often you corrected an agent, tokens per turn, how often you
+  were asked, and what delegation cost. Releases go only onto tested, committed code on which each agent has
+  answered one real turn; a release pauses running workers at their next safe point and resumes them on the new
+  build. The dashboard switches an agent's model in one click.
+
+- **A request carries what it needs.** Tools used often are sent in full; the rest are one line each and arrive
+  with their full instructions the first time an agent reaches for one. A rule about one tool lives with that
+  tool, not in the prompt every call reads.
 
 ## Add the rest of the cast
 
@@ -208,8 +214,8 @@ Version 0.5. It runs daily, and it is not yet a drop-in product:
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md): a failing test first, records over guesses, a concept budget, one release a
-day. Security concerns: [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md): a failing test first, records over guesses, a concept budget, releases only
+through the gate. Security concerns: [SECURITY.md](SECURITY.md).
 
 ## Citation
 

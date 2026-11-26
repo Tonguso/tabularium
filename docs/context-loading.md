@@ -101,3 +101,28 @@ larger tool sets. The core, live state and contract are already included in prep
 Tacitus's numbers came only from the runtime's integer diagnostics, not inspection of private text.
 Full synthetic results, per-attempt routes, deltas and numeric context diagnostics are saved in
 context-loading-comparison.json. No additional restart is required for this report.
+
+## Tool definitions (2026-11-25)
+
+The replacement above left tool definitions loaded in full. Measured over thirty days, they were the largest
+fixed part of a request: 45 definitions and 55,900 characters for the coordinator on each of about 25,000 model
+calls a month, and 22 of those tools made 2.9% of its tool calls while being 46% of that text.
+
+- Those 22 tools are one line each inside one tool, use_tool. The first call for a tool in a turn returns its
+  description and input schema and runs nothing; the next call runs it as itself, so approvals, the path
+  boundary and the receipts see the real tool. The list is constant, so the provider's cache still reads it.
+- Which tools are listed is arithmetic: a definition read on every call against one extra model call per use.
+  The runtime counts those extra calls (usage event tool_instructions), so a tool used often moves back.
+- Four paragraphs of the shared rules block were about listed tools. Their sentences moved into those tools'
+  descriptions; none was dropped unless the description already said it.
+
+| Sent on every call, characters | Before | After |
+|---|---:|---:|
+| Coordinator tool text | 55,947 | 33,334 |
+| Librarian tool text | 48,671 | 25,836 |
+| Engineer tool text | 49,053 | 27,622 |
+| Shared rules block, coordinator | 9,087 | 6,845 |
+
+The private agent already has a short tool list and is unchanged. One real turn on each subscription route
+called a listed tool this way and answered correctly; the fallback route was not tested with a real call. The
+effect on cost is read from tokens per turn on the weekly scorecard.

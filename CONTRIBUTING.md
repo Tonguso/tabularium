@@ -11,7 +11,9 @@ the rules for contributions here.
   check that trusts an actor's account of its own work.
 - **Concept budget.** A change that adds a new named thing (a table, a state, a file kind, a term that can reach the
   owner's chat) removes one, or says why it cannot.
-- **One release a day.** Commit as you go; the restart that takes changes live happens once a day in a quiet hour.
+- **Release through the gate.** Commit as you go. A restart takes changes live only from committed code, after the
+  suite passes and each agent has answered one real turn on that commit. Change one thing at a time where you can:
+  the weekly scorecard cannot tell two changes of the same week apart.
 - **Write it down.** Every change gets an entry in the operations log naming what changed, why, what was measured,
   and what the other author did alongside. A failure the owner noticed gets an incident review.
 - **Never read the private agent.** The private agent's memory and conversations are off limits to maintainers;
