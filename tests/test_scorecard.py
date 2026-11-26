@@ -58,7 +58,8 @@ class Scorecard(unittest.TestCase):
             self.assertEqual((this["bounces"], last["bounces"]), ({"unbacked_promise": 1}, {"runaway": 1}))
             self.assertEqual((this["tasks_finished"], this["tasks_stopped"], this["task_minutes_median"]), (1, 1, 20.0))
             self.assertEqual(this["delegations"], {"accepted": 2, "items_met": 5, "items_total": 6, "reworks": 1, "wrong_guesses": 1,
-                                               "rework_changed": 0, "rework_unchanged": 0})
+                                               "rework_changed": 0, "rework_unchanged": 0,
+                                               "reviews_known": 0, "reviews_same_provider": 0})
             self.assertEqual((this["memory_exam"], this["lessons_candidate"], this["lessons_taken"], this["incidents"]),
                              ({"correct": 2, "partial": 0, "wrong": 1}, 1, 1, 1))
             self.assertEqual(report["weeks"][0]["agents"]["engineer"]["incidents"], 1)      # "Vit" in the Affected row

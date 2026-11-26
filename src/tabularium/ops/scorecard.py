@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 from tabularium.core.roster import AGENTS, ROLES
 from tabularium.models.usage import decode
 from tabularium.records.task_cost import effective_tokens
+from tabularium.learning import review_exam
 
 LOCAL = ZoneInfo("UTC")
 STOPPED = ("needs_attention", "interrupted", "capped", "infeasible", "cancelled")
@@ -73,6 +74,10 @@ def agent_week(root, name, start, end):
     priced = _query(state / "background" / "jobs.sqlite3", "SELECT budget, spent FROM scorecard WHERE accepted>=? AND accepted<? "
                     "AND spent IS NOT NULL AND budget>0", (start, end))
     asked = _query(state / "background" / "jobs.sqlite3", "SELECT count(*) n FROM decisions WHERE created>=? AND created<?", (start, end))
+    reviews = [json.loads(r["acceptance"] or "{}").get("providers") for r in _query(
+        state / "background" / "jobs.sqlite3", "SELECT d.acceptance FROM delegations d JOIN scorecard s ON s.request_id=d.request_id "
+        "WHERE s.accepted>=? AND s.accepted<? GROUP BY d.request_id", (start, end))]
+    reviews = [p for p in reviews if p and p.get("worker")]
     usage = _query(state / "inbox.sqlite3", "SELECT metrics, role FROM usage_events WHERE kind='response' AND created>=? AND created<?", (start, end))
     done = sum(j["status"] == "done" for j in jobs)
     corrected = corrections[0]["n"] if corrections else 0
@@ -112,7 +117,11 @@ def agent_week(root, name, start, end):
             # a finding the delegate changed nothing for was noise or a dispute; either way it cost a round
             "rework_changed": outcomes.count("changed"),
             "rework_unchanged": outcomes.count("unchanged"),
+            # a review by the provider that did the work shares its blind spots; counted where both are on record
+            "reviews_known": len(reviews),
+            "reviews_same_provider": sum(p["reviewer"] in p["worker"] for p in reviews),
         } if accepted else None,
+        "review_exam": review_exam.latest(root / name, start, end),      # planted defects caught, clean work sent back
         "memory_exam": exam or None,
         # candidates are the workers' own failure notes; the rest went through Alex (proposed, approved, verified, applied)
         "lessons_candidate": sum(l["n"] for l in lessons if l["s"] == "candidate"),
@@ -164,6 +173,8 @@ def table(report):
                 ("median task minutes", lambda a: "-" if a["task_minutes_median"] is None else str(a["task_minutes_median"])),
                 ("delegations items met", lambda a: "-" if not a["delegations"] else f"{a['delegations']['items_met']}/{a['delegations']['items_total']} rw{a['delegations']['reworks']}"),
                 ("rework items changed/unch.", lambda a: "-" if not a["delegations"] else f"{a['delegations'].get('rework_changed', 0)}/{a['delegations'].get('rework_unchanged', 0)}"),
+                ("reviewed by worker's provider", lambda a: "-" if not (a["delegations"] or {}).get("reviews_known") else f"{a['delegations']['reviews_same_provider']}/{a['delegations']['reviews_known']}"),
+                ("review exam caught / false", lambda a: "-" if not a.get("review_exam") else f"{a['review_exam']['caught']}/{a['review_exam']['planted']} / {a['review_exam']['false_alarms']}/{a['review_exam']['clean']}"),
                 ("delegation cost x target", lambda a: "-" if not a.get("delegation_cost") else f"{a['delegation_cost']['spent'] / a['delegation_cost']['target']:.1f}x ({a['delegation_cost']['priced']})"),
                 ("memory exam c/p/w", lambda a: "-" if not a["memory_exam"] else "/".join(str(a["memory_exam"][k]) for k in ("correct", "partial", "wrong"))),
                 ("lessons cand/taken + inc", lambda a: f"{a['lessons_candidate']}/{a['lessons_taken']} + {a['incidents']}")]

@@ -16,7 +16,7 @@ from tabularium.ops.scorecard import weekly
 from tabularium.models.usage import aggregate, decode
 from tabularium.core import trace
 from tabularium.learning import regression
-from tabularium.learning import research_signal, correction_eval
+from tabularium.learning import research_signal, correction_eval, review_exam
 from tabularium.core.agent_runtime import atomic_json
 from tabularium.models import provider_routing as routing
 from tabularium.tools import search_routing
@@ -192,6 +192,8 @@ def state():
         except (OSError, ValueError, KeyError): agent['correction_eval']=None
         try: agent['corrections_week']=correction_eval.live_rate(ROOT/name, OWNER_CHAT_ID)   # what he actually corrected
         except (OSError, sqlite3.Error): agent['corrections_week']=None
+        try: agent['review_exam']=review_exam.latest(ROOT/name)               # planted defects the review caught (2026-11-26)
+        except (OSError, ValueError): agent['review_exam']=None
         try:   # the latest regression eval against the one before (2026-10-23)
             agent['regression']=regression.latest(ROOT/name)
             r=agent['regression']

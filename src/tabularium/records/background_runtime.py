@@ -616,16 +616,21 @@ class TaskStore:
         finally:
             db.close()
 
-    def accept_delegation(self, ident, request_id, verdicts, delivery_id=""):
+    def accept_delegation(self, ident, request_id, verdicts, delivery_id="", reviewer=""):
         """Review one fetched delivery. Rejection stays open; proof and judgment stay distinct. The review records
         what the request has cost the delegate so far, from the delegate task's own usage records and in the
         effective tokens its target is stated in. Until 2026-11-25 nothing wrote it: the column was empty in all 109
-        requests while real cost ran ten times the targets, and a task's usage records are archived after two weeks."""
+        requests while real cost ran ten times the targets, and a task's usage records are archived after two weeks.
+        With `reviewer`, the provider the reviewing model runs on, the review also records the providers that did
+        the work, so the scorecard can count reviews made by the worker's own provider (2026-11-26)."""
         from tabularium.records import verification, task_cost
         record, critical_unmet, unmet = verification.acceptance(self, ident, request_id, verdicts, delivery_id)
         resolved = verification.delegate(self, ident, request_id)
         spent = task_cost.spend(resolved[0].directory(resolved[1]))["estimated_effective_tokens"] if resolved else None
         verdicts = record['verdicts']
+        if reviewer:
+            record['providers'] = dict(reviewer=task_cost.family(reviewer),
+                                       worker=task_cost.providers(resolved[0].directory(resolved[1])) if resolved else [])
         items = self.contract_items(request_id)
         db = sqlite3.connect(self.database, timeout=30)
         try:

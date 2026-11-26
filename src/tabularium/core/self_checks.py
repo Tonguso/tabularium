@@ -31,7 +31,7 @@ class SelfChecks:
     WEEKLY_SECONDS = 7 * 24 * 3600
 
     WEEKLY_CHECKS = (("memory_review", "run_memory_review"), ("memory_exam", "run_memory_exam"),
-                     ("lesson_digest", "run_lesson_digest"))                                       # json name, method
+                     ("lesson_digest", "run_lesson_digest"), ("review_exam", "run_review_exam"))   # json name, method
 
     def _selftest_worker(self):
         """Daily self-test, plus the weekly memory review and memory exam (2026-10-11). A weekly check runs when its
@@ -110,6 +110,20 @@ class SelfChecks:
                              cwd=str(root), env=child_env(), stdout=log, stderr=subprocess.STDOUT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         atomic_json(record, {"route": current, "time": time.time()})
         print(f"[benchmark_rerun] primary route is now {current}: benchmark rerun launched")
+        return True
+
+    def run_review_exam(self):
+        """Weekly, for an agent that reviews delegated work: the reviewer's exam (learning/review_exam) in its own
+        process, logging to logs/eval-<agent>.log. It plants known defects in staged deliveries and counts how many
+        the review catches; the weekly scorecard and the dashboard show the last result (2026-11-26)."""
+        from tabularium.core.agent_runtime import atomic_json
+        if not self.config.role.delegates:
+            return False
+        root = self.AGENT_DIR.parent
+        with open(root / "logs" / f"eval-{self.AGENT_DIR.name}.log", "ab") as log:   # the child keeps its own handle
+            subprocess.Popen([sys.executable, "-m", "tabularium", "eval", self.AGENT_DIR.name, "--review"],
+                             cwd=str(root), env=child_env(), stdout=log, stderr=subprocess.STDOUT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        atomic_json(self.AGENT_DIR / "task_state" / "review_exam.json", {"time": time.time()})
         return True
 
     def run_lesson_digest(self):

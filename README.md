@@ -71,7 +71,8 @@ agent is in [examples/minimal](examples/minimal/README.md).
 - **Background work with proof.** Long jobs run in worker processes with checkpoints, numbered requirements and
   declared checks that run on the delivered bytes. "Finished" is derived from the records, never declared.
 - **Delegation by contract.** A coordinator briefs another agent with numbered obligations; delivery is accepted
-  from the checks, not the report; what no check could confirm reaches you named as unproven.
+  from the checks, not the report; what no check could confirm reaches you named as unproven. The reviewer is
+  examined too: each week it reviews staged deliveries with one planted defect each, and the catches are counted.
 - **Owner-judged learning.** Agents turn your corrections into exact skill edits and change nothing until you say so.
   A proposal must delete the rule it blames rather than add beside it, name the designs considered, and account for
   the same rule in the agent's other skills; it never lengthens a method. Your verdict from the dashboard settles at

@@ -277,6 +277,18 @@ tier, naming why the owner's yes is needed before the result is applied (it touc
 calculation, his reference data, or sends on his behalf); acceptance then records a decision for him, because the
 coordinator's accept is never the owner's approval. Everything else is applied on green checks without him.
 
+The review itself is examined. A record in which every item is met says the same of a reviewer that is never wrong
+and of one that never looks: in one month the coordinator marked 168 of 168 delegated items met, most by reading
+alone. So each week the production coordinator, in a disposable process with its real method and a scripted
+delegate, reviews nine small staged deliveries twice, once clean and once with one planted defect whose ground
+truth is certain: a total that is not the sum of its rows, a figure from the wrong year, a declared check that
+passes and proves less than its item. It is told only that the request has returned. Two numbers are read from the
+task store after the process exits: defects caught of defects planted, and clean deliveries sent back of clean
+deliveries, because a reviewer that rejects everything catches every defect. The first run caught nine of nine and
+sent back one clean delivery of nine, for a source note it judged too vague. A review also records the provider
+that reviewed and the providers that did the work, and the scorecard counts reviews made by the worker's own
+provider, which shares the worker's blind spots.
+
 The earlier acceptance kept three copies of the agreement (the requirements, the verdicts on the delegation row and
 the scorecard) and never checked that the delegation had returned, so a report-only verdict could accept work still
 in progress and a rejected requirement could vanish in a rework. Both were found by reading the code, not by an
@@ -530,6 +542,7 @@ Tabularium is run like software, which is uncommon for agent systems.
 | Trace | Everything one task did, in order: tools, model calls, tokens, failures, minutes; usage is recorded per model call as it happens, so an interrupted session keeps its partial count | On demand |
 | Regression benchmark | Fixed, reviewed synthetic cases with independent answers (six at the time of writing, with twenty-one objective checks and one declared subjective rubric); code checks the delivered files; pass rate and flaky cases per task type | Weekly, and after any change A change of the primary model or route reruns the benchmark once, in its own process, and the dashboard shows the new score beside the previous route's. |
 | Interactive evaluation | The same benchmark machinery with events injected while a real, disposable agent process works: a scope update after the first write, a question followed by a process restart, a corrective follow-up beside a runtime warning, an incomplete delegate delivery; the state is checked independently after the process exits | On demand, after changes to the turn loop |
+| Reviewer's exam | Nine staged deliveries, each reviewed clean and with one planted defect by the production coordinator in a disposable process: defects caught of planted, clean deliveries sent back of clean | Weekly, and on demand |
 | Research signal | A few real past tasks rerun; a model says only whether each new answer is closer, the same, or further from the accepted one | Weekly; a signal, never a score |
 | Live probes | Token use and pass rate before and after an engine change, on matched synthetic tasks | At each release |
 | Incident reviews | What went wrong, what each actor could see, which design choice allowed it | After each failure the owner noticed |
@@ -631,6 +644,9 @@ Tabularium borrows from, and departs from, several lines of published work.
   whether behaviour changed is read from the weekly numbers, not proven.
 - The weekly scorecard says what moved, not which change moved it: changes released in the same week share one
   number, so a change is judged cleanly only when it is the one change of its week.
+- The reviewer's exam is small, synthetic and easy: its catch rate is a floor on defects a careful reader cannot
+  miss, not a measure of review on real research, where ground truth is rarely certain. It examines the
+  coordinator's reading; the stateless cold reader is not in it.
 
 ## 14. Lessons from building it
 
@@ -710,6 +726,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-25 | Sixty rows of this table and no measure that said which change helped. The share of turns the owner corrected, the cost of a turn and how often he was asked were not shown, and the cost of a delegated request had never been recorded: the column was empty in all 109 requests while real cost ran about ten times the agreed targets | The weekly scorecard shows all four, from records only, and the review of a delivery writes what the request has cost the delegate so far. A change is kept or removed on those numbers |
 | 2026-11-25 | Every request carried every tool definition in full: 45 tools and 56,000 characters for the coordinator, on each of about 25,000 model calls a month. In thirty days, 22 of those tools made 2.9% of its calls and were 46% of that text | Those tools are one line each inside one tool, `use_tool`. The first call for a tool in a turn returns its description and input schema and runs nothing; the next call runs it as itself. The coordinator's tool text fell from 55,900 to 33,300 characters and the librarian's from 48,600 to 25,800. Which tools are listed this way is arithmetic: a definition read on every call against one extra model call per use, and the runtime counts those extra calls so a tool that proves to be used often moves back |
 | 2026-11-25 | The rules block every agent reads on every call held four paragraphs about tools it now reaches for a few times a month: the capability check, the specialist review, the output review and the report scan. Most of their sentences repeated the tool's own description | Those paragraphs are gone from the block and their sentences are in the description of the tool they are about, which the model is given before the tool's first use in a turn. The block fell from 9,100 to 6,800 characters for the coordinator. A rule about one tool belongs with the tool; the block keeps the rules that hold in every reply |
+| 2026-11-26 | In one month the coordinator marked 168 of 168 delegated items met, most by reading alone, and nothing said how often a reading misses: a reviewer that is never wrong and one that never looks leave the same record | A weekly exam plants one known defect in each of nine staged deliveries and counts how many the production coordinator catches, beside how many clean twins it sends back. The first run caught nine of nine and sent back one clean delivery of nine; the first draft of one scenario held a mistake of its author's, scores above the stated maximum, and the reviewer sent that back too. Each review now records which provider reviewed and which did the work |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
@@ -740,3 +757,4 @@ office, where the decisions and contracts that no magistrate's word could overri
 | Release probe | One real turn each agent answers on the commit about to be released, before any process is replaced |
 | Listed tool | A rarely used tool sent as one line inside `use_tool`; its full instructions arrive the first time it is called in a turn |
 | Scorecard | The weekly numbers per agent, taken from records only: corrections, tokens per turn, questions asked, delegation cost |
+| Reviewer's exam | Staged deliveries with one planted defect each, and clean twins, reviewed by the production coordinator; the count of defects caught and clean work sent back |

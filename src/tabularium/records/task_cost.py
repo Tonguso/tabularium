@@ -112,6 +112,24 @@ def spend(directory):
     return out
 
 
+def family(label):
+    """The company behind a provider label, so a route through a vendor's own client and its API count as one."""
+    label = str(label or "").lower()
+    return "anthropic" if "claude" in label or "anthropic" in label else "google" if "gemini" in label else label
+
+
+def providers(directory):
+    """The model providers that answered in a task, from its usage records."""
+    path = Path(directory) / 'task_state' / 'inbox.sqlite3'
+    if not path.exists():
+        return []
+    con = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5)
+    try:
+        return sorted({family(row[0]) for row in con.execute("SELECT DISTINCT provider FROM usage_events WHERE kind='response'") if row[0]})
+    finally:
+        con.close()
+
+
 def status(directory):
     """Spend plus the target and estimate, for a client's status reply."""
     out = spend(directory)

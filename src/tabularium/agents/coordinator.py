@@ -181,7 +181,8 @@ class CatoApp(AgentApp):
             critical_unmet, unmet = [], []
             try:
                 for ident in idents or [None]:
-                    critical_unmet, unmet = self._background.accept_delegation(ident, request_id, verdicts, delivery_id=delivery_id)
+                    critical_unmet, unmet = self._background.accept_delegation(ident, request_id, verdicts, delivery_id=delivery_id,
+                                                                               reviewer=self.get_provider(chat_id))
             except ValueError as exc:
                 return str(exc)
             card = self._background.scorecard(request_id)

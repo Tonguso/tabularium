@@ -181,6 +181,13 @@ def main(args):
         if name not in AGENTS:
             sys.exit("Unknown agent: " + name)
         agent_root = root / name
+        if "--review" in args:                                  # the reviewer's exam: planted defects, counted (2026-11-26)
+            from tabularium.learning import review_exam
+            if not ROLES[name].delegates:
+                sys.exit(name + " reviews no delegated work.")
+            record = review_exam.run(agent_root)
+            print(review_exam.summary(record)); print("Saved:", record["path"])
+            sys.exit(0)
         interactive = "--interactions" in args
         if interactive and ("--collect" in args or "--signal" in args):
             sys.exit("Choose one evaluation profile: interactions, collect or signal.")
