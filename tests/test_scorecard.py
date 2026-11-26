@@ -19,14 +19,23 @@ def seed(root, name):
         db.execute("CREATE TABLE usage_events (id INTEGER PRIMARY KEY, job INTEGER, created REAL, kind TEXT, provider TEXT, model TEXT, billing TEXT, role TEXT, metrics TEXT)")
         for i, (status, created) in enumerate([("done", THIS), ("done", THIS - 60), ("failed", THIS), ("done", LAST)]):
             db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?)", (i + 1, 1, i + 1, "handle_message", "{}", status, created))
-        db.execute("INSERT INTO usage_events(created,kind,model,role) VALUES (?,?,?,?)", (THIS, "bounce", "unbacked_promise", "runtime"))
-        db.execute("INSERT INTO usage_events(created,kind,model,role) VALUES (?,?,?,?)", (LAST, "bounce", "runaway", "runtime"))
-        db.execute("INSERT INTO usage_events(created,kind,model,role) VALUES (?,?,?,?)", (THIS, "response", "m", "worker"))
+        db.execute("INSERT INTO jobs VALUES (5,1,5,'handle_voice','{}','done',?)", (THIS,))                     # spoken: a turn
+        db.execute("INSERT INTO jobs VALUES (6,1,6,'handle_message','{\"channel\": \"button\"}','done',?)", (THIS,))  # a tap: not one
+        db.execute("INSERT INTO usage_events(job,created,kind,model,role) VALUES (1,?,?,?,?)", (THIS, "bounce", "unbacked_promise", "runtime"))
+        db.execute("INSERT INTO usage_events(job,created,kind,model,role) VALUES (4,?,?,?,?)", (LAST, "bounce", "runaway", "runtime"))
+        db.execute("INSERT INTO usage_events(created,kind,model,role) VALUES (?,?,?,?)", (THIS, "bounce", "dead_end", "runtime"))   # the replay's
+        usage = lambda n: json.dumps({"input_uncached": n, "cache_read": 0, "cache_write": 0, "output": 0})
+        db.execute("INSERT INTO usage_events(job,created,kind,model,role,metrics) VALUES (1,?,?,?,?,?)", (THIS, "response", "m", "worker", usage(300)))
+        db.execute("INSERT INTO usage_events(job,created,kind,model,role,metrics) VALUES (5,?,?,?,?,?)", (THIS, "response", "m", "worker", usage(600)))
+        db.execute("INSERT INTO usage_events(created,kind,model,role,metrics) VALUES (?,?,?,?,?)", (THIS, "response", "m", "worker", usage(5000)))  # a probe
     with closing(sqlite3.connect(state / "background" / "jobs.sqlite3")) as db, db:
         db.execute("CREATE TABLE tasks (id INTEGER PRIMARY KEY, chat INTEGER, request TEXT, status TEXT, created REAL, updated REAL, pid INTEGER, note TEXT, notified INTEGER)")
         db.execute("INSERT INTO tasks(chat,request,status,created,updated) VALUES (1,'a','finished',?,?)", (THIS - 1200, THIS))
         db.execute("INSERT INTO tasks(chat,request,status,created,updated) VALUES (1,'b','needs_attention',?,?)", (THIS - 600, THIS))
         db.execute("CREATE TABLE scorecard (request_id TEXT, agent TEXT, items_total INTEGER, items_met INTEGER, reworks INTEGER, guesses_verdict TEXT, accepted REAL)")
+        db.execute("CREATE TABLE delegations (request_id TEXT, acceptance TEXT)")
+        db.execute("INSERT INTO delegations VALUES ('r1','[{\"item\": 1, \"verdict\": \"met\"}]')")       # the shape before 2026-11-26
+        db.execute("INSERT INTO delegations VALUES ('r2','{\"providers\": {\"reviewer\": \"anthropic\", \"worker\": [\"openai\"]}}')")
         db.execute("INSERT INTO scorecard VALUES ('r1','vit',4,3,1,'ok',?)", (THIS,))
         db.execute("INSERT INTO scorecard VALUES ('r2','cal',2,2,0,'wrong',?)", (THIS,))
     with closing(sqlite3.connect(state / "projects.sqlite3")) as db, db:
@@ -54,12 +63,14 @@ class Scorecard(unittest.TestCase):
             (root / "docs" / "incidents" / "2026-10-15-x.md").write_text("# x\n| Affected | Cato; Vit's client |\n", encoding="utf-8")
             report = scorecard.weekly(root, now=NOW)
             this, last = (w["agents"]["coordinator"] for w in report["weeks"])
-            self.assertEqual((this["turns"], this["turns_failed"], last["turns"]), (2, 1, 1))
+            self.assertEqual((this["turns"], this["turns_failed"], last["turns"]), (3, 1, 1))       # typed, typed, spoken
             self.assertEqual((this["bounces"], last["bounces"]), ({"unbacked_promise": 1}, {"runaway": 1}))
+            # a probe's response and the replay's bounce belong to no message of his: neither is charged to his turns
+            self.assertEqual((this["tokens_per_turn"], this["tokens_not_a_turn"], this["model_responses"]), (300, 5000, 2))
             self.assertEqual((this["tasks_finished"], this["tasks_stopped"], this["task_minutes_median"]), (1, 1, 20.0))
             self.assertEqual(this["delegations"], {"accepted": 2, "items_met": 5, "items_total": 6, "reworks": 1, "wrong_guesses": 1,
                                                "rework_changed": 0, "rework_unchanged": 0,
-                                               "reviews_known": 0, "reviews_same_provider": 0})
+                                               "reviews_known": 1, "reviews_same_provider": 0})
             self.assertEqual((this["memory_exam"], this["lessons_candidate"], this["lessons_taken"], this["incidents"]),
                              ({"correct": 2, "partial": 0, "wrong": 1}, 1, 1, 1))
             self.assertEqual(report["weeks"][0]["agents"]["engineer"]["incidents"], 1)      # "Vit" in the Affected row

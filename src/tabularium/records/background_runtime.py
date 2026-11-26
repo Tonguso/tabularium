@@ -115,6 +115,8 @@ class TaskStore:
                 db.execute("ALTER TABLE tasks ADD COLUMN release TEXT")
             if "self_work" not in task_columns:                  # a coordinator's own worker wrote code outside its folder (2026-11-15)
                 db.execute("ALTER TABLE tasks ADD COLUMN self_work TEXT")
+            if "set_aside" not in task_columns:                  # when a stopped task left the per-turn evidence (lifecycle.set_aside)
+                db.execute("ALTER TABLE tasks ADD COLUMN set_aside REAL")
             db.execute("CREATE TABLE IF NOT EXISTS worker_failures(task INTEGER PRIMARY KEY, note TEXT, created REAL, notified INTEGER DEFAULT 0)")
             db.execute("CREATE TABLE IF NOT EXISTS decisions(id INTEGER PRIMARY KEY, task INTEGER NOT NULL, chat INTEGER NOT NULL, question TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', answer TEXT, source TEXT, control INTEGER, created REAL NOT NULL, updated REAL NOT NULL)")
             decision_columns = {r[1] for r in db.execute("PRAGMA table_info(decisions)")}
@@ -902,7 +904,14 @@ class TaskStore:
                 if row.get(key):
                     item[key] = row[key]
             rows.append(item)
-        return {"tasks": rows, "detail": "task_evidence(id) for a task's full brief, actions and result."}
+        with self.db() as db:      # stopped tasks he moved past: one line each, so one can be found and resumed
+            aside = [{"id": r["id"], "status": r["status"], "label": self.label(dict(r))[:100], "stopped": when(r["updated"])}
+                     for r in db.execute("SELECT * FROM tasks WHERE chat=? AND set_aside IS NOT NULL ORDER BY id DESC", (chat,))
+                     if r["id"] not in {row["id"] for row in rows}]
+        out = {"tasks": rows, "detail": "task_evidence(id) for a task's full brief, actions and result."}
+        if aside:
+            out["set_aside"] = aside
+        return out
 
     def evidence(self, chat, ident, limit=8):
         task = self.get(ident)

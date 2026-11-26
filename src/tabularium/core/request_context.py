@@ -78,7 +78,7 @@ class RequestContext:
         print(f"[context] Request passed {self.STEP_CEILING_BYTES:,} bytes; cut to {wire_size(bounded):,}.")
         return bounded
 
-    def trim_history(self, messages: list, chat_id: int) -> list:
+    def trim_history(self, messages: list, chat_id: int, attach: bool = True) -> list:
         """Retain complete recent user exchanges; completed tool traces do not evict the conversation."""
         from tabularium.core.context_window import exchange_starts, completed_exchanges
         starts = exchange_starts(messages)
@@ -93,17 +93,22 @@ class RequestContext:
             self._window_anchor[chat_id] = id(messages[start])
         window = completed_exchanges(messages[:2] + messages[start:],
                                      self.AGENT_DIR / 'context_archive' / str(chat_id))
-        return self._attach_current_context(window, chat_id)
+        return self._attach_current_context(window, chat_id, attach)
 
-    def _attach_current_context(self, window: list, chat_id: int) -> list:
+    def _attach_current_context(self, window: list, chat_id: int, attach: bool = True) -> list:
         """What is true now goes on the wire copy, next to the newest message: this turn's notes, and the core memory
         read fresh from memory.md. Nothing here is saved, so a correction is in force from the next request on and no
-        older copy can contradict it. The history above stays unchanged, so it stays cacheable."""
+        older copy can contradict it. The history above stays unchanged, so it stays cacheable.
+        attach=False leaves the window as the conversation holds it and puts what is true now in self._current, for a
+        route that sends it beside the history (models/conversation_blocks: the history it sent before must go again
+        unchanged, and anything written into a message would change it)."""
         self._context_sizes = {}
+        self._current = {}
         if getattr(self, "_trial", None):
             return window
         window = self._pin_contract(window[:2]) + window[2:]
-        window = self._attach_turn_notes(window, chat_id)
+        if attach:
+            window = self._attach_turn_notes(window, chat_id)
         store = getattr(self, "_background", None)
         live = store.live_context(chat_id, int(self.BACKGROUND_TASK_ID) if self.BACKGROUND_TASK_ID else None) if store is not None else ""
         if self.BACKGROUND_TASK_ID and store is not None:
@@ -111,6 +116,7 @@ class RequestContext:
             budget_note = task_cost.notice(store.directory(int(self.BACKGROUND_TASK_ID)))
             if budget_note:
                 live += '\n' + budget_note
+        evidence = live                      # the task evidence; what follows it belongs to this turn only
         if not self.BACKGROUND_TASK_ID:
             recalled = self._recall_affairs(window, chat_id)
             if recalled:
@@ -127,7 +133,7 @@ class RequestContext:
                     {'id': m['message_id'], 'text': m['text']} for m in incoming], ensure_ascii=False) + ']'
         if burst:
             live = (live + "\n\n" + burst) if live else burst
-        if live:
+        if live and attach:
             for i in range(len(window) - 1, -1, -1):
                 if window[i].get("role") == "user":
                     content = window[i].get("content")
@@ -137,6 +143,11 @@ class RequestContext:
         core = self._load_core_memory()
         self._context_sizes.update(core_chars=len(core), live_state_chars=len(live),
                                    turn_notes_chars=len(self._turn_notes.get(chat_id, ("", ""))[1]))
+        if not attach:
+            self._current = {"core": f"{self._CORE_MEMORY_NOTE}\n\n{core}\n\n[End of core memory.]" if core else "",
+                             "evidence": evidence, "turn": live[len(evidence):].strip(),
+                             "notes": self._turn_notes.get(chat_id, ("", ""))[1].strip()}
+            return window
         if not core:
             return window
         block = f"{self._CORE_MEMORY_NOTE}\n\n{core}\n\n[End of core memory. The message follows.]\n\n"

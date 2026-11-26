@@ -44,6 +44,31 @@ class QuestionBinding(unittest.TestCase):
         a._inbox.local.message_id = message_id
         a._inbox.local.turn_messages = [(message_id, text)]
 
+    def test_a_stopped_task_is_shown_for_his_next_message_then_set_aside_and_stays_resumable(self):
+        import time
+        a = self.agent()
+        store = a._background
+        stopped = store.start(1, 'Fix the layout', completion_items=WORK)['id']
+        waiting = store.start(1, 'Make a report', completion_items=WORK)['id']
+        store.move(stopped, 'stop', 'needs_attention', 'The worker did not declare a complete result.')
+        store.ask(1, waiting, 'Choose A or B')
+        shown = lambda: [t['task_id'] for t in json.loads(td.context(store, 1).split(chr(10), 1)[1])['tasks'] if t['task_id'] in (stopped, waiting)]
+        self.assertEqual(shown(), [stopped, waiting])
+        # His next message is answered with the stopped task still in view; after that turn it is set aside.
+        self.turn(a, 901, 'Book the flight', date=time.time() + 60)
+        td.verify_reply(a, [], 1, Reply('Booked.'))
+        evidence = td.context(store, 1)
+        self.assertEqual(shown(), [waiting])                                   # a task waiting on his answer never leaves
+        self.assertIn('"tasks_set_aside": {"count": 1', evidence)
+        self.assertNotIn('Fix the layout', evidence)
+        self.assertEqual(store.get(stopped)['status'], 'needs_attention')      # the record is unchanged
+        self.assertEqual([t['id'] for t in store.overview(1).get('set_aside', [])], [])     # among the ten newest: listed there
+        self.assertIn(stopped, [t['id'] for t in store.overview(1)['tasks']])
+        self.assertIn(str(stopped), td.context(store, 1, stopped))             # its own worker still sees it
+        store.control(1, stopped, 'resume')
+        self.assertEqual(shown(), [stopped, waiting])                          # any move brings it back
+        self.assertNotIn('tasks_set_aside', td.context(store, 1))
+
     def test_conversation_question_lapses_when_owner_moves_on_and_stays_answerable(self):
         a = self.agent()
         asked = a._background.ask(1, 0, 'Shall I draft the memo?')

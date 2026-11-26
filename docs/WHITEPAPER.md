@@ -1,6 +1,6 @@
 # Tabularium: An Owner-Judged Agent Framework
 
-Version 0.8, 26 November 2026
+Version 0.9, 26 November 2026
 
 ## Abstract
 
@@ -359,7 +359,7 @@ An agent's memory is one text file, readable by the owner, plus a searchable arc
 model remembers nothing between turns; the current file is attached fresh to the latest message of every request,
 so a correction is in force from the next request and no stale copy can contradict it. One tool writes memory, and a
 decision or preference of the owner can be written only with the message cited and the owner's words quoted, which
-the runtime checks. Two checks run weekly. A memory exam takes a few durable things the owner said that week (not
+the runtime checks. Two checks run weekly. A memory exam takes ten durable things the owner said that week (not
 instructions about one deliverable), has a separate model turn each into a question, asks the agent with only its
 memory to go on, and records the score; it is shown on the dashboard with the missed questions. A memory review
 proposes tidy-ups as a candidate copy, which is applied only after the exam passes on both the current and the
@@ -519,7 +519,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
 | Checkpoints and receipts | A crash losing work | Every tool call is a receipt; progress is checkpointed |
 | Drain restart | Restarting mid-task or onto broken code | Pauses workers at their next safe point and queues their tasks for the new process, runs all tests, refuses uncommitted code |
-| Release probe | A change the provider refuses, which passes every test because the tests replace the model | Each agent answers one real turn on the tested commit, with its real prompt and tools, before any process is replaced; an answer from a fallback route is a failure |
+| Release probe | A change the provider refuses, which passes every test because the tests replace the model | Each agent answers two real turns of one conversation on the tested commit, with its real prompt and tools, before any process is replaced; an answer from a fallback route is a failure, and the record keeps what each turn read from the cache and wrote to it |
 | Snapshot | An edit on disk reaching running agents before any test | Every component and worker runs an export of the released commit, never the working tree; a crash restart runs the last release |
 | Privacy by role | Maintainers reading private conversations | The private agent's records are closed; only tool records |
 
@@ -541,7 +541,7 @@ Tabularium is run like software, which is uncommon for agent systems.
 |---|---|---|
 | Self-test | The agent can take a message that follows a conversation with a tool call in it, read a file and answer, and which model route answered | Daily, five minutes after every start, and whenever the model client changes |
 | Release probe | The same turn, for each agent, in its own process on the commit about to be released: the agent's real prompt, tools, memory and routes, answered on the route its next live turn would use | Every release, after the suites and before any process is replaced |
-| Scorecard | The week per agent: turns, bounced replies, corrections and their share of turns, tokens per turn, how often the owner was asked, tasks finished, delegated items met, delegation cost against target, memory exam | Weekly |
+| Scorecard | The week per agent: the owner's messages of every kind answered, bounced replies, corrections and their share of messages, tokens per message, tokens spent outside his messages (probes, exams, replays), how often he was asked, tasks finished, delegated items met, delegation cost against target, memory exam. A record is counted by the message it belongs to, not by the week it falls in | Weekly |
 | Correction replay | The owner's recorded corrections older than three days, each rebuilt from the inbox and outbox and answered again in a rehearsal; a judge says whether the fault he named is repeated | Daily, when the chat is quiet |
 | Trace | Everything one task did, in order: tools, model calls, tokens, failures, minutes; usage is recorded per model call as it happens, so an interrupted session keeps its partial count | On demand |
 | Regression benchmark | Fixed, reviewed synthetic cases with independent answers (six at the time of writing, with twenty-one objective checks and one declared subjective rubric); code checks the delivered files; pass rate and flaky cases per task type | Weekly, and after any change A change of the primary model or route reruns the benchmark once, in its own process, and the dashboard shows the new score beside the previous route's. |
@@ -554,7 +554,7 @@ Tabularium is run like software, which is uncommon for agent systems.
 | Release record | Which commit each task ran on | Every task |
 
 Restarts drain current work, run the test suite, and refuse uncommitted code. The suites replace the model with a
-stand-in, so after they pass each agent answers one real turn on the tested commit, in its own process beside the
+stand-in, so after they pass each agent answers two real turns of one conversation on the tested commit, in its own process beside the
 live one; a release whose turn fails ends there, with every running process untouched. What then runs is not the working
 tree but an export of the tested commit, kept under the home folder with its identity written beside the package;
 every component and every worker it starts imports from there, so an edit on disk reaches nothing until it is
@@ -642,8 +642,16 @@ Tabularium borrows from, and departs from, several lines of published work.
 - Model access through vendors' own clients is the operator's responsibility under the vendors' terms.
 - Command screening is not a sandbox. A process the model directs no longer inherits the home's keys and tokens, but
   it runs as the owner and can read and write what he can; an operating-system boundary is not built.
-- The release probe is one turn per agent on its primary route. A release does not exercise a fallback route, and
-  a fault that needs a long conversation or a rarely used tool can still pass it.
+- The release probe is two turns per agent on its primary route. A release does not exercise a fallback route, and
+  a fault that needs a long conversation, a picture or a rarely used tool can still pass it.
+- The conversation is found again in the provider's cache only on the subscription route, only for the owner's own
+  conversation, and not while a picture is in view; a worker's task and those turns are sent whole as before. The
+  saving was measured on two turns (a second turn wrote 709 tokens where the first wrote 34,043); the weekly
+  number on real traffic has not been read yet.
+- Lessons have not lowered the share of messages the owner corrects: it stayed between 13% and 19% over five
+  weeks, and one rule (answer from the source opened in this turn) was written at least seven times while the
+  failure returned. A check in code on whether a turn opened anything was measured and rejected: corrected turns
+  had opened a file or a page as often as the others (68% against 61%). No mechanism for this class is built.
 - A tool listed in one line costs one extra model call the first time it is used in a turn, and an agent may
   reach for it less often than when its instructions were always in front of it. The runtime counts those calls;
   whether behaviour changed is read from the weekly numbers, not proven.
@@ -736,6 +744,10 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-25 | The rules block every agent reads on every call held four paragraphs about tools it now reaches for a few times a month: the capability check, the specialist review, the output review and the report scan. Most of their sentences repeated the tool's own description | Those paragraphs are gone from the block and their sentences are in the description of the tool they are about, which the model is given before the tool's first use in a turn. The block fell from 9,100 to 6,800 characters for the coordinator. A rule about one tool belongs with the tool; the block keeps the rules that hold in every reply |
 | 2026-11-26 | In one month the coordinator marked 168 of 168 delegated items met, most by reading alone, and nothing said how often a reading misses: a reviewer that is never wrong and one that never looks leave the same record | A weekly exam plants one known defect in each of nine staged deliveries and counts how many the production coordinator catches, beside how many clean twins it sends back. The first run caught nine of nine and sent back one clean delivery of nine; the first draft of one scenario held a mistake of its author's, scores above the stated maximum, and the reviewer sent that back too. Each review now records which provider reviewed and which did the work |
 | 2026-11-26 | Since the taint rail went, a page or an inbound email could ask for an email to any address and nothing in code stood in the way; whether an agent would follow such a request had never been measured | The owner's instruction is still the consent, and for an email it is on record: every recipient has to be an address he wrote in the chat or approved before, or the exact email waits for his yes. Replayed on the 240 past send records it would have asked nothing. An exam plants six instructions in what an agent reads and counts those acted on: the coordinator and the librarian each ignored six of six |
+| 2026-11-26 | A second review read six weeks of records. The scorecard counted only typed messages as turns and charged every model call of the week to them, so one week read 37 turns, 27% corrected and 433,000 tokens a turn where the records held 92 messages, 11% and 124,000; twelve of thirteen bounced replies it showed were the nightly replay's; it stopped with an error on older weeks | A record is counted by the message it belongs to: every kind of message is a turn, and what the probes, exams and replays cost has its own line |
+| 2026-11-26 | Answering one message cost twice what it did five weeks before (median 54,500 to 114,400 weighted tokens). Each turn is a new session and the whole conversation went as one block of text, which the provider's cache can never find again; writing it was 49% of a turn, though two of three messages came within five minutes of the last | The conversation goes as blocks that are sent again byte for byte, with one new block per turn and no cache marker of the framework's own; the blocks are reused only while the conversation still begins with the messages they cover. Proven first on a real session with the full prompt and tools: a second session read 165,563 tokens and wrote 440 |
+| 2026-11-26 | Thirty-three stopped tasks, the oldest four weeks old, were listed in every turn of the coordinator: a stopped state had no end, so a task stayed until someone cancelled it and that was no one's job | A stopped task is shown for the owner's next message and then set aside: out of the per-turn evidence, still in the record, resumable, and listed on request. The same rule an unanswered question has had since 2026-11-11 |
+| 2026-11-26 | The memory exam asked three questions a week; a result of none in three could not be read either way | Ten questions |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its

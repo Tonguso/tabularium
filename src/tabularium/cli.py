@@ -78,7 +78,7 @@ def probe(argv):
     agent = build(paths.agent_dir(argv[0]), argv[0])
     agent.send_message = lambda *args, **kwargs: None
     expected = provider_routing.first_open(agent.AGENT_DIR)
-    record = agent.run_selftest()
+    record = agent.run_selftest(follow_up=True)
     if record["ok"] and expected and record.get("route") != expected["kind"]:
         record.update(ok=False, error=f"answered on {record.get('route') or 'no route'}; {expected['kind']} did not answer")
     print("PROBE " + json.dumps(record, ensure_ascii=False))

@@ -38,6 +38,24 @@ class SelftestTurn(unittest.TestCase):
         self.assertTrue(any(isinstance(m["content"], list) and any(b.get("type") == "tool_result" for b in m["content"]) for m in seen))
         self.assertIn("Runtime self-test, not a message", seen[-1]["content"])
 
+    def test_with_a_follow_up_a_second_message_is_answered_in_the_same_conversation(self):
+        runtime = self.runtime()
+        seen = []
+
+        def fake_run_turn(messages, chat_id):
+            seen.append(len(messages))
+            if len(seen) == 1:
+                messages.append({"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "read_file", "input": {"path": "x"}}]})
+                messages.append({"role": "assistant", "content": "OK"})
+                return "OK"
+            self.assertIn("once more", messages[-1]["content"])
+            return "Not that"
+        runtime.run_turn = fake_run_turn
+        record = runtime.run_selftest(follow_up=True)
+        self.assertEqual(seen[1], seen[0] + 3)                    # the first turn's call and reply, then the second message
+        self.assertEqual((record["ok"], record["error"]), (False, "the second turn's reply was not OK"))
+        self.assertEqual(record["cache"], [])                     # the stand-in made no model call
+
     def test_the_tool_call_in_the_history_does_not_count_as_this_turns(self):
         runtime = self.runtime()
         runtime.run_turn = lambda messages, chat_id: "OK"          # answers without calling read_file
@@ -84,7 +102,7 @@ class ProbeProcess(unittest.TestCase):
         self.assertFalse((root / "task_state" / "selftest.json").exists())
 
     def command(self, record, expected):
-        agent = type("Agent", (), {"AGENT_DIR": Path("x"), "run_selftest": lambda self: dict(record)})()
+        agent = type("Agent", (), {"AGENT_DIR": Path("x"), "run_selftest": lambda self, follow_up=False: dict(record, asked_twice=follow_up)})()
         out = io.StringIO()
         with patch("tabularium.agents.build", return_value=agent), patch.object(provider_routing, "first_open", return_value=expected), \
                 patch.dict(os.environ, {}), redirect_stdout(out):
@@ -96,6 +114,7 @@ class ProbeProcess(unittest.TestCase):
         message, record = self.command({"ok": True, "error": "", "route": "anthropic_subscription"}, {"kind": "anthropic_subscription", "model": "claude-x"})
         self.assertIsNone(message)
         self.assertTrue(record["ok"])
+        self.assertTrue(record["asked_twice"])                    # the probe sends a second message in the conversation
 
     def test_an_answer_from_a_fallback_fails(self):
         message, record = self.command({"ok": True, "error": "", "route": "openai_subscription"}, {"kind": "anthropic_subscription", "model": "claude-x"})

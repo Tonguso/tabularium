@@ -569,9 +569,13 @@ def context(store, chat, task=None):
     db = sqlite3.connect(store.database, timeout=30)
     db.row_factory = sqlite3.Row
     try:
+        # a worker sees its own task whatever its state; the foreground sees what is in motion, waits on the owner,
+        # or stopped since his last message (lifecycle.set_aside)
         ids = [r[0] for r in db.execute(
             "SELECT id FROM tasks WHERE chat=? AND status NOT IN ('finished','cancelled','superseded') "
-            "AND (? IS NULL OR id=?) ORDER BY id", (chat, task, task))]
+            "AND (id=? OR (? IS NULL AND set_aside IS NULL)) ORDER BY id", (chat, task, task))]
+        aside = 0 if task is not None else db.execute(
+            "SELECT count(*) FROM tasks WHERE chat=? AND set_aside IS NOT NULL", (chat,)).fetchone()[0]
         outcomes = [dict(r) for r in db.execute(
             "SELECT id,task,question,state,answer FROM decisions WHERE chat=? AND kind='action' AND state<>'pending' "
             "AND (? IS NULL OR task=?) ORDER BY updated DESC LIMIT 6", (chat, task, task))]
@@ -586,7 +590,7 @@ def context(store, chat, task=None):
         db.close()
     decisions = store.decisions(chat, task)
     unanswered = len(lapsed(store, chat, since=time.time() - LAPSED_SECONDS)) if task is None else 0
-    if not ids and not decisions and not outcomes and not rulings and not unanswered:
+    if not ids and not decisions and not outcomes and not rulings and not unanswered and not aside:
         return ""
     for outcome in outcomes:
         outcome['answer'] = outcome['answer'][:1500] if outcome['answer'] else 'Outcome unknown.'
@@ -601,6 +605,9 @@ def context(store, chat, task=None):
         evidence['questions_not_answered'] = {'count': unanswered, 'note': "Conversation questions of the last week that Alex "
                                               "moved past without answering; not shown here (task_decision list has them). "
                                               "Ask one again only when its matter is live, never as a reminder."}
+    if aside:
+        evidence['tasks_set_aside'] = {'count': aside, 'note': "Stopped tasks Alex has moved past; not shown here "
+                                       "(background_task status lists them). Resume one only when he asks for that work."}
     return "[Live task evidence; historical assistant claims are not current status]\n" + json.dumps(evidence, ensure_ascii=False)
 
 
@@ -757,6 +764,8 @@ def _lapse_conversation_questions(agent, chat, declared):
             if s.get("decision_id"):
                 keep.add(int(s["decision_id"]))
         lapse(agent._background, chat, before, keep)
+        with agent._background.db() as db:          # a task that stopped before this message and is still stopped
+            lifecycle.set_aside(db, chat, before)
     except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
         print(f"[decision] lapse: {type(exc).__name__}: {exc}")
 

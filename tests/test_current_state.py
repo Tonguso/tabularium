@@ -27,7 +27,7 @@ class SteerReachesTheLiveSession(unittest.TestCase):
                        get_tools=lambda _: [{"name": "read_file", "description": "read",
                                              "input_schema": {"type": "object", "properties": {}}}],
                        _prepare_request_context=lambda m, c: m, _sanitise_tool_history=lambda m: m,
-                       trim_history=lambda m, c: m, save_conversation=Mock(), execute_tool=Mock(return_value="towers saved"),
+                       trim_history=lambda m, c, attach=True: m, save_conversation=Mock(), execute_tool=Mock(return_value="towers saved"),
                        _inbox=NS(progress=Mock(), record_event=Mock()), _background=NS(newest=lambda c: 0, activated_since=lambda c, t: False), BACKGROUND_TASK_ID="")
             captured = {}
 
@@ -131,7 +131,7 @@ class AnAnswerlessSessionGetsOneMoreSession(unittest.TestCase):
             agent = NS(AGENT_DIR=Path(folder), RUNTIME_DIR=Path(folder), SYSTEM_PROMPT="persona", MAX_TOOL_ITERATIONS=4,
                        _abort_requested={}, _background_boundary=lambda *a: [], get_tools=lambda _: [],
                        _prepare_request_context=lambda m, c: m, _sanitise_tool_history=lambda m: m,
-                       trim_history=lambda m, c: m, save_conversation=Mock(), execute_tool=Mock(),
+                       trim_history=lambda m, c, attach=True: m, save_conversation=Mock(), execute_tool=Mock(),
                        _inbox=NS(progress=Mock(), record_event=Mock()), _background=NS(newest=lambda c: 0, activated_since=lambda c, t: False), BACKGROUND_TASK_ID="")
             prompts = []
 

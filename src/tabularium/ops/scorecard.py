@@ -1,6 +1,7 @@
 """Weekly scorecard from records the system already writes (2026-10-16). No model calls.
 
-Per agent, per local week (Monday to Sunday): turns answered and turns that failed; replies the runtime bounced
+Per agent, per local week (Monday to Sunday): the owner's messages answered and failed, of every kind (typed, spoken,
+a photo, a document; a button tap is not a message); replies the runtime bounced
 (unbacked promise, cut-off, step limit, runaway stop; recorded as usage_events of kind "bounce" at the moment they
 happen, so no history is parsed and Tacitus's conversations are never read); what a foreground turn costs and how often
 the agent put a question or a parked action to the owner; background tasks finished and stopped,
@@ -11,6 +12,11 @@ and incident records that name the agent. The last line only
 counts what was written down: a week with no lessons and no incidents is clean only if we kept the records.
 Four of these are what a change to the framework is judged by, week on week (2026-11-25): the share of turns the owner
 corrected, effective tokens per turn, delegation cost against target, and how often he was asked.
+A record is counted by the message it belongs to, not by the week it falls in (2026-11-26): the release probes, the
+exams and the nightly replay of corrections call the model and bounce drafts in the same store with no owner message
+behind them. Counted by time they were charged to his turns, and with only typed messages counted as turns one week
+read 37 turns, 27% corrected and 433,000 tokens a turn where the records held 92, 11% and 124,000. What is not a turn
+has its own line.
 Usage: python -m tabularium.ops.scorecard [weeks]  (the dashboard shows the same table on the overview)."""
 from datetime import datetime, timedelta
 import json
@@ -31,6 +37,9 @@ from tabularium.learning import review_exam
 LOCAL = ZoneInfo("UTC")
 STOPPED = ("needs_attention", "interrupted", "capped", "infeasible", "cancelled")
 BOUNCES = ("unbacked_promise", "cut_off", "step_limit", "runaway")
+# An owner message is a job he sent: any handler, not a button tap (correction_eval.live_rate counts the same way).
+OWNER = "coalesce(json_extract(payload,'$.channel'),'')<>'button'"
+OF_A_TURN = f"job IN (SELECT id FROM jobs WHERE {OWNER})"
 # Incident records name people, not slots: a slot matches its name, its persona's display name and the short
 # forms people use for that persona (keyed by display name so the export's slot rename leaves them alone).
 SHORT = {"Callimachus": ("cal",), "Vitruvius": ("vit",)}
@@ -62,9 +71,9 @@ def _query(path, sql, args=()):
 
 def agent_week(root, name, start, end):
     root = Path(root); state = root / name / "task_state"
-    jobs = _query(state / "inbox.sqlite3", "SELECT status FROM jobs WHERE handler='handle_message' AND created>=? AND created<?", (start, end))
-    bounces = _query(state / "inbox.sqlite3", "SELECT model, count(*) n FROM usage_events WHERE kind='bounce' AND created>=? AND created<? GROUP BY model", (start, end))
-    responses = _query(state / "inbox.sqlite3", "SELECT count(*) n FROM usage_events WHERE kind='response' AND created>=? AND created<?", (start, end))
+    jobs = _query(state / "inbox.sqlite3", f"SELECT status FROM jobs WHERE {OWNER} AND created>=? AND created<?", (start, end))
+    bounces = _query(state / "inbox.sqlite3", f"SELECT model, count(*) n FROM usage_events WHERE kind='bounce' AND {OF_A_TURN} AND created>=? AND created<? GROUP BY model", (start, end))
+    responses = _query(state / "inbox.sqlite3", f"SELECT count(*) n FROM usage_events WHERE kind='response' AND {OF_A_TURN} AND created>=? AND created<?", (start, end))
     corrections = _query(state / "inbox.sqlite3", "SELECT count(*) n FROM usage_events WHERE kind='correction' AND created>=? AND created<?", (start, end))
     tasks = _query(state / "background" / "jobs.sqlite3", "SELECT status, created, updated FROM tasks WHERE created>=? AND created<?", (start, end))
     finished = [t for t in tasks if t["status"] == "finished"]
@@ -74,11 +83,13 @@ def agent_week(root, name, start, end):
     priced = _query(state / "background" / "jobs.sqlite3", "SELECT budget, spent FROM scorecard WHERE accepted>=? AND accepted<? "
                     "AND spent IS NOT NULL AND budget>0", (start, end))
     asked = _query(state / "background" / "jobs.sqlite3", "SELECT count(*) n FROM decisions WHERE created>=? AND created<?", (start, end))
-    reviews = [json.loads(r["acceptance"] or "{}").get("providers") for r in _query(
+    # an acceptance written before 2026-11-26 is the list of verdicts alone and names no provider
+    reviews = [a.get("providers") for a in (json.loads(r["acceptance"] or "{}") for r in _query(
         state / "background" / "jobs.sqlite3", "SELECT d.acceptance FROM delegations d JOIN scorecard s ON s.request_id=d.request_id "
-        "WHERE s.accepted>=? AND s.accepted<? GROUP BY d.request_id", (start, end))]
+        "WHERE s.accepted>=? AND s.accepted<? GROUP BY d.request_id", (start, end))) if isinstance(a, dict)]
     reviews = [p for p in reviews if p and p.get("worker")]
-    usage = _query(state / "inbox.sqlite3", "SELECT metrics, role FROM usage_events WHERE kind='response' AND created>=? AND created<?", (start, end))
+    usage = _query(state / "inbox.sqlite3", f"SELECT metrics, role, {OF_A_TURN} AS turn FROM usage_events WHERE kind='response' AND created>=? AND created<?", (start, end))
+    cost = lambda turn: sum(effective_tokens(decode(u["metrics"], u["role"] or "")) for u in usage if bool(u["turn"]) == turn)
     done = sum(j["status"] == "done" for j in jobs)
     corrected = corrections[0]["n"] if corrections else 0
     outcomes = [o for a in logs for e in json.loads(a.get("rework_log") or "[]") for o in (e.get("outcome") or {}).values()]
@@ -100,8 +111,10 @@ def agent_week(root, name, start, end):
         "model_responses": responses[0]["n"] if responses else 0,
         "corrections": corrected,                                      # times Alex told the agent it got something wrong
         "correction_rate": round(corrected / done, 3) if done else None,
-        # every model response recorded in the foreground that week, weighted as task_cost weighs a task's
-        "tokens_per_turn": round(sum(effective_tokens(decode(u["metrics"], u["role"] or "")) for u in usage) / done) if done else None,
+        # the model responses of his messages that week, weighted as task_cost weighs a task's
+        "tokens_per_turn": round(cost(True) / done) if done else None,
+        # responses with no message of his behind them: release probes, exams, the replay of corrections, the self-test
+        "tokens_not_a_turn": cost(False),
         "asked": asked[0]["n"] if asked else 0,                        # questions and parked actions put to Alex
         "delegation_cost": {"priced": len(priced), "spent": sum(p["spent"] for p in priced),
                             "target": sum(p["budget"] for p in priced)} if priced else None,
@@ -168,6 +181,7 @@ def table(report):
                 ("bounced replies", lambda a: str(sum(a["bounces"].values()))),
                 ("Alex's corrections (rate)", lambda a: str(a.get("corrections", 0)) + ("" if a.get("correction_rate") is None else f" ({a['correction_rate']:.0%})")),
                 ("tokens per turn", lambda a: "-" if a.get("tokens_per_turn") is None else f"{a['tokens_per_turn']:,}"),
+                ("tokens outside his turns", lambda a: f"{a.get('tokens_not_a_turn', 0):,}"),
                 ("asked Alex", lambda a: str(a.get("asked", 0))),
                 ("tasks finished / stopped", lambda a: f"{a['tasks_finished']} / {a['tasks_stopped']}"),
                 ("median task minutes", lambda a: "-" if a["task_minutes_median"] is None else str(a["task_minutes_median"])),

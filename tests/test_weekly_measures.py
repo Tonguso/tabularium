@@ -28,19 +28,19 @@ class WeeklyMeasures(unittest.TestCase):
         def extend(state):
             with closing(sqlite3.connect(state / "inbox.sqlite3")) as db, db:
                 db.execute("INSERT INTO usage_events(created,kind,model,role) VALUES (?,?,?,?)", (THIS, "correction", "owner", "foreground"))
-                db.execute("INSERT INTO usage_events(created,kind,model,role,metrics) VALUES (?,?,?,?,?)", (THIS, "response", "m", "sdk_total",
+                db.execute("INSERT INTO usage_events(job,created,kind,model,role,metrics) VALUES (2,?,?,?,?,?)", (THIS, "response", "m", "sdk_total",
                            json.dumps({"input_uncached": 1000, "cache_read": 10000, "cache_write": 0, "output": 100})))
             with closing(sqlite3.connect(state / "background" / "jobs.sqlite3")) as db, db:
                 db.execute("CREATE TABLE decisions (id INTEGER PRIMARY KEY, created REAL)")
                 db.executemany("INSERT INTO decisions(created) VALUES (?)", [(THIS,), (THIS - 60,), (THIS - 120,), (LAST,)])
         (this, last), report = self.report(extend)
-        self.assertEqual(this["correction_rate"], 0.5)               # one correction over the two turns answered
-        self.assertEqual(this["tokens_per_turn"], 1250)              # (1000 + 10000 x 0.1 + 100 x 5) over two turns
+        self.assertEqual(this["correction_rate"], 0.333)             # one correction over the three messages answered
+        self.assertEqual(this["tokens_per_turn"], 1133)              # (1000 + 10000 x 0.1 + 100 x 5, and the seed's 300 and 600) over three
         self.assertEqual((this["asked"], last["asked"]), (3, 1))
         self.assertEqual(last["correction_rate"], 0.0)
         text = scorecard.table(report)
-        self.assertIn("1 (50%)", text)
-        self.assertIn("1,250", text)
+        self.assertIn("1 (33%)", text)
+        self.assertIn("1,133", text)
 
     def test_a_week_without_turns_has_no_rate(self):
         (this, last), report = self.report()

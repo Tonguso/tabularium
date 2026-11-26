@@ -12,7 +12,7 @@ STATIC = Path(__file__).resolve().parent
 from tabularium.ops.operations import snapshot, read_json, query, PORT, URL
 from tabularium.records.background_runtime import TaskStore
 from tabularium.core.roster import AGENTS, ROLES
-from tabularium.ops.scorecard import weekly
+from tabularium.ops.scorecard import weekly, OF_A_TURN
 from tabularium.models.usage import aggregate, decode
 from tabularium.core import trace
 from tabularium.learning import regression
@@ -172,8 +172,9 @@ def state():
         # Foreground usage today (local day): what one message costs on average, so compaction is measurable.
         try:
             midnight=datetime.now(ZoneInfo('UTC')).replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
-            rows=query(folder/'inbox.sqlite3',"SELECT role,metrics FROM usage_events WHERE kind='response' AND created>?",(midnight,))
-            turns=sum(r.get('role') not in ('reviewer','advisor') for r in rows)
+            # his messages' responses only: a release probe or an exam is not a message (scorecard.OF_A_TURN, 2026-11-26)
+            rows=query(folder/'inbox.sqlite3',"SELECT job,role,metrics FROM usage_events WHERE kind='response' AND "+OF_A_TURN+" AND created>?",(midnight,))
+            turns=len({r.get('job') for r in rows})
             totals=aggregate(decode(r.get('metrics'), r.get('role')) for r in rows)
             inp,cached=totals['input_total'],totals['cache_read']
             agent['today']={'turns':turns,'input_per_turn':int(inp/turns) if turns and inp is not None else None,

@@ -97,6 +97,18 @@ def adopt(db, completion_of):
     return len(rows)
 
 
+def set_aside(db, chat, before):
+    """A stopped task lives in the per-turn evidence until the owner's next message has been answered; if it is still
+    stopped then, it is set aside: out of the evidence, in the record, resumable, listed by background_task status.
+    The same rule a conversation question has had since 2026-11-11, for the same reason. (2026-11-26: 33 stopped
+    tasks, the oldest four weeks old, rode every turn of the coordinator; a stopped state had no end at all, so
+    each one was listed until someone cancelled it, and no one's job was to cancel it.) A task waiting on his
+    answer is never set aside; it waits. Returns how many were set aside."""
+    marks = ",".join("?" * len(STOPPED))
+    return db.execute(f"UPDATE tasks SET set_aside=? WHERE chat=? AND set_aside IS NULL AND updated<? AND status IN ({marks})",
+                      (time.time(), chat, float(before), *STOPPED)).rowcount
+
+
 class InvalidTransition(ValueError):
     """The move is not in the lifecycle table, or the task changed state underneath it. Nothing was written."""
 
@@ -122,7 +134,7 @@ def move(db, ident, op, to, note=None, *, notified=0, quiet=False, attempt_is=_A
             return False
         raise InvalidTransition(f"Task {ident} is {current}; {op} applies only to "
                                 f"{', '.join(sorted(OPS[op][0]))}.")
-    columns, values = ["status=?", "updated=?"], [to, time.time()]
+    columns, values = ["status=?", "updated=?", "set_aside=NULL"], [to, time.time()]     # any move brings it back
     if note is not None:
         columns.append("note=?"); values.append(note)
     if notified is not None:

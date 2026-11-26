@@ -210,7 +210,7 @@ class DecisionContext(unittest.TestCase):
         history.append({'role': 'user', 'content': 'Use the later requirement: euros, not dollars.'})
         self.assertEqual(completed_exchanges(history, self.root/'archive'), history)
         attach = agent._attach_current_context
-        agent._attach_current_context = lambda value, chat: value
+        agent._attach_current_context = lambda value, chat, attach=True: value
         try:
             self.assertEqual(agent.trim_history(history, 1), history)
         finally:
@@ -221,7 +221,7 @@ class DecisionContext(unittest.TestCase):
 
     def test_window_prefix_stays_anchored_between_exchange_cuts(self):
         agent = self.agent()
-        agent._attach_current_context = lambda value, chat: value
+        agent._attach_current_context = lambda value, chat, attach=True: value
         history = agent.load_memory_context()
         for n in range(24):
             history += [{'role': 'user', 'content': f'Question {n}'},

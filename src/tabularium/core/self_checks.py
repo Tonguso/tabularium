@@ -3,6 +3,7 @@ rerun after a route change, the lesson digest, and the nightly save.
 """
 from tabularium.paths import child_env
 import json
+import sqlite3
 import subprocess
 import sys
 import time
@@ -168,10 +169,12 @@ class SelfChecks:
             print(f"[selftest] Gemini CLI changed: {previous_gemini or '(none)'} -> {current_gemini or '(none)'}; running the self-test now")
         return True
 
-    def run_selftest(self):
+    def run_selftest(self, follow_up=False):
         """One real turn, composed the way the message handler composes it (compose_turn on a synthetic Telegram
         message) after SELFTEST_HISTORY, and run through run_turn: the model must call read_file on the identity
-        file and answer OK. The release probe (tabularium probe) runs this same turn on the source under test.
+        file and answer OK. The release probe (tabularium probe) runs this same turn on the source under test, and
+        with follow_up a second message in the same conversation: the request of a second turn repeats what the
+        first one sent and adds to it (models/conversation_blocks), and only a second turn sends that form.
         Result in task_state/selftest.json; the supervisor tells Alex on failure, the dashboard shows it.
         Runs under the chat lock so it never interleaves with a real conversation turn (2026-10-11). Nothing is sent
         to Telegram. Before 2026-10-11 18:00 this bypassed the handler and passed while every real message failed."""
@@ -197,9 +200,24 @@ class SelfChecks:
                 ok = "OK" in reply.upper() and used_tool
                 if not ok:
                     error = "no tool call" if not used_tool else "reply was not OK"
+                elif follow_up:
+                    incoming.text = ("[Runtime self-test, not a message from Alex; send nothing to Telegram and change "
+                                     "nothing.] Reply with exactly the word OK once more; call no tool.")
+                    messages.append({"role": "user", "content": self.compose_turn(incoming, nudge=False)})
+                    ok = "OK" in (self.run_turn(messages, OWNER_CHAT_ID) or "").upper()
+                    error = "" if ok else "the second turn's reply was not OK"
             except Exception as exc:
                 error = f"{type(exc).__name__}: {str(exc)[:300]}"
         record = {"time": time.time(), "ok": ok, "seconds": round(time.time() - started, 1), "reply": reply[:200], "error": error}
+        if follow_up:
+            # What each turn read from the provider's cache and wrote to it; the second should write little.
+            try:
+                from tabularium.models.usage import decode
+                with self._inbox.db() as db:
+                    rows = db.execute("SELECT metrics, role FROM usage_events WHERE kind='response' AND created>=? ORDER BY id", (started,)).fetchall()
+                record["cache"] = [{k: decode(r[0], r[1] or "").get(k) for k in ("cache_read", "cache_write")} for r in rows]
+            except (sqlite3.Error, ValueError) as exc:
+                record["cache"] = f"unread: {type(exc).__name__}"
         # Which route answered, and whether it was the first choice: for two days (2026-10-20 to 10-22) the daily
         # self-test passed on the ChatGPT fallback while the Claude CLI was missing, and nothing said so.
         try:

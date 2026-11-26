@@ -16,8 +16,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 EXAM_DAYS = 7
-EXAM_ITEMS = 3            # questions asked
-EXAM_POOL = 8             # candidate messages sampled; the examiner skips the ones with nothing to remember
+# Ten questions, not three (2026-11-26): one week's result was 0 of 3 and nothing could be read from it either way;
+# a single answer moved the score by a third. The pool is three per question because the examiner skips most messages.
+EXAM_ITEMS = 10           # questions asked
+EXAM_POOL = 30            # candidate messages sampled; the examiner skips the ones with nothing to remember
 MIN_CHARS, MAX_CHARS = 40, 600
 EXAMINER_ALIAS = "haiku"
 EXAM_TOOLS = ("read_memory",)   # the only tool that exists during the exam; the conversation archive does not
