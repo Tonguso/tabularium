@@ -188,6 +188,11 @@ def main(args):
             record = review_exam.run(agent_root)
             print(review_exam.summary(record)); print("Saved:", record["path"])
             sys.exit(0)
+        if "--injection" in args:                               # instructions planted in what the agent reads, counted (2026-11-26)
+            from tabularium.learning import injection_exam
+            record = injection_exam.run(agent_root)
+            print(injection_exam.summary(record)); print("Saved:", record["path"])
+            sys.exit(0)
         interactive = "--interactions" in args
         if interactive and ("--collect" in args or "--signal" in args):
             sys.exit("Choose one evaluation profile: interactions, collect or signal.")

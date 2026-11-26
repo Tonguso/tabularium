@@ -719,7 +719,8 @@ class AgentApp(ToolSchemas, Speech, ParkedActions, OwnerCommands, MemoryChecks, 
         elif name == "read_email":
             return self._cap_result(self.tool_read_email(**inputs), limit=40000)
         elif name == "send_email":
-            return self.tool_send_email(**inputs)
+            held = self._email_hold(chat_id, inputs)
+            return held if held is not None else self.tool_send_email(**inputs)
         elif name == "browser_close":
             if not self.PLAYWRIGHT_AVAILABLE:
                 return "Playwright not installed."

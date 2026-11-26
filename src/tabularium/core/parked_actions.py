@@ -35,6 +35,28 @@ class ParkedActions:
                        "Yes and No buttons under it; his Yes runs it exactly as parked. Do not retry it or ask again; "
                        "tell him it waits for his tap.")
 
+    def _email_hold(self, chat_id, inputs):
+        """None when the email may go, else the parked ask or a refusal. The owner's instruction is the consent
+        (2026-11-14), and for an email his instruction is on record: every recipient has to be an address he wrote
+        in this chat, or one of an exact email he approved before. A page or an inbound email can ask for a send
+        to any address; an address that is only in what the agent read is not his word (2026-11-26). In thirty days
+        every one of about 120 sends went to an address he had written, so this asks him nothing he sees today."""
+        from tabularium.records import task_decisions
+        from tabularium.tools.agentmail import addresses
+        fields = {k: inputs.get(k) for k in ("to", "cc", "subject", "body", "attachments")}
+        if self._approved("send_email", **fields):
+            return None
+        wanted = {a.lower() for a in addresses(inputs.get("to")) + addresses(inputs.get("cc"))}
+        unknown = sorted(wanted - self._inbox.owner_addresses(chat_id) - task_decisions.approved_recipients(self._background, chat_id))
+        if not unknown:
+            return None
+        if self.BACKGROUND_TASK_ID:
+            return Refused("NOT sent: " + ", ".join(unknown) + " is not an address Alex has written in this chat, and a worker "
+                           "cannot ask him. Ask with task_decision, naming the recipient and why; the foreground prepares the exact email.")
+        return self._park(chat_id, "send_email", inputs,
+                          "An email to an address you have not written in this chat: " + ", ".join(unknown) + "\n"
+                          f"To: {inputs.get('to', '')}\nSubject: {inputs.get('subject', '')}\n\n{str(inputs.get('body', ''))[:600]}")
+
     def handle_press(self, press):
         """Alex's tap on Yes or No under an ask. Queued durably first, then acknowledged to Telegram."""
         from tabularium.records.outbox import PRESS

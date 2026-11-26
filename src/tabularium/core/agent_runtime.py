@@ -184,6 +184,14 @@ class DurableInbox:
                     print(f'[health] Status write failed; inbox continues: {type(exc).__name__}')
                     self._health_write_warning = now
 
+    def owner_addresses(self, chat):
+        """Every email address in the owner's own messages to this chat. The inbox holds only what passed the owner
+        gate, so an address found here is one he wrote, forwarded or captioned himself."""
+        import re
+        with self.db() as db:
+            rows = db.execute("SELECT payload FROM jobs WHERE chat=? AND payload LIKE '%@%'", (chat,)).fetchall()
+        return {a.lower() for row in rows for a in re.findall(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", row[0] or "")}
+
     def db(self):
         # Connections are short-lived; FULL synchronous transactions survive process exit.
         from contextlib import contextmanager

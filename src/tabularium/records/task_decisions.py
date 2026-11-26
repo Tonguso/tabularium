@@ -193,6 +193,19 @@ def by_message(store, chat, message_id):
     return None
 
 
+def approved_recipients(store, chat):
+    """The recipients of the exact emails the owner approved in this chat: his yes to one is his word for its address."""
+    from tabularium.tools.agentmail import addresses
+    db = sqlite3.connect(store.database, timeout=30)
+    try:
+        rows = db.execute("SELECT action FROM decisions WHERE chat=? AND kind='action' AND state='answered' "
+                          "AND json_extract(action,'$.tool')='send_email'", (chat,)).fetchall()
+    finally:
+        db.close()
+    sent = [json.loads(row[0])["inputs"] for row in rows]
+    return {a.lower() for inputs in sent for a in addresses(inputs.get("to")) + addresses(inputs.get("cc"))}
+
+
 def settle_action(store, chat, decision, approved, source, outcome=""):
     """Claim approval once before execution. An interrupted claim has an unknown outcome, never an automatic retry."""
     db = sqlite3.connect(store.database, timeout=30)

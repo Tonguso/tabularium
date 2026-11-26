@@ -219,52 +219,62 @@ def worker(root, ident, variant):
         ie.save(root.parent / 'observations.json', observations())
 
 
+def disposable(agent_root, route, kind, module, args, launch=None):
+    """One run of the production agent in a new home under task_state/<kind>/attempts: its real SKILL.md and skills,
+    no memory, conversation or records. The worker is `module` run with the home and args; returns the attempt's
+    folder, what the worker observed, and the effective tokens the run used."""
+    from tabularium.learning import interaction_eval as ie, regression
+    from tabularium.paths import child_env
+    agent_root = Path(agent_root)
+    name = agent_root.name
+    folder = agent_root / 'task_state' / kind / 'attempts' / uuid.uuid4().hex
+    root = ie.prepare(folder, name, route)
+    for part in ('SKILL.md', 'skills'):
+        source = agent_root / part
+        if source.is_dir():
+            shutil.copytree(source, root / part, dirs_exist_ok=True)
+        elif source.exists():
+            shutil.copyfile(source, root / part)
+    if launch is None:
+        env = child_env(folder, PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8', TELEGRAM_BOT_TOKEN='1:evaluation',
+                        LIBRARIAN_TELEGRAM_BOT_TOKEN='2:evaluation', ENGINEER_TELEGRAM_BOT_TOKEN='3:evaluation',
+                        PRIVATE_TELEGRAM_BOT_TOKEN='4:evaluation')
+        env[name.upper() + '_BACKGROUND_TASK'] = '1'
+        env.setdefault('ANTHROPIC_API_KEY', 'evaluation-unused')
+        with open(folder / 'run.log', 'w', encoding='utf-8') as out:
+            proc = subprocess.Popen([sys.executable, '-B', '-X', 'utf8', '-m', module, str(root), *args], cwd=root, env=env,
+                                    stdout=out, stderr=subprocess.STDOUT, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            try:
+                proc.wait(timeout=TIMEOUT)
+            except subprocess.TimeoutExpired:
+                from tabularium.core.engine import AgentRuntime
+                AgentRuntime._kill_tree(None, proc.pid)
+                proc.wait(timeout=20)
+    else:
+        launch(root)
+    shutil.rmtree(root / 'skills', ignore_errors=True)      # the copied method is the bulk; the run's records stay
+    usage = regression.generation_usage(root / 'task_state/background/1')
+    return folder, ie.read(folder / 'observations.json', {}), usage.get('estimated_effective_tokens')
+
+
 def run(agent_root, log=print, launch=None):
     """Every scenario clean and with its defect, each in a new disposable home; the record is saved and returned."""
-    from tabularium.learning import interaction_eval as ie, regression
+    from tabularium.learning import regression
     from tabularium.models.provider_routing import config
     from tabularium.ops.release import LOADED
-    from tabularium.paths import child_env
     agent_root = Path(agent_root)
     regression.load_config_env(agent_root.parent)        # the model sign-in the runs use, as every evaluation loads it
     name, route = agent_root.name, config(agent_root)['routes'][0]
     record = dict(time=time.time(), agent=name, route=route, release=dict(LOADED), runs=[])
     for scenario in SCENARIOS:
         for variant in VARIANTS:
-            folder = agent_root / 'task_state' / 'review_exam' / 'attempts' / uuid.uuid4().hex
-            root = ie.prepare(folder, name, route)
-            for part in ('SKILL.md', 'skills'):          # the reviewer's real method; no memory, conversation or records
-                source = agent_root / part
-                if source.is_dir():
-                    shutil.copytree(source, root / part, dirs_exist_ok=True)
-                elif source.exists():
-                    shutil.copyfile(source, root / part)
-            if launch is None:
-                env = child_env(folder, PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8', TELEGRAM_BOT_TOKEN='1:evaluation',
-                                LIBRARIAN_TELEGRAM_BOT_TOKEN='2:evaluation', ENGINEER_TELEGRAM_BOT_TOKEN='3:evaluation',
-                                PRIVATE_TELEGRAM_BOT_TOKEN='4:evaluation')
-                env[name.upper() + '_BACKGROUND_TASK'] = '1'
-                env.setdefault('ANTHROPIC_API_KEY', 'evaluation-unused')
-                with open(folder / 'run.log', 'w', encoding='utf-8') as out:
-                    proc = subprocess.Popen([sys.executable, '-B', '-X', 'utf8', '-m', 'tabularium.learning.review_exam',
-                                             str(root), scenario['id'], variant], cwd=root, env=env, stdout=out,
-                                            stderr=subprocess.STDOUT, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-                    try:
-                        proc.wait(timeout=TIMEOUT)
-                    except subprocess.TimeoutExpired:
-                        from tabularium.core.engine import AgentRuntime
-                        AgentRuntime._kill_tree(None, proc.pid)
-                        proc.wait(timeout=20)
-            else:
-                launch(root, scenario, variant)
-            shutil.rmtree(root / 'skills', ignore_errors=True)      # the copied method is the bulk; the run's records stay
-            seen = ie.read(folder / 'observations.json', {})
+            folder, seen, tokens = disposable(agent_root, route, 'review_exam', __name__, (scenario['id'], variant),
+                                              launch and (lambda root: launch(root, scenario, variant)))
             planted = scenario['defect']['item'] if variant == 'defect' else None
-            usage = regression.generation_usage(root / 'task_state/background/1')
             entry = dict(scenario=scenario['id'], variant=variant, planted=planted, folder=str(folder),
                          outcome=outcome(planted, seen.get('verdicts'), seen.get('reworked')),
                          verdicts=seen.get('verdicts') or [], reworked=seen.get('reworked') or [],
-                         effective_tokens=usage.get('estimated_effective_tokens'))
+                         effective_tokens=tokens)
             record['runs'].append(entry)
             log(f"{scenario['id']} {variant}: {entry['outcome']}")
     record.update(tally(record['runs']), finished=time.time())

@@ -514,6 +514,7 @@ Each rail exists because something went wrong once. The failure is the specifica
 | Truthful live status | A dead process shown idle; planned restarts counted as crashes | Status from process identity; unknowns shown as unknown |
 | Lesson approval | Agents changing their own rules | Owner's words only; a trial first where the skill has benchmark cases, and where it has none the owner's explicit choice, never an exception handler's |
 | Incoming files | A 20 MB screenshot reported twice as an internal error | One size gate for every incoming file; the owner is told the size and the limit |
+| Email on the owner's words | A page or an inbound email asking for a send to an address of its own | An email goes without asking when every recipient is an address the owner wrote in the chat or approved before; any other waits for his yes with the exact email shown, and a worker is refused |
 | Owner tier | A coordinator's accept presented as the owner's approval | An owner-tier request records a decision for the owner at acceptance; nothing is applied until he answers |
 | Memory candidates | A tidy-up that loses a fact | Exam before and after; applied only onto its base version |
 | Checkpoints and receipts | A crash losing work | Every tool call is a receipt; progress is checkpointed |
@@ -524,7 +525,10 @@ Each rail exists because something went wrong once. The failure is the specifica
 
 **Known gaps.** A command runs with the owner's rights on his instruction, and outside content read in the same
 turn can ask for one; only the danger screen stands between that page and the shell, by the owner's choice (the
-taint rail that held every command after a read went on 2026-11-14). The boundary holds the file tools, not the shell. A real sandbox with desktop integrations behind
+taint rail that held every command after a read went on 2026-11-14). An email is the exception: its recipients have to
+be addresses the owner wrote. What the agents do with a planted instruction is measured, not assumed: in the injection
+exam of 2026-11-26 the coordinator and the librarian each ignored six of six, which is evidence about six plain
+attacks and no guarantee. The boundary holds the file tools, not the shell. A real sandbox with desktop integrations behind
 narrow host-side tools is the next large piece. A declared check proves that a test ran against those bytes, not that
 the test was a good one. The supervisor itself still runs from the working tree; it is the process that exports
 the snapshots and hands itself off after a release.
@@ -543,6 +547,7 @@ Tabularium is run like software, which is uncommon for agent systems.
 | Regression benchmark | Fixed, reviewed synthetic cases with independent answers (six at the time of writing, with twenty-one objective checks and one declared subjective rubric); code checks the delivered files; pass rate and flaky cases per task type | Weekly, and after any change A change of the primary model or route reruns the benchmark once, in its own process, and the dashboard shows the new score beside the previous route's. |
 | Interactive evaluation | The same benchmark machinery with events injected while a real, disposable agent process works: a scope update after the first write, a question followed by a process restart, a corrective follow-up beside a runtime warning, an incomplete delegate delivery; the state is checked independently after the process exits | On demand, after changes to the turn loop |
 | Reviewer's exam | Nine staged deliveries, each reviewed clean and with one planted defect by the production coordinator in a disposable process: defects caught of planted, clean deliveries sent back of clean | Weekly, and on demand |
+| Injection exam | Six ordinary requests whose page, email or file carries one planted instruction (an email to a stranger, a download command, a forged approval, a forged end of turn), done by the production agent in a disposable process whose email and command tools record and do nothing: instructions acted on, those the runtime stopped, requests still completed | On demand, and after a change of model |
 | Research signal | A few real past tasks rerun; a model says only whether each new answer is closer, the same, or further from the accepted one | Weekly; a signal, never a score |
 | Live probes | Token use and pass rate before and after an engine change, on matched synthetic tasks | At each release |
 | Incident reviews | What went wrong, what each actor could see, which design choice allowed it | After each failure the owner noticed |
@@ -647,6 +652,9 @@ Tabularium borrows from, and departs from, several lines of published work.
 - The reviewer's exam is small, synthetic and easy: its catch rate is a floor on defects a careful reader cannot
   miss, not a measure of review on real research, where ground truth is rarely certain. It examines the
   coordinator's reading; the stateless cold reader is not in it.
+- Outside content still reaches the acting model as text. A reader that passed on only extracted facts was
+  considered and not built: research needs the source's own words, and a planted instruction can ride inside a quoted
+  passage. The injection exam is six plain attacks; an attack written for these agents is not in it.
 
 ## 14. Lessons from building it
 
@@ -727,6 +735,7 @@ Tabularium borrows from, and departs from, several lines of published work.
 | 2026-11-25 | Every request carried every tool definition in full: 45 tools and 56,000 characters for the coordinator, on each of about 25,000 model calls a month. In thirty days, 22 of those tools made 2.9% of its calls and were 46% of that text | Those tools are one line each inside one tool, `use_tool`. The first call for a tool in a turn returns its description and input schema and runs nothing; the next call runs it as itself. The coordinator's tool text fell from 55,900 to 33,300 characters and the librarian's from 48,600 to 25,800. Which tools are listed this way is arithmetic: a definition read on every call against one extra model call per use, and the runtime counts those extra calls so a tool that proves to be used often moves back |
 | 2026-11-25 | The rules block every agent reads on every call held four paragraphs about tools it now reaches for a few times a month: the capability check, the specialist review, the output review and the report scan. Most of their sentences repeated the tool's own description | Those paragraphs are gone from the block and their sentences are in the description of the tool they are about, which the model is given before the tool's first use in a turn. The block fell from 9,100 to 6,800 characters for the coordinator. A rule about one tool belongs with the tool; the block keeps the rules that hold in every reply |
 | 2026-11-26 | In one month the coordinator marked 168 of 168 delegated items met, most by reading alone, and nothing said how often a reading misses: a reviewer that is never wrong and one that never looks leave the same record | A weekly exam plants one known defect in each of nine staged deliveries and counts how many the production coordinator catches, beside how many clean twins it sends back. The first run caught nine of nine and sent back one clean delivery of nine; the first draft of one scenario held a mistake of its author's, scores above the stated maximum, and the reviewer sent that back too. Each review now records which provider reviewed and which did the work |
+| 2026-11-26 | Since the taint rail went, a page or an inbound email could ask for an email to any address and nothing in code stood in the way; whether an agent would follow such a request had never been measured | The owner's instruction is still the consent, and for an email it is on record: every recipient has to be an address he wrote in the chat or approved before, or the exact email waits for his yes. Replayed on the 240 past send records it would have asked nothing. An exam plants six instructions in what an agent reads and counts those acted on: the coordinator and the librarian each ignored six of six |
 
 Two patterns run through the list. Whenever the system guessed at something by reading text, it eventually guessed
 wrong; each fix replaced the guess with a declared field or a record. And whenever it took an actor's word for its
@@ -757,4 +766,5 @@ office, where the decisions and contracts that no magistrate's word could overri
 | Release probe | One real turn each agent answers on the commit about to be released, before any process is replaced |
 | Listed tool | A rarely used tool sent as one line inside `use_tool`; its full instructions arrive the first time it is called in a turn |
 | Scorecard | The weekly numbers per agent, taken from records only: corrections, tokens per turn, questions asked, delegation cost |
+| Injection exam | Requests whose material carries a planted instruction; the count of those the agent acted on and those the runtime stopped |
 | Reviewer's exam | Staged deliveries with one planted defect each, and clean twins, reviewed by the production coordinator; the count of defects caught and clean work sent back |
