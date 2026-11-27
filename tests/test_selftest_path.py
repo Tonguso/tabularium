@@ -49,6 +49,25 @@ class SelftestPath(unittest.TestCase):
             self.assertFalse(record["ok"])
             self.assertIn("NameError", record["error"])
 
+    def test_a_turn_no_route_answered_names_no_answering_route(self):
+        """routing_state.json names the last route tried; a clean install with no route signed in was recorded and
+        printed as 'passed on the fallback route anthropic_api' just before 'FAILED' (2026-11-27)."""
+        from tabularium.core.agent_runtime import atomic_json
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "coordinator"; root.mkdir()
+            runtime = load_agent("coordinator", root)["runtime"]
+            routes = [{"kind": "anthropic_subscription", "model": "claude-test"}, {"kind": "anthropic_api", "model": "claude-test"}]
+            (root / "routing.json").write_text(json.dumps({"enabled": True, "routes": routes}), encoding="utf-8")
+            def no_route(messages, chat_id):
+                atomic_json(runtime.RUNTIME_DIR / "task_state" / "routing_state.json",
+                            {"route": routes[-1], "status": "attempting", "updated": 0})
+                raise RuntimeError("No configured route is available.")
+            runtime.run_turn = no_route
+            record = runtime.run_selftest()
+            self.assertFalse(record["ok"])
+            self.assertEqual(record["route"], "")
+            self.assertFalse(record["fallback"])
+
 
 if __name__ == "__main__":
     unittest.main()

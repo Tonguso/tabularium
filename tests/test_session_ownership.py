@@ -227,7 +227,9 @@ def run_turn(messages, chat):
         folder = store.directory(ident)
         self.assertEqual(proc.returncode,0,(folder/'worker.log').read_text(encoding='utf-8'))
         self.assertEqual(json.loads((folder/'first_pid.json').read_text()),json.loads((folder/'second_pid.json').read_text()))
-        self.assertEqual(store.get(ident)['pid'],proc.pid)
+        # The worker's own process, not the one launched: a Windows venv's python.exe is a launcher that starts the
+        # interpreter as its child (found on a clean install, 2026-11-27; conda has no launcher).
+        self.assertEqual(store.get(ident)['pid'],json.loads((folder/'first_pid.json').read_text())['pid'])
         self.assertFalse(store.lease_busy(ident))
         self.assertTrue((folder/'task_state/session_checkpoint.json').exists())
 

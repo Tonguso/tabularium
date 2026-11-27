@@ -219,9 +219,6 @@ class AgentApp(ToolSchemas, Speech, ParkedActions, OwnerCommands, MemoryChecks, 
         self.SKILL_FILE = self.AGENT_DIR / "SKILL.md"
         self.TELEGRAM_BOT_TOKEN = os.environ.get(cfg.token_env, "")
         self.DEFAULT_MODEL_PROVIDER = os.environ.get(cfg.provider_env, cfg.provider_default).lower()
-        if not self.ANTHROPIC_API_KEY:
-            print("ANTHROPIC_API_KEY not set.")
-            sys.exit(1)
         if not self.TELEGRAM_BOT_TOKEN:
             print(cfg.token_missing)
             sys.exit(1)

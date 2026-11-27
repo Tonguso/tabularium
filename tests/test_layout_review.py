@@ -153,6 +153,27 @@ class Launch(unittest.TestCase):
             from tabularium import cli
             self.assertTrue(cli.init(home, [second]).endswith(agents[second]['setup']['next']))
 
+    def test_an_agent_made_by_init_starts_with_one_model_key_or_none(self):
+        """The Quickstart on a clean install (2026-11-27): init wrote no style core, which every agent reads at start,
+        and the agent stopped without an Anthropic key though the README asks for one key of either provider and the
+        first route is a subscription. Which routes can answer is the routing's question, asked on every turn."""
+        import os
+        from tabularium import cli
+        from tabularium.agents import build
+        from tabularium.core.roster import AGENTS
+        slot = AGENTS[0]
+        with tempfile.TemporaryDirectory() as home:
+            home = Path(home)
+            cli.init(home, [slot])
+            env = {k: v for k, v in os.environ.items() if not k.endswith('_API_KEY')}
+            env.update({'OPENAI_API_KEY': 'test', 'TELEGRAM_BOT_TOKEN': '1:a', 'OWNER_TELEGRAM_USER_ID': '1',
+                        f'{slot.upper()}_BACKGROUND_TASK': '1'})
+            (home / slot / 'task_state' / 'background' / '1').mkdir(parents=True)
+            with patch.dict(os.environ, env, clear=True):
+                agent = build(home / slot, slot)
+            self.assertEqual(agent.ANTHROPIC_API_KEY, '')
+            self.assertIn('Everyday communication core', agent.SYSTEM_PROMPT)
+
 
 if __name__ == '__main__':
     unittest.main()

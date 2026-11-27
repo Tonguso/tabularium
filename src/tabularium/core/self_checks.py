@@ -223,7 +223,9 @@ class SelfChecks:
         try:
             state = json.loads((self.RUNTIME_DIR / "task_state" / "routing_state.json").read_text(encoding="utf-8"))
             routes = self._routing.config(self.AGENT_DIR).get("routes") or []
-            route = state.get("route") or {}
+            # The state names the last route tried; it answered only when completed (2026-11-27: a self-test that no
+            # route answered was recorded and printed as passed on the last fallback tried).
+            route = (state.get("route") or {}) if state.get("status") == "completed" else {}
             record["route"] = route.get("kind", "")
             record["fallback"] = bool(routes and route and route.get("kind") != routes[0].get("kind"))
             if record["fallback"]:

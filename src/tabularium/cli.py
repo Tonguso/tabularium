@@ -29,8 +29,11 @@ def init(home, argv):
     slot = argv[0]
     folder = home / slot
     written = []
+    # The style core is read by every agent at start (agent_runtime.everyday_style_prompt); until 2026-11-27 init did
+    # not write it, so an agent made by the Quickstart stopped at its first start.
     for name, template in (("SKILL.md", "SKILL.md"), ("memory.md", "memory.md"), ("agent.toml", "agent.toml"),
-                           ("routing.json", "routing.json")):
+                           ("routing.json", "routing.json"),
+                           ("skills/talk-like-a-human-being/runtime-core.md", "runtime-core.md")):
         target = folder / name
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)

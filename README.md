@@ -40,8 +40,11 @@ tabularium init coordinator
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and get your own Telegram user id (message
    [@userinfobot](https://t.me/userinfobot)). Open `.env` and fill in `OWNER_TELEGRAM_USER_ID`,
-   `TELEGRAM_BOT_TOKEN` and one model key, `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. The agent answers your user id
-   and refuses everyone else.
+   `TELEGRAM_BOT_TOKEN` and one way to reach a model: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or a Claude
+   subscription (`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`), the first route in `routing.json`. Each turn
+   takes the first route that answers. Without `ANTHROPIC_API_KEY` the advisor, the specialist reviewer and the
+   exam judges, which call that API directly, report themselves unavailable. The agent answers your user id and
+   refuses everyone else.
 2. Open `coordinator\SKILL.md` and write who the agent is and who you are. The template is a plain assistant; everything
    from the tone to what it must ask before doing is yours to change. `agent.toml` holds the settings that are the
    agent's own (its display name, its voice lines, its ports, and `work_roots`: the folders outside its own that its
