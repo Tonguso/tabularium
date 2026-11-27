@@ -267,7 +267,7 @@ def reconcile(store, send):
                 folder = store.directory(task['id'])
                 answer = folder / 'result.txt'
                 text = answer.read_text(encoding='utf-8') if answer.exists() else ''
-                grade = regression.grade(None, cases[run['case']], text, folder / 'trial_output')
+                grade = regression.grade(regression.api_judge, cases[run['case']], text, folder / 'trial_output')
                 if task['status'] != 'finished':
                     grade.update(passed=False, quality=0, note='Run did not finish: ' + task['status'])
                 outcomes.append(dict(run, status=task['status'], grade=grade,

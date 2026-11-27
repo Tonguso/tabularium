@@ -517,6 +517,13 @@ def judge_from_env():
     return judge
 
 
+def api_judge(prompt, schema):
+    """The judge of a grader that runs inside an agent process (the reconcile of a calibration or a lesson trial),
+    made when a case first has a subjective requirement. Until 2026-11-27 those two graders passed no judge, so a
+    case with a `judgment` check, which the lesson tool offers, could only ever be refused."""
+    return judge_from_env()(prompt, schema)
+
+
 def load_config_env(root):
     """The home folder's .env into this process, never printed."""
     from tabularium.config import load_env

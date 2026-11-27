@@ -121,6 +121,36 @@ class LessonCases(unittest.TestCase):
         self.assertIn("CASE? ", digest)
         self.assertIn("refused: broken", digest)
 
+    def test_a_judgment_requirement_is_graded_by_the_judge_and_a_silent_judge_is_not_a_broken_case(self):
+        judged = [dict(id="tone", description="The reply reads as the owner's own words", check=dict(kind="judgment", rubric="Met only if no phrase is the assistant's own."))]
+
+        def run(judge):
+            key = self.lesson(rule=f"Rule {len(seen)} {judge.__name__}")
+            lesson_cases.fill(self.root, 1, key, "case", None, "Owner's wording", judged)
+            lesson_cases.calibrate(self.root, 1, key, self.store, "You are the agent.")
+            for r in self.read(key)["calibration"]["runs"]:
+                (self.store.directory(r["task"]) / "result.txt").write_text(r["arm"], encoding="utf-8")
+                put(self.store, r["task"], "finished")
+            with patch.object(regression, "api_judge", judge):
+                lesson_cases.reconcile(self.store)
+            return self.read(key)
+        seen = []
+
+        def answers(prompt, schema):
+            seen.append(prompt)
+            met = json.loads(prompt)["candidate"] == "ceiling"
+            return json.dumps({"items": [{"id": "tone", "met": met, "reason": "read"}]})
+
+        def silent(prompt, schema):
+            raise TimeoutError("no answer")
+        case = run(answers)
+        self.assertEqual(case["status"], "calibrated", case["calibration"]["verdict"])
+        self.assertEqual(len(seen), 2 * lesson_cases.RUNS)
+        case = run(silent)
+        self.assertEqual(case["status"], "rejected")
+        self.assertIn("not graded", case["calibration"]["verdict"])
+        self.assertNotIn("broken", case["calibration"]["verdict"])
+
     def test_calibration_is_a_band_over_repeated_runs_not_one_flaky_pair(self):
         """2026-11-02 (GDPevo): one pass without the rule, or one failure with it, no longer decides the case."""
         def settle_runs(key, floor_outputs, ceiling_outputs):

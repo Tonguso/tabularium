@@ -164,6 +164,10 @@ def verdict(floor, ceiling):
     """The calibration band over repeated runs. Broken: with the rule stated outright fewer than CEILING_MIN of the
     runs pass. Not discriminating: without it more than FLOOR_MAX already pass. One run per arm (old records) grades
     as before: a single pass or fail."""
+    ungraded = [str(i.get("reason")) for g in floor + ceiling for i in g.get("items", [])
+                if i.get("status") == "unverified" and str(i.get("reason")).startswith("Judge unverified")]
+    if ungraded:                                          # the judge did not answer: that says nothing about the case
+        return "rejected", f"not graded: the judge gave no verdict on {len(ungraded)} requirements ({ungraded[0][:160]}); calibrate again"
     up, down = sum(bool(g["passed"]) for g in ceiling), sum(bool(g["passed"]) for g in floor)
     if up < CEILING_MIN * len(ceiling):
         return "rejected", f"broken: with the rule stated outright only {up} of {len(ceiling)} runs passed"
@@ -196,7 +200,7 @@ def reconcile(store):
                 folder = store.directory(task["id"])
                 answer = folder / "result.txt"
                 text = answer.read_text(encoding="utf-8") if answer.exists() else ""
-                g = regression.grade(None, case, text, folder / "trial_output")
+                g = regression.grade(regression.api_judge, case, text, folder / "trial_output")
                 if task["status"] != "finished":
                     g.update(passed=False, quality=0, note="Run did not finish: " + task["status"])
                 g.update(task=task["id"], status=task["status"])
